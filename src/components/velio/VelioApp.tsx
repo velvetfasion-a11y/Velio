@@ -36,6 +36,7 @@ export function VelioApp() {
   const fullMap = screen === "service" && mapMode;
   const mainRef = useRef<HTMLElement>(null);
   const [ready, setReady] = useState(false);
+  const bootstrapAuth = useVelio((state) => state.bootstrapAuth);
 
   useLayoutEffect(() => {
     const el = mainRef.current;
@@ -44,57 +45,56 @@ export function VelioApp() {
   }, [screen]);
 
   useEffect(() => {
-    void Promise.resolve(useVelio.persist.rehydrate()).then(() => {
-      const { chats } = useVelio.getState();
-      const clean = chats["st-cleanpro"];
-      if (!clean?.length || (clean.length === 1 && clean[0]?.text?.includes("Hej Anna"))) {
-        useVelio.setState({
-          chats: {
-            ...chats,
-            "st-cleanpro": [
-              { id: "c1", from: "me", text: "Hej! Kan du komma idag klockan 14?", time: "14:02" },
-              { id: "c2", from: "them", text: "Ja, det passar mig.", time: "14:05" },
-            ],
-          },
-        });
-      } else if (!clean[0]?.time) {
-        useVelio.setState({
-          chats: {
-            ...chats,
-            "st-cleanpro": clean.map((message, index) => (index === 0 ? { ...message, time: "14:02" } : message)),
-          },
-        });
-      }
-      const next = useVelio.getState().chats;
-      if (!next["el-erik"]?.some((message) => message.card)) {
-        useVelio.setState({ chats: { ...next, "el-erik": erikThread } });
-      }
-      const bookings = useVelio.getState().bookings;
-      if (!bookings.some((item) => item.id === "b-erik" || (item.providerId === "el-erik" && item.whenLabel === "Idag 14:00"))) {
-        useVelio.setState({
-          bookings: [
-            ...bookings,
-            {
-              id: "b-erik",
-              serviceId: "el",
-              providerId: "el-erik",
-              whenLabel: "Idag 14:00",
-              cost: 890,
-              tip: null,
-              location: "Östermalm",
-              rating: null,
-              status: "done",
-              holdKr: 890,
+    void Promise.resolve(useVelio.persist.rehydrate())
+      .then(async () => {
+        const { chats } = useVelio.getState();
+        const clean = chats["st-cleanpro"];
+        if (!clean?.length || (clean.length === 1 && clean[0]?.text?.includes("Hej Anna"))) {
+          useVelio.setState({
+            chats: {
+              ...chats,
+              "st-cleanpro": [
+                { id: "c1", from: "me", text: "Hej! Kan du komma idag klockan 14?", time: "14:02" },
+                { id: "c2", from: "them", text: "Ja, det passar mig.", time: "14:05" },
+              ],
             },
-          ],
-        });
-      }
-      if (!useVelio.getState().loginIntro) {
-        useVelio.setState({ loggedIn: false, loginIntro: true });
-      }
-      setReady(true);
-    });
-  }, []);
+          });
+        } else if (!clean[0]?.time) {
+          useVelio.setState({
+            chats: {
+              ...chats,
+              "st-cleanpro": clean.map((message, index) => (index === 0 ? { ...message, time: "14:02" } : message)),
+            },
+          });
+        }
+        const next = useVelio.getState().chats;
+        if (!next["el-erik"]?.some((message) => message.card)) {
+          useVelio.setState({ chats: { ...next, "el-erik": erikThread } });
+        }
+        const bookings = useVelio.getState().bookings;
+        if (!bookings.some((item) => item.id === "b-erik" || (item.providerId === "el-erik" && item.whenLabel === "Idag 14:00"))) {
+          useVelio.setState({
+            bookings: [
+              ...bookings,
+              {
+                id: "b-erik",
+                serviceId: "el",
+                providerId: "el-erik",
+                whenLabel: "Idag 14:00",
+                cost: 890,
+                tip: null,
+                location: "Östermalm",
+                rating: null,
+                status: "done",
+                holdKr: 890,
+              },
+            ],
+          });
+        }
+        await bootstrapAuth();
+      })
+      .finally(() => setReady(true));
+  }, [bootstrapAuth]);
 
   const nav: { id: Screen; label: string; icon: typeof Home }[] = [
     { id: "home", label: "Hem", icon: Home },
@@ -125,62 +125,62 @@ export function VelioApp() {
       <div className="relative flex h-dvh w-full max-w-phone flex-col overflow-hidden bg-cream md:h-[calc(100dvh-2rem)] md:rounded-3xl md:shadow-2xl">
         {loggedIn ? (
           <>
-        {showChrome ? <AppHeader /> : null}
+            {showChrome ? <AppHeader /> : null}
 
-        <main
-          key={screen}
-          ref={mainRef}
-          className={cn("min-h-0 flex-1", fullMap ? "flex flex-col overflow-hidden" : "overflow-y-auto pb-24")}
-        >
-          {screen === "home" ? (accountMode === "business" ? <BusinessHome /> : <HomeScreen />) : null}
-          {screen === "search" ? <SearchScreen /> : null}
-          {screen === "inbox" ? <InboxScreen /> : null}
-          {screen === "service" ? <ServiceScreen /> : null}
-          {screen === "history" ? <HistoryScreen /> : null}
-          {profileScreens.includes(screen) ? <ProfileScreens /> : null}
-        </main>
+            <main
+              key={screen}
+              ref={mainRef}
+              className={cn("min-h-0 flex-1", fullMap ? "flex flex-col overflow-hidden" : "overflow-y-auto pb-24")}
+            >
+              {screen === "home" ? (accountMode === "business" ? <BusinessHome /> : <HomeScreen />) : null}
+              {screen === "search" ? <SearchScreen /> : null}
+              {screen === "inbox" ? <InboxScreen /> : null}
+              {screen === "service" ? <ServiceScreen /> : null}
+              {screen === "history" ? <HistoryScreen /> : null}
+              {profileScreens.includes(screen) ? <ProfileScreens /> : null}
+            </main>
 
-        <nav className="absolute inset-x-0 bottom-0 z-20 flex items-end justify-around border-t border-ink/5 bg-cream px-1 pt-1.5 pb-3">
-          {nav.map((item) => {
-            const Icon = item.icon;
-            const active = navActive(item.id);
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => go(item.id)}
-                className={cn(
-                  "flex min-w-14 flex-col items-center gap-0.5 rounded-2xl px-2 py-1.5 text-[10px] font-medium text-muted",
-                  active && "bg-sand text-ink",
-                )}
-              >
-                <span className="relative">
-                  <Icon className="size-5" strokeWidth={active ? 2.2 : 1.8} />
-                  {item.id === "inbox" && unread ? (
-                    <span className="absolute -top-0.5 -right-1 size-2 rounded-full bg-gold" />
-                  ) : null}
-                </span>
-                {item.label}
-              </button>
-            );
-          })}
-        </nav>
+            <nav className="absolute inset-x-0 bottom-0 z-20 flex items-end justify-around border-t border-ink/5 bg-cream px-1 pt-1.5 pb-3">
+              {nav.map((item) => {
+                const Icon = item.icon;
+                const active = navActive(item.id);
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => go(item.id)}
+                    className={cn(
+                      "flex min-w-14 flex-col items-center gap-0.5 rounded-2xl px-2 py-1.5 text-[10px] font-medium text-muted",
+                      active && "bg-sand text-ink",
+                    )}
+                  >
+                    <span className="relative">
+                      <Icon className="size-5" strokeWidth={active ? 2.2 : 1.8} />
+                      {item.id === "inbox" && unread ? (
+                        <span className="absolute -top-0.5 -right-1 size-2 rounded-full bg-gold" />
+                      ) : null}
+                    </span>
+                    {item.label}
+                  </button>
+                );
+              })}
+            </nav>
 
-        <Toast />
-        {sheet === "provider" ? <ProviderSheet /> : null}
-        {sheet === "chat" ? <ChatSheet /> : null}
-        {sheet === "book" ? <BookSheet /> : null}
-        {sheet === "request" ? <RequestSheet /> : null}
-        {sheet === "sort" ? <SortSheet /> : null}
-        {sheet === "cart" ? <CartSheet /> : null}
-        {sheet === "receipt" ? <ReceiptSheet /> : null}
-        {sheet === "track" ? <TrackSheet /> : null}
-        {sheet === "pay" ? <PaySheet /> : null}
-        {sheet === "rate" ? <RateSheet /> : null}
-        {sheet === "location" ? <LocationSheet /> : null}
-        {sheet === "bankid" ? <BankIdSheet /> : null}
-        {sheet === "onboard" ? <OnboardSheet /> : null}
-        <HomeSheets />
+            <Toast />
+            {sheet === "provider" ? <ProviderSheet /> : null}
+            {sheet === "chat" ? <ChatSheet /> : null}
+            {sheet === "book" ? <BookSheet /> : null}
+            {sheet === "request" ? <RequestSheet /> : null}
+            {sheet === "sort" ? <SortSheet /> : null}
+            {sheet === "cart" ? <CartSheet /> : null}
+            {sheet === "receipt" ? <ReceiptSheet /> : null}
+            {sheet === "track" ? <TrackSheet /> : null}
+            {sheet === "pay" ? <PaySheet /> : null}
+            {sheet === "rate" ? <RateSheet /> : null}
+            {sheet === "location" ? <LocationSheet /> : null}
+            {sheet === "bankid" ? <BankIdSheet /> : null}
+            {sheet === "onboard" ? <OnboardSheet /> : null}
+            <HomeSheets />
           </>
         ) : (
           <LoginScreen />

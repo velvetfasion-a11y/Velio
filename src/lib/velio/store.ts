@@ -9,6 +9,7 @@ import {
   type Slot,
   type SortKey,
 } from "@/lib/velio/data";
+import { fetchMe, saveRemoteState } from "@/lib/velio/auth-api";
 
 export type Screen =
   | "home"
@@ -189,6 +190,10 @@ type VelioState = {
   sheet: Sheet;
   loggedIn: boolean;
   loginIntro: boolean;
+  authReady: boolean;
+  authSimulated: boolean;
+  authViewer: { name: string; email: string } | null;
+  authError: string | null;
   locationOn: boolean;
   notifications: boolean;
   search: string;
@@ -222,6 +227,9 @@ type VelioState = {
   setTime: (time: Slot | "anytime") => void;
   setArea: (area: string | null) => void;
   showToast: (toast: string) => void;
+  bootstrapAuth: () => Promise<void>;
+  loginWithCursor: () => Promise<void>;
+  syncRemote: () => Promise<void>;
   login: () => void;
   logout: () => void;
   allowLocation: () => void;
@@ -336,6 +344,10 @@ export const useVelio = create<VelioState>()(
       sheet: null,
       loggedIn: false,
       loginIntro: false,
+      authReady: false,
+      authSimulated: false,
+      authViewer: null,
+      authError: null,
       locationOn: false,
       notifications: true,
       search: "",
@@ -395,14 +407,131 @@ export const useVelio = create<VelioState>()(
         set({ toast });
         toastTimer = setTimeout(() => set({ toast: null }), 2600);
       },
-      login: () => set({ loggedIn: true, sheet: null, screen: "home" }),
+      bootstrapAuth: async () => {
+        try {
+          const me = await fetchMe();
+          if (!me.authenticated) {
+            set({
+              authReady: true,
+              authViewer: null,
+              authSimulated: false,
+              authError: null,
+              loggedIn: false,
+            });
+            return;
+          }
+          const remoteProfile = me.profile;
+          const remoteState = me.state ?? {};
+          set({
+            authReady: true,
+            authViewer: me.viewer,
+            authSimulated: me.simulated,
+            authError: null,
+            loggedIn: false,
+            profile: {
+              name: remoteProfile.name || me.viewer.name || get().profile.name,
+              phone: remoteProfile.phone || get().profile.phone,
+              email: remoteProfile.email || me.viewer.email || get().profile.email,
+            },
+            accountMode: me.accountMode ?? remoteState.accountMode ?? get().accountMode,
+            locationOn: remoteState.locationOn ?? get().locationOn,
+            notifications: remoteState.notifications ?? get().notifications,
+            cards: (remoteState.cards as PayCard[] | undefined) ?? get().cards,
+            cart: (remoteState.cart as CartItem[] | undefined) ?? get().cart,
+            chats: (remoteState.chats as Record<string, ChatMsg[]> | undefined) ?? get().chats,
+            bookings: (remoteState.bookings as Booking[] | undefined) ?? get().bookings,
+            posted: (remoteState.posted as PostedJob[] | undefined) ?? get().posted,
+            listing: (remoteState.listing as Listing | null | undefined) ?? get().listing,
+            businessForm: (remoteState.businessForm as BusinessForm | null | undefined) ?? get().businessForm,
+            activeBookingId: remoteState.activeBookingId ?? get().activeBookingId,
+          });
+        } catch {
+          set({
+            authReady: true,
+            authError: "Kunde inte nå inloggningen just nu.",
+            loggedIn: false,
+          });
+        }
+      },
+      loginWithCursor: async () => {
+        const me = await fetchMe();
+        if (!me.authenticated) {
+          set({
+            authError: "Ingen Cursor-session. Publicera som privat/team eller kör lokalt med simulerad användare.",
+            loggedIn: false,
+            authViewer: null,
+          });
+          return;
+        }
+        set({
+          authViewer: me.viewer,
+          authSimulated: me.simulated,
+          authError: null,
+          loggedIn: true,
+          loginIntro: true,
+          sheet: null,
+          screen: "home",
+          profile: {
+            name: me.profile.name || me.viewer.name || get().profile.name,
+            phone: me.profile.phone || get().profile.phone,
+            email: me.profile.email || me.viewer.email || get().profile.email,
+          },
+          accountMode: me.accountMode ?? get().accountMode,
+        });
+        await get().syncRemote();
+        get().showToast(me.simulated ? "Inloggad (simulerad lokal användare)" : "Inloggad via Cursor");
+      },
+      syncRemote: async () => {
+        if (!get().loggedIn) return;
+        const {
+          profile,
+          accountMode,
+          locationOn,
+          notifications,
+          cards,
+          cart,
+          chats,
+          bookings,
+          posted,
+          listing,
+          businessForm,
+          activeBookingId,
+        } = get();
+        await saveRemoteState({
+          profile: { ...profile, accountMode },
+          state: {
+            profile: { ...profile, accountMode },
+            accountMode,
+            locationOn,
+            notifications,
+            cards,
+            cart,
+            chats,
+            bookings,
+            posted,
+            listing,
+            businessForm,
+            activeBookingId,
+          },
+        });
+      },
+      login: () => {
+        void get().loginWithCursor();
+      },
       logout: () => set({ loggedIn: false, screen: "home", sheet: null }),
       allowLocation: () => {
         set({ locationOn: true, sheet: null });
         get().showToast("Plats delad. Visar utförare nära Östermalm.");
+        void get().syncRemote();
       },
-      setNotifications: (notifications) => set({ notifications }),
-      setProfile: (profile) => set({ profile }),
+      setNotifications: (notifications) => {
+        set({ notifications });
+        void get().syncRemote();
+      },
+      setProfile: (profile) => {
+        set({ profile });
+        void get().syncRemote();
+      },
       addCard: (card) => set({ cards: [...get().cards, card] }),
       addToCart: () => {
         const { providerId, cart } = get();
@@ -538,6 +667,7 @@ export const useVelio = create<VelioState>()(
           activeBookingId: booking.id,
           sheet: "request",
         });
+        void get().syncRemote();
         get().showToast(`${kr(provider.price)} reserverat. Inget dras om arbetet inte utförs.`);
         const first = provider.name.split(" ")[0];
         window.setTimeout(() => {
@@ -560,6 +690,7 @@ export const useVelio = create<VelioState>()(
                   ],
             },
           });
+          void get().syncRemote();
           get().showToast(`${first} har accepterat. Nu kan ni chatta.`);
         }, 2400);
       },
@@ -620,17 +751,26 @@ export const useVelio = create<VelioState>()(
       finishOnboard: (listing) => {
         set({ listing, accountMode: "business", sheet: null, screen: "business" });
         get().showToast("Profil skickad. Granskas inom 24 timmar.");
+        void get().syncRemote();
       },
-      saveBusinessForm: (businessForm) => set({ businessForm }),
-      setAccountMode: (accountMode) => set({ accountMode }),
-      addPosted: (job) => set({ posted: [{ ...job, id: `job-${Date.now()}` }, ...get().posted] }),
+      saveBusinessForm: (businessForm) => {
+        set({ businessForm });
+        void get().syncRemote();
+      },
+      setAccountMode: (accountMode) => {
+        set({ accountMode });
+        void get().syncRemote();
+      },
+      addPosted: (job) => {
+        set({ posted: [{ ...job, id: `job-${Date.now()}` }, ...get().posted] });
+        void get().syncRemote();
+      },
     }),
     {
       name: "velio",
       skipHydration: true,
       storage: createJSONStorage(() => (typeof window === "undefined" ? memoryStorage : localStorage)),
       partialize: (state) => ({
-        loggedIn: state.loggedIn,
         loginIntro: state.loginIntro,
         locationOn: state.locationOn,
         notifications: state.notifications,
