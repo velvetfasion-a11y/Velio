@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Home, MessageCircle, User } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useVelio, erikThread, type Screen } from "@/lib/velio/store";
@@ -35,9 +35,12 @@ export function VelioApp() {
   const mapMode = useVelio((state) => state.mapMode);
   const fullMap = screen === "service" && mapMode;
   const mainRef = useRef<HTMLElement>(null);
+  const [ready, setReady] = useState(false);
 
-  useEffect(() => {
-    mainRef.current?.scrollTo({ top: 0 });
+  useLayoutEffect(() => {
+    const el = mainRef.current;
+    if (!el) return;
+    el.scrollTop = 0;
   }, [screen]);
 
   useEffect(() => {
@@ -89,6 +92,7 @@ export function VelioApp() {
       if (!useVelio.getState().loginIntro) {
         useVelio.setState({ loggedIn: false, loginIntro: true });
       }
+      setReady(true);
     });
   }, []);
 
@@ -108,6 +112,14 @@ export function VelioApp() {
   const unread = useVelio((state) => Object.keys(state.chats).length > 0);
   const loggedIn = useVelio((state) => state.loggedIn);
 
+  if (!ready) {
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-stage">
+        <div className="font-serif text-2xl tracking-[0.28em] text-paper/80">VELIO</div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-dvh justify-center bg-stage md:items-center md:p-4">
       <div className="relative flex h-dvh w-full max-w-phone flex-col overflow-hidden bg-cream md:h-[calc(100dvh-2rem)] md:rounded-3xl md:shadow-2xl">
@@ -116,6 +128,7 @@ export function VelioApp() {
         {showChrome ? <AppHeader /> : null}
 
         <main
+          key={screen}
           ref={mainRef}
           className={cn("min-h-0 flex-1", fullMap ? "flex flex-col overflow-hidden" : "overflow-y-auto pb-24")}
         >
