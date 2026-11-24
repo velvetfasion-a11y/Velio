@@ -83,25 +83,97 @@ export async function getAccountById(id: string): Promise<Account | null> {
   return rows[0] ? mapAccount(rows[0]) : null;
 }
 
-export async function loginWithProvider(provider: AuthProvider): Promise<{ account: Account; token: string }> {
-  const rows = await sql<AccountRow>(
-    `select id, provider, name, email, phone, provider_id, account_mode
-     from accounts where provider = $1 limit 1`,
-    [provider],
-  );
-  const row = rows[0];
-  if (!row) {
-    throw new Error("unknown_provider");
-  }
-  const account = mapAccount(row);
+export async function listAccounts(provider?: AuthProvider): Promise<Account[]> {
+  const rows = provider
+    ? await sql<AccountRow>(
+        `select id, provider, name, email, phone, provider_id, account_mode
+         from accounts where provider = $1
+         order by created_at asc, name asc`,
+        [provider],
+      )
+    : await sql<AccountRow>(
+        `select id, provider, name, email, phone, provider_id, account_mode
+         from accounts
+         order by created_at asc, name asc`,
+      );
+  return rows.map(mapAccount);
+}
+
+async function createSession(accountId: string): Promise<string> {
   const token = randomUUID();
   const expires = new Date(Date.now() + DAY_MS).toISOString();
   await sql(`insert into sessions (token, account_id, expires_at) values ($1, $2, $3)`, [
     token,
-    account.id,
+    accountId,
     expires,
   ]);
+  return token;
+}
+
+export async function loginWithAccountId(accountId: string): Promise<{ account: Account; token: string }> {
+  const account = await getAccountById(accountId);
+  if (!account) throw new Error("unknown_account");
+  const token = await createSession(account.id);
   return { account, token };
+}
+
+/** Legacy helper: log into the first account for a provider if exactly one exists. */
+export async function loginWithProvider(provider: AuthProvider): Promise<{ account: Account; token: string }> {
+  const accounts = await listAccounts(provider);
+  if (!accounts.length) throw new Error("unknown_provider");
+  return loginWithAccountId(accounts[0]!.id);
+}
+
+export async function createAccount(input: {
+  provider: AuthProvider;
+  name: string;
+  email: string;
+  phone: string;
+  accountMode?: "customer" | "business";
+}): Promise<{ account: Account; token: string }> {
+  const name = input.name.trim();
+  const email = input.email.trim().toLowerCase();
+  const phone = input.phone.trim();
+  if (name.length < 2) throw new Error("invalid_name");
+  if (email.length < 5 || !email.includes("@")) throw new Error("invalid_email");
+  if (phone.length < 6) throw new Error("invalid_phone");
+
+  const id = `acc-${randomUUID().slice(0, 8)}`;
+  const mode = input.accountMode === "business" ? "business" : "customer";
+  await sql(
+    `insert into accounts (id, provider, name, email, phone, provider_id, account_mode)
+     values ($1, $2, $3, $4, $5, null, $6)`,
+    [id, input.provider, name, email, phone, mode],
+  );
+  return loginWithAccountId(id);
+}
+
+export async function updateAccount(
+  accountId: string,
+  patch: {
+    name?: string;
+    email?: string;
+    phone?: string;
+    accountMode?: "customer" | "business";
+    providerId?: string | null;
+  },
+): Promise<Account> {
+  const current = await getAccountById(accountId);
+  if (!current) throw new Error("unknown_account");
+  const name = patch.name?.trim() || current.name;
+  const email = patch.email?.trim().toLowerCase() || current.email;
+  const phone = patch.phone?.trim() || current.phone;
+  const mode = patch.accountMode ?? current.accountMode;
+  const providerId = patch.providerId === undefined ? current.providerId : patch.providerId;
+  await sql(
+    `update accounts
+     set name = $2, email = $3, phone = $4, account_mode = $5, provider_id = $6
+     where id = $1`,
+    [accountId, name, email, phone, mode, providerId],
+  );
+  const updated = await getAccountById(accountId);
+  if (!updated) throw new Error("unknown_account");
+  return updated;
 }
 
 export async function destroySession(request: Request): Promise<void> {

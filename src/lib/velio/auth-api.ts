@@ -64,15 +64,67 @@ export async function fetchMe(): Promise<MeResponse> {
   return json<MeResponse>(response);
 }
 
-export async function loginWithProvider(provider: AuthProvider): Promise<MeResponse> {
+export async function listAccountsRemote(provider?: AuthProvider): Promise<AccountDto[]> {
+  const query = provider ? `?provider=${encodeURIComponent(provider)}` : "";
+  const response = await fetch(`/api/auth/accounts${query}`, {
+    credentials: "same-origin",
+    cache: "no-store",
+  });
+  if (!response.ok) return [];
+  const data = await json<{ accounts: AccountDto[] }>(response);
+  return data.accounts ?? [];
+}
+
+export async function loginWithAccount(provider: AuthProvider, accountId: string): Promise<MeResponse> {
   const response = await fetch("/api/auth/login", {
     method: "POST",
     credentials: "same-origin",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ provider }),
+    body: JSON.stringify({ provider, accountId }),
   });
   if (!response.ok) return { authenticated: false };
   return fetchMe();
+}
+
+export async function createAccountRemote(input: {
+  provider: AuthProvider;
+  name: string;
+  email: string;
+  phone: string;
+  accountMode?: "customer" | "business";
+}): Promise<MeResponse> {
+  const response = await fetch("/api/auth/login", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ ...input, create: true }),
+  });
+  if (!response.ok) return { authenticated: false };
+  return fetchMe();
+}
+
+/** @deprecated Prefer loginWithAccount — kept for single-account shortcuts. */
+export async function loginWithProvider(provider: AuthProvider): Promise<MeResponse> {
+  const accounts = await listAccountsRemote(provider);
+  if (!accounts[0]) return { authenticated: false };
+  return loginWithAccount(provider, accounts[0].id);
+}
+
+export async function updateProfileRemote(input: {
+  name?: string;
+  email?: string;
+  phone?: string;
+  accountMode?: "customer" | "business";
+}): Promise<AccountDto | null> {
+  const response = await fetch("/api/me", {
+    method: "PATCH",
+    credentials: "same-origin",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) return null;
+  const data = await json<{ account: AccountDto }>(response);
+  return data.account ?? null;
 }
 
 export async function logoutRemote(): Promise<void> {

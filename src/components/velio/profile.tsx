@@ -66,11 +66,13 @@ export function ProfileScreens() {
   const logout = useVelio((state) => state.logout);
   const profile = useVelio((state) => state.profile);
   const setProfile = useVelio((state) => state.setProfile);
+  const saveProfile = useVelio((state) => state.saveProfile);
   const cards = useVelio((state) => state.cards);
   const addCard = useVelio((state) => state.addCard);
   const bookings = useVelio((state) => state.bookings);
   const posted = useVelio((state) => state.posted);
   const accountId = useVelio((state) => state.accountId);
+  const authProvider = useVelio((state) => state.authProvider);
   const openReceipt = useVelio((state) => state.openReceipt);
   const listing = useVelio((state) => state.listing);
   const accountMode = useVelio((state) => state.accountMode);
@@ -106,8 +108,12 @@ export function ProfileScreens() {
         />
         <Btn
           onClick={() => {
-            showToast("Profil sparad");
-            go("profile");
+            void (async () => {
+              const ok = await saveProfile(profile);
+              if (!ok) return;
+              showToast("Profil sparad");
+              go("profile");
+            })();
           }}
         >
           Spara ändringar
@@ -345,13 +351,21 @@ export function ProfileScreens() {
     );
   }
 
-  const email = profile.email === "anna@example.com" ? "anna.karlsson@velio.se" : profile.email;
-  const address = "Strandvägen 12, 114 56 Stockholm";
+  const email = profile.email;
+  const verifyLabel =
+    authProvider === "google"
+      ? "Verifierad med Google"
+      : authProvider === "apple"
+        ? "Verifierad med Apple"
+        : authProvider === "phone"
+          ? "Verifierad med mobil"
+          : "Verifierad med BankID";
+  const roleLabel = accountMode === "business" ? "Utförare" : "Kund";
   const quick = [
     { icon: Calendar, label: "Bokningar", badge: bookings.length, onClick: () => go("bookings") },
     { icon: ClipboardList, label: "Mina uppdrag", badge: posted.filter((job) => !accountId || job.ownerId === accountId).length, onClick: () => go("posted") },
     { icon: Heart, label: "Favoriter", onClick: () => showToast("Inga sparade favoriter ännu") },
-    { icon: MapPin, label: "Adresser", onClick: () => showToast(address) },
+    { icon: MapPin, label: "Adresser", onClick: () => showToast("Lägg till en adress under Redigera profil snart") },
   ];
   const rows = [
     { icon: User, label: "Redigera profil", onClick: () => go("edit") },
@@ -378,11 +392,11 @@ export function ProfileScreens() {
             <h2 className="font-serif text-[1.7rem] leading-none font-medium">{profile.name}</h2>
             <p className="mt-2 flex items-center gap-1 text-sm font-medium text-[#3d8f4a]">
               <span className="grid size-4 place-items-center rounded-full border border-[#3d8f4a] text-[10px]">✓</span>
-              Verifierad med BankID
+              {verifyLabel}
             </p>
             <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-[#f3ece3] px-3 py-1 text-xs font-medium">
               <Crown className="size-3.5" />
-              Premiumkund
+              {roleLabel}
             </span>
           </div>
         </div>
@@ -390,16 +404,16 @@ export function ProfileScreens() {
           <div className="flex gap-2">
             <MapPin className="mt-0.5 size-4 shrink-0" />
             <div>
-              <p className="text-xs text-muted">Sparad adress</p>
-              <p className="text-sm leading-snug">{address}</p>
+              <p className="text-xs text-muted">Telefon</p>
+              <p className="text-sm leading-snug">{profile.phone || "Ingen telefon"}</p>
             </div>
           </div>
           <span className="mt-1 h-8 w-px bg-[#efeae4]" />
           <div className="flex gap-2">
             <Mail className="mt-0.5 size-4 shrink-0" />
             <div className="min-w-0">
-              <p className="text-xs text-muted">Kontakt</p>
-              <p className="truncate text-sm">{email}</p>
+              <p className="text-xs text-muted">E-post</p>
+              <p className="truncate text-sm">{email || "Ingen e-post"}</p>
             </div>
           </div>
         </div>

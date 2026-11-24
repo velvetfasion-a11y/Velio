@@ -10,12 +10,14 @@ import {
   type SortKey,
 } from "@/lib/velio/data";
 import {
+  createAccountRemote,
   createJobRemote,
   fetchMe,
   fetchMessages,
-  loginWithProvider as loginRemote,
+  loginWithAccount,
   logoutRemote,
   openConversation,
+  updateProfileRemote,
   type AuthProvider,
   type ConversationDto,
   type JobDto,
@@ -265,6 +267,15 @@ type VelioState = {
   showToast: (toast: string) => void;
   bootstrapAuth: () => Promise<void>;
   loginWithProvider: (provider: AuthProvider) => Promise<void>;
+  loginWithAccountId: (provider: AuthProvider, accountId: string) => Promise<void>;
+  createAccount: (input: {
+    provider: AuthProvider;
+    name: string;
+    email: string;
+    phone: string;
+    accountMode?: "customer" | "business";
+  }) => Promise<boolean>;
+  saveProfile: (profile?: Profile) => Promise<boolean>;
   refreshSync: () => Promise<void>;
   login: () => void;
   logout: () => void;
@@ -571,8 +582,8 @@ export const useVelio = create<VelioState>()(
           });
         }
       },
-      loginWithProvider: async (provider) => {
-        const me = await loginRemote(provider);
+      loginWithAccountId: async (provider, accountId) => {
+        const me = await loginWithAccount(provider, accountId);
         if (!me.authenticated) {
           set({
             authError: "Inloggningen kunde inte slutföras. Försök igen.",
@@ -599,8 +610,84 @@ export const useVelio = create<VelioState>()(
           conversationByProvider: mapped.conversationByProvider,
           chats: mapped.chats,
           peers: mapped.peers,
+          bookings: [],
+          cart: [],
+          cards: [],
+          activeBookingId: null,
+          listing: null,
+          businessForm: null,
         });
         get().showToast(`Inloggad som ${me.account.name}`);
+      },
+      createAccount: async (input) => {
+        const me = await createAccountRemote(input);
+        if (!me.authenticated) {
+          set({
+            authError: "Kontot kunde inte skapas. Kontrollera uppgifterna och försök igen.",
+            loggedIn: false,
+          });
+          return false;
+        }
+        const mapped = applyConversations(me.conversations, {}, {});
+        set({
+          authError: null,
+          loggedIn: true,
+          loginIntro: true,
+          sheet: null,
+          screen: "home",
+          accountId: me.account.id,
+          authProvider: me.account.provider,
+          profile: {
+            name: me.account.name,
+            phone: me.account.phone,
+            email: me.account.email,
+          },
+          accountMode: me.account.accountMode,
+          posted: jobsToPosted(me.jobs),
+          conversationByProvider: mapped.conversationByProvider,
+          chats: mapped.chats,
+          peers: mapped.peers,
+          bookings: [],
+          cart: [],
+          cards: [],
+          activeBookingId: null,
+          listing: null,
+          businessForm: null,
+        });
+        get().showToast(`Konto skapat — hej ${me.account.name}`);
+        return true;
+      },
+      loginWithProvider: async (provider) => {
+        const { listAccountsRemote } = await import("@/lib/velio/auth-api");
+        const accounts = await listAccountsRemote(provider);
+        if (!accounts[0]) {
+          set({ authError: "Inga konton hittades för den metoden. Skapa ett nytt konto." });
+          return;
+        }
+        await get().loginWithAccountId(provider, accounts[0].id);
+      },
+      saveProfile: async (nextProfile) => {
+        const profile = nextProfile ?? get().profile;
+        if (nextProfile) set({ profile: nextProfile });
+        const saved = await updateProfileRemote({
+          name: profile.name,
+          email: profile.email,
+          phone: profile.phone,
+          accountMode: get().accountMode,
+        });
+        if (!saved) {
+          get().showToast("Kunde inte spara profilen");
+          return false;
+        }
+        set({
+          profile: {
+            name: saved.name,
+            email: saved.email,
+            phone: saved.phone,
+          },
+          accountMode: saved.accountMode,
+        });
+        return true;
       },
       refreshSync: async () => {
         if (!get().loggedIn) return;
@@ -640,6 +727,15 @@ export const useVelio = create<VelioState>()(
           authProvider: null,
           conversationByProvider: {},
           peers: {},
+          chats: {},
+          bookings: [],
+          cart: [],
+          posted: [],
+          cards: [],
+          activeBookingId: null,
+          listing: null,
+          businessForm: null,
+          accountMode: "customer",
         });
       },
       allowLocation: () => {
@@ -952,6 +1048,9 @@ export const useVelio = create<VelioState>()(
       },
       finishOnboard: (listing) => {
         set({ listing, accountMode: "business", sheet: null, screen: "business" });
+        void updateProfileRemote({ accountMode: "business" }).then((saved) => {
+          if (saved) set({ accountMode: saved.accountMode });
+        });
         get().showToast("Profil skickad. Granskas inom 24 timmar.");
       },
       saveBusinessForm: (businessForm) => {
@@ -959,6 +1058,9 @@ export const useVelio = create<VelioState>()(
       },
       setAccountMode: (accountMode) => {
         set({ accountMode });
+        void updateProfileRemote({ accountMode }).then((saved) => {
+          if (saved) set({ accountMode: saved.accountMode });
+        });
       },
       addPosted: (job) => {
         void (async () => {
@@ -976,16 +1078,6 @@ export const useVelio = create<VelioState>()(
         loginIntro: state.loginIntro,
         locationOn: state.locationOn,
         notifications: state.notifications,
-        listing: state.listing,
-        businessForm: state.businessForm,
-        accountMode: state.accountMode,
-        profile: state.profile,
-        cards: state.cards,
-        cart: state.cart,
-        chats: state.chats,
-        bookings: state.bookings,
-        posted: state.posted,
-        activeBookingId: state.activeBookingId,
       }),
     },
   ),
