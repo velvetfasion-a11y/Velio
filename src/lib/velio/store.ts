@@ -4,6 +4,7 @@ import {
   kr,
   providerById,
   providers,
+  serviceById,
   type ServiceId,
   type Slot,
   type SortKey,
@@ -19,6 +20,13 @@ import {
   type ConversationDto,
   type JobDto,
 } from "@/lib/velio/auth-api";
+import { chatDtoToMsg, previewMessageText, resolveTakeRequestStatuses } from "@/lib/velio/chat-codec";
+
+function mapSyncedMessages(
+  messages: { id: string; from: "me" | "them"; text: string; time?: string }[],
+): ChatMsg[] {
+  return resolveTakeRequestStatuses(messages.map(chatDtoToMsg));
+}
 
 export type Screen =
   | "home"
@@ -56,7 +64,16 @@ export type Sheet =
   | null;
 
 export type ChatCard =
-  | { kind: "request"; service: string; when: string; place: string; price: number }
+  | {
+      kind: "request";
+      service: string;
+      when: string;
+      place: string;
+      price: number;
+      intent?: "book" | "take";
+      status?: "pending" | "accepted" | "declined";
+      about?: string;
+    }
   | { kind: "confirmed"; date: string; time: string; place: string }
   | { kind: "enroute"; eta: string }
   | { kind: "done"; service: string; desc: string; price: number }
@@ -272,6 +289,8 @@ type VelioState = {
   saveBusinessForm: (form: BusinessForm) => void;
   setAccountMode: (mode: "customer" | "business") => void;
   addPosted: (job: Omit<PostedJob, "id">) => void;
+  takePostedJob: (job: PostedJob) => void;
+  answerTakeRequest: (peerKey: string, messageId: string, status: "accepted" | "declined") => void;
   submitReview: (rating: number, tip: number) => void;
 };
 
@@ -330,7 +349,7 @@ function applyConversations(
         {
           id: `preview-${item.id}`,
           from: "them",
-          text: item.lastMessage,
+          text: previewMessageText(item.lastMessage),
           time: new Date(item.lastAt).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" }),
         },
       ];
@@ -496,12 +515,7 @@ export const useVelio = create<VelioState>()(
             },
             chats: {
               ...get().chats,
-              [threadKey]: messages.map((message) => ({
-                id: message.id,
-                from: message.from,
-                text: message.text,
-                time: message.time,
-              })),
+              [threadKey]: mapSyncedMessages(messages),
             },
           });
         })();
@@ -598,12 +612,7 @@ export const useVelio = create<VelioState>()(
         const activeConversation = activeProvider ? mapped.conversationByProvider[activeProvider] : null;
         if (activeConversation && get().sheet === "chat" && activeProvider) {
           const messages = await fetchMessages(activeConversation);
-          nextChats[activeProvider] = messages.map((message) => ({
-            id: message.id,
-            from: message.from,
-            text: message.text,
-            time: message.time,
-          }));
+          nextChats[activeProvider] = mapSyncedMessages(messages);
         }
         set({
           posted: jobsToPosted(me.jobs),
@@ -744,9 +753,7 @@ export const useVelio = create<VelioState>()(
             chats: {
               ...get().chats,
               [threadKey]: current.map((message) =>
-                message.id === optimistic.id
-                  ? { id: saved.id, from: "me", text: saved.text, time: saved.time }
-                  : message,
+                message.id === optimistic.id ? chatDtoToMsg({ ...saved, from: "me" }) : message,
               ),
             },
           });
@@ -766,6 +773,96 @@ export const useVelio = create<VelioState>()(
             ),
           },
         });
+      },
+      answerTakeRequest: (peerKey, messageId, status) => {
+        const prev = get().chats[peerKey] ?? [];
+        set({
+          chats: {
+            ...get().chats,
+            [peerKey]: prev.map((message) =>
+              message.id === messageId && message.card?.kind === "request"
+                ? { ...message, card: { ...message.card, status } }
+                : message,
+            ),
+          },
+        });
+        void (async () => {
+          const conversationId = get().conversationByProvider[peerKey];
+          if (!conversationId) return;
+          const note =
+            status === "accepted"
+              ? "Jag godkänner — du får ta uppdraget."
+              : "Tack, men jag tar en annan utförare den här gången.";
+          const { sendMessageRemote } = await import("@/lib/velio/auth-api");
+          const saved = await sendMessageRemote(conversationId, note);
+          if (saved) {
+            const next = resolveTakeRequestStatuses([
+              ...(get().chats[peerKey] ?? []),
+              chatDtoToMsg({ ...saved, from: "me" }),
+            ]);
+            set({
+              chats: {
+                ...get().chats,
+                [peerKey]: next,
+              },
+            });
+          }
+          get().showToast(status === "accepted" ? "Utföraren får ta uppdraget" : "Förfrågan avböjd");
+        })();
+      },
+      takePostedJob: (job) => {
+        const ownerId = job.ownerId;
+        if (!ownerId) {
+          get().showToast("Kunde inte hitta kunden");
+          return;
+        }
+        void (async () => {
+          const opened = await openConversation({ accountId: ownerId });
+          if (!opened) {
+            get().showToast("Kunde inte öppna chatten");
+            return;
+          }
+          const threadKey = opened.threadKey || ownerId;
+          const serviceName = serviceById(job.serviceId)?.name ?? "Uppdrag";
+          const card: ChatCard = {
+            kind: "request",
+            service: serviceName,
+            when: job.when,
+            place: job.address,
+            price: job.price || 0,
+            intent: "take",
+            status: "pending",
+            about: job.text,
+          };
+          const { sendMessageRemote } = await import("@/lib/velio/auth-api");
+          const saved = await sendMessageRemote(opened.conversationId, "Bokningsförfrågan", card);
+          const messages = await fetchMessages(opened.conversationId);
+          let mapped = mapSyncedMessages(messages);
+          if (saved && !mapped.some((message) => message.id === saved.id)) {
+            mapped = resolveTakeRequestStatuses([...mapped, chatDtoToMsg({ ...saved, from: "me" })]);
+          }
+          set({
+            providerId: threadKey,
+            sheet: "chat",
+            conversationByProvider: {
+              ...get().conversationByProvider,
+              [threadKey]: opened.conversationId,
+            },
+            peers: {
+              ...get().peers,
+              [threadKey]: {
+                id: opened.peer.id,
+                name: opened.peer.name,
+                providerId: opened.peer.providerId,
+              },
+            },
+            chats: {
+              ...get().chats,
+              [threadKey]: mapped,
+            },
+          });
+          get().showToast("Förfrågan skickad till kunden");
+        })();
       },
       confirmBook: (whenLabel) => {
         const provider = providerById(get().providerId);

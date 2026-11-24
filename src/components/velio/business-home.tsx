@@ -71,6 +71,7 @@ export function BusinessHome() {
   const setAccountMode = useVelio((state) => state.setAccountMode);
   const showToast = useVelio((state) => state.showToast);
   const openThread = useVelio((state) => state.openThread);
+  const takePostedJob = useVelio((state) => state.takePostedJob);
   const accountId = useVelio((state) => state.accountId);
   const posted = useVelio((state) => state.posted);
   const [open, setOpen] = useState(true);
@@ -106,18 +107,20 @@ export function BusinessHome() {
           ownerId: job.ownerId,
         }))}
         onBack={() => setOffersOpen(false)}
-        onAccept={(id) => {
+        onTake={(id) => {
           if (offers.some((offer) => offer.id === id)) {
             setOffers(offers.map((offer) => (offer.id === id ? { ...offer, status: "active" } : offer)));
-            showToast("Uppdrag accepterat");
+            showToast("Uppdraget är taget");
             return;
           }
           const job = posted.find((entry) => entry.id === id);
-          setSkipped([...skipped, id]);
-          showToast("Uppdrag accepterat");
-          if (job?.ownerId) {
-            openThread(job.ownerId, { accountId: job.ownerId });
+          if (!job?.ownerId) {
+            showToast("Kunde inte hitta kunden");
+            return;
           }
+          setSkipped([...skipped, id]);
+          setOffersOpen(false);
+          takePostedJob(job);
         }}
         onDecline={(id) => {
           if (offers.some((offer) => offer.id === id)) setOffers(offers.filter((offer) => offer.id !== id));
@@ -266,13 +269,13 @@ function OffersPage({
   offers,
   posted,
   onBack,
-  onAccept,
+  onTake,
   onDecline,
 }: {
   offers: Offer[];
   posted: Offer[];
   onBack: () => void;
-  onAccept: (id: string) => void;
+  onTake: (id: string) => void;
   onDecline: (id: string) => void;
 }) {
   const showToast = useVelio((state) => state.showToast);
@@ -338,7 +341,7 @@ function OffersPage({
             {tab === "new" ? (
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <button type="button" onClick={() => onDecline(job.id)} className="rounded-full border border-[#e6dfd6] py-2.5 text-sm font-semibold">Avböj</button>
-                <button type="button" onClick={() => onAccept(job.id)} className="rounded-full bg-[#6e5636] py-2.5 text-sm font-semibold text-white">Acceptera</button>
+                <button type="button" onClick={() => onTake(job.id)} className="rounded-full bg-[#6e5636] py-2.5 text-sm font-semibold text-white">Ta uppdrag</button>
               </div>
             ) : null}
           </article>

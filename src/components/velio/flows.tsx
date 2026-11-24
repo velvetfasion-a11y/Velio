@@ -209,6 +209,7 @@ export function ChatSheet() {
   const showToast = useVelio((state) => state.showToast);
   const openReceipt = useVelio((state) => state.openReceipt);
   const appendChat = useVelio((state) => state.appendChat);
+  const answerTakeRequest = useVelio((state) => state.answerTakeRequest);
   const cancelBooking = useVelio((state) => state.cancelBooking);
   const bookings = useVelio((state) => state.bookings);
   const accountMode = useVelio((state) => state.accountMode);
@@ -381,6 +382,11 @@ export function ChatSheet() {
                 onCalendar={() => showToast("Tid tillagd i kalendern")}
                 onFollow={() => showToast(`${provider.name.split(" ")[0]} är cirka 10 minuter bort`)}
                 onPay={() => setSheet("pay")}
+                onAnswerTake={
+                  providerId
+                    ? (status) => answerTakeRequest(providerId, message.id, status)
+                    : undefined
+                }
               />
             ) : (
               <div className={message.from === "me" ? "flex justify-end" : "flex justify-start"}>
@@ -779,7 +785,17 @@ function SyncedPeerChat({
       </div>
       <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
         {messages.map((message) =>
-          message.text ? (
+          message.card ? (
+            <div key={message.id} className="mt-3">
+              <ChatCardView
+                message={message}
+                onDetails={() => undefined}
+                onCalendar={() => undefined}
+                onFollow={() => undefined}
+                onPay={() => undefined}
+              />
+            </div>
+          ) : message.text ? (
             <div key={message.id} className={cn("mt-3 flex", message.from === "me" ? "justify-end" : "justify-start")}>
               <div
                 className={cn(
@@ -933,7 +949,15 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
 
         {messages.map((message) => (
           <div key={message.id} className="mt-3">
-            {message.card?.kind === "slot" ? (
+            {message.card?.kind === "request" ? (
+              <ChatCardView
+                message={message}
+                onDetails={() => showToast(message.card?.kind === "request" ? message.card.about || message.card.service : "Detaljer")}
+                onCalendar={() => showToast("Tid tillagd i kalendern")}
+                onFollow={() => showToast("Kunden väntar")}
+                onPay={() => showToast("Väntar på kundens betalning")}
+              />
+            ) : message.card?.kind === "slot" ? (
               <TimeConfirmedCard when={message.card.when} place={message.card.place} service={message.card.service} time={message.time ?? "14:05"} />
             ) : message.card?.kind === "rebook" ? (
               <div className="rounded-[1.25rem] border border-[#efeae4] bg-white px-4 py-4">
@@ -1286,15 +1310,19 @@ function ChatCardView({
   onCalendar,
   onFollow,
   onPay,
+  onAnswerTake,
 }: {
   message: ChatMsg;
   onDetails: () => void;
   onCalendar: () => void;
   onFollow: () => void;
   onPay: () => void;
+  onAnswerTake?: (status: "accepted" | "declined") => void;
 }) {
   const card = message.card;
   if (!card) return null;
+  const takePending = card.kind === "request" && card.intent === "take" && (card.status ?? "pending") === "pending";
+  const takeDone = card.kind === "request" && card.intent === "take" && card.status && card.status !== "pending";
   const action =
     card.kind === "request"
       ? { label: "Visa detaljer", onClick: onDetails }
@@ -1316,6 +1344,7 @@ function ChatCardView({
         {card.kind === "request" ? (
           <div className="space-y-1 text-[15px]">
             <p><span className="font-semibold">Tjänst:</span> {card.service}</p>
+            {card.about ? <p><span className="font-semibold">Om jobbet:</span> {card.about}</p> : null}
             <p><span className="font-semibold">Tid:</span> {card.when}</p>
             <p><span className="font-semibold">Plats:</span> {card.place}</p>
             <p><span className="font-semibold">Pris (estimat):</span> {kr(card.price)}</p>
@@ -1345,9 +1374,24 @@ function ChatCardView({
             <p><span className="font-semibold">Pris:</span> {kr(card.price)}</p>
           </div>
         ) : null}
-        <button type="button" onClick={action.onClick} className="mt-4 w-full rounded-full border border-[#e4dfd8] py-3 text-[15px] font-semibold">
-          {action.label}
-        </button>
+        {takePending && message.from === "them" && onAnswerTake ? (
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => onAnswerTake("declined")} className="rounded-full border border-[#e4dfd8] py-3 text-[15px] font-semibold">
+              Avböj
+            </button>
+            <button type="button" onClick={() => onAnswerTake("accepted")} className="rounded-full bg-[#6e5636] py-3 text-[15px] font-semibold text-white">
+              Godkänn
+            </button>
+          </div>
+        ) : takeDone ? (
+          <p className="mt-3 text-sm text-[#5c564f]">{card.status === "accepted" ? "Godkänd" : "Avböjd"}</p>
+        ) : takePending && message.from === "me" ? (
+          <p className="mt-3 text-sm text-[#5c564f]">Väntar på att kunden svarar</p>
+        ) : (
+          <button type="button" onClick={action.onClick} className="mt-4 w-full rounded-full border border-[#e4dfd8] py-3 text-[15px] font-semibold">
+            {action.label}
+          </button>
+        )}
       </div>
       {message.time ? <p className="mt-1 text-right text-xs text-muted">{message.time}</p> : null}
     </div>

@@ -1,4 +1,6 @@
 import type { ServiceId } from "@/lib/velio/data";
+import type { ChatCard } from "@/lib/velio/store";
+import { encodeCardMessage } from "@/lib/velio/chat-codec";
 
 export type AuthProvider = "bankid" | "google" | "apple" | "phone";
 
@@ -138,12 +140,17 @@ export async function fetchMessages(conversationId: string): Promise<ChatDto[]> 
   return data.messages ?? [];
 }
 
-export async function sendMessageRemote(conversationId: string, text: string): Promise<ChatDto | null> {
+export async function sendMessageRemote(
+  conversationId: string,
+  text: string,
+  card?: ChatCard,
+): Promise<ChatDto | null> {
+  const bodyText = card ? encodeCardMessage(card, text || "Bokningsförfrågan") : text;
   const response = await fetch(`/api/conversations/${conversationId}/messages`, {
     method: "POST",
     credentials: "same-origin",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text: bodyText }),
   });
   if (!response.ok) return null;
   const data = await json<{ message: ChatDto }>(response);

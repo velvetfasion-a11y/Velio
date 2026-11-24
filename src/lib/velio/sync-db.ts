@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "@/lib/db";
+import { previewMessageText } from "@/lib/velio/chat-codec";
 import { getAccountById, getAccountByProviderId, type Account } from "@/lib/velio/session";
 
 export type JobRow = {
@@ -152,7 +153,7 @@ export async function listConversations(accountId: string): Promise<Conversation
       id: row.id,
       peer,
       providerId: peer.providerId,
-      lastMessage: row.last_text ?? "",
+      lastMessage: row.last_text ? previewMessageText(row.last_text) : "",
       lastAt: row.updated_at,
     });
   }
