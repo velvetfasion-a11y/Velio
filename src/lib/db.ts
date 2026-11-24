@@ -3,22 +3,27 @@ import { PGlite } from "@electric-sql/pglite";
 import pg from "pg";
 
 const databaseUrl = process.env.DATABASE_URL?.trim() ?? "";
-let pool: pg.Pool | undefined;
-let local: Promise<PGlite> | undefined;
+
+type DbGlobal = {
+  velioPool?: pg.Pool;
+  velioLocal?: Promise<PGlite>;
+};
+
+const g = globalThis as typeof globalThis & DbGlobal;
 
 export async function sql<T = Record<string, unknown>>(
   text: string,
   params: unknown[] = [],
 ): Promise<T[]> {
   if (databaseUrl !== "") {
-    pool ??= new pg.Pool({ connectionString: databaseUrl, max: 5 });
-    return (await pool.query(text, params)).rows as T[];
+    g.velioPool ??= new pg.Pool({ connectionString: databaseUrl, max: 5 });
+    return (await g.velioPool.query(text, params)).rows as T[];
   }
-  local ??= startLocal().catch((error: unknown) => {
-    local = undefined;
+  g.velioLocal ??= startLocal().catch((error: unknown) => {
+    g.velioLocal = undefined;
     throw error;
   });
-  return (await (await local).query<T>(text, params)).rows;
+  return (await (await g.velioLocal).query<T>(text, params)).rows;
 }
 
 async function startLocal(): Promise<PGlite> {
