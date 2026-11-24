@@ -15,6 +15,8 @@ import { AppHeader } from "@/components/velio/header";
 import { CityMap } from "@/components/velio/map";
 import { Avatar, BottomSheet, Btn, FullScreen } from "@/components/velio/ui";
 
+const EMPTY_CHAT: ChatMsg[] = [];
+
 function receiptText(booking: Booking) {
   const service = serviceById(booking.serviceId);
   const provider = providerById(booking.providerId);
@@ -824,7 +826,7 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
   const peer = peers[threadKey];
   const marketplace = providerById(threadKey);
   const customerName = peer?.name || marketplace?.name || "kunden";
-  const messages = useVelio((state) => state.chats[threadKey] ?? []);
+  const messages = useVelio((state) => state.chats[threadKey] ?? EMPTY_CHAT);
   const [panel, setPanel] = useState<"time" | "price" | null>("time");
   const [when, setWhen] = useState("Idag, 14:00");
   const [slotDate, setSlotDate] = useState<Date | null>(null);
