@@ -376,7 +376,7 @@ export function ProfileScreens() {
             <h2 className="font-serif text-[1.7rem] leading-none font-medium">{profile.name}</h2>
             <p className="mt-2 flex items-center gap-1 text-sm font-medium text-[#3d8f4a]">
               <span className="grid size-4 place-items-center rounded-full border border-[#3d8f4a] text-[10px]">✓</span>
-              Inloggad via Cursor
+              Verifierad med BankID
             </p>
             <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-[#f3ece3] px-3 py-1 text-xs font-medium">
               <Crown className="size-3.5" />

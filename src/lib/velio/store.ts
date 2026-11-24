@@ -457,7 +457,7 @@ export const useVelio = create<VelioState>()(
         const me = await fetchMe();
         if (!me.authenticated) {
           set({
-            authError: "Ingen Cursor-session. Publicera som privat/team eller kör lokalt med simulerad användare.",
+            authError: "Inloggningen kunde inte slutföras. Försök igen.",
             loggedIn: false,
             authViewer: null,
           });
@@ -479,7 +479,7 @@ export const useVelio = create<VelioState>()(
           accountMode: me.accountMode ?? get().accountMode,
         });
         await get().syncRemote();
-        get().showToast(me.simulated ? "Inloggad (simulerad lokal användare)" : "Inloggad via Cursor");
+        get().showToast("Inloggad");
       },
       syncRemote: async () => {
         if (!get().loggedIn) return;
