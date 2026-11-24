@@ -1,49 +1,39 @@
-import { getIdentity } from "../../../cursor/identity";
-import { getOrCreateProfile } from "@/lib/velio/user-store";
+import { getAccountBySession } from "@/lib/velio/session";
+import { listConversations, listJobs } from "@/lib/velio/sync-db";
 
 export const dynamic = "force-dynamic";
 
 const noStore = { "cache-control": "private, no-store" };
 
 export async function GET(request: Request) {
-  const identity = await getIdentity(request);
-  if (!identity.verified) {
-    return Response.json(
-      { authenticated: false, reason: identity.reason },
-      { status: 200, headers: noStore },
-    );
+  const account = await getAccountBySession(request);
+  if (!account) {
+    return Response.json({ authenticated: false }, { status: 200, headers: noStore });
   }
 
-  if (identity.kind === "key") {
-    return Response.json(
-      { authenticated: false, reason: "api_key" },
-      { status: 200, headers: noStore },
-    );
-  }
-
-  const { profile, state } = await getOrCreateProfile({
-    owner: identity.sub,
-    stage: identity.stage,
-    name: identity.name,
-    email: identity.email,
-  });
+  const [jobs, conversations] = await Promise.all([listJobs(), listConversations(account.id)]);
 
   return Response.json(
     {
       authenticated: true,
-      simulated: identity.simulated,
-      stage: identity.stage,
-      viewer: {
-        name: identity.name || profile.name,
-        email: identity.email || profile.email,
+      account: {
+        id: account.id,
+        provider: account.provider,
+        name: account.name,
+        email: account.email,
+        phone: account.phone,
+        providerId: account.providerId,
+        accountMode: account.accountMode,
       },
-      profile: {
-        name: profile.name || identity.name,
-        phone: profile.phone,
-        email: profile.email || identity.email,
-      },
-      accountMode: state.accountMode ?? profile.accountMode,
-      state,
+      jobs,
+      conversations: conversations.map((item) => ({
+        id: item.id,
+        peerId: item.peer.id,
+        peerName: item.peer.name,
+        providerId: item.providerId,
+        lastMessage: item.lastMessage,
+        lastAt: item.lastAt,
+      })),
     },
     { headers: noStore },
   );

@@ -199,6 +199,7 @@ export function ChatSheet() {
   const providerId = useVelio((state) => state.providerId);
   const screen = useVelio((state) => state.screen);
   const chats = useVelio((state) => state.chats);
+  const peers = useVelio((state) => state.peers);
   const sendChat = useVelio((state) => state.sendChat);
   const setSheet = useVelio((state) => state.setSheet);
   const closeSheet = useVelio((state) => state.closeSheet);
@@ -210,6 +211,7 @@ export function ChatSheet() {
   const bookings = useVelio((state) => state.bookings);
   const accountMode = useVelio((state) => state.accountMode);
   const provider = providerById(providerId);
+  const peer = providerId ? peers[providerId] : null;
   const service = provider ? serviceById(provider.serviceId) : null;
   const messages = providerId ? (chats[providerId] ?? []) : [];
   const [draft, setDraft] = useState("");
@@ -229,6 +231,10 @@ export function ChatSheet() {
   }, [lastId, messages.length]);
 
   if (accountMode === "business") return <WorkerChat onClose={closeSheet} />;
+  if (!provider && !peer) return null;
+  if (!provider && peer) {
+    return <SyncedPeerChat peerName={peer.name} messages={messages} draft={draft} setDraft={setDraft} onSend={() => { if (!draft.trim()) return; sendChat(draft); setDraft(""); }} onClose={() => (screen === "inbox" ? closeSheet() : setSheet(null))} />;
+  }
   if (!provider) return null;
   const status = presence(messages);
   const paid = messages.some((message) => message.card?.kind === "paid");
@@ -724,12 +730,101 @@ function MiniWheel({ values, value, onChange }: { values: number[]; value: numbe
   );
 }
 
+function SyncedPeerChat({
+  peerName,
+  messages,
+  draft,
+  setDraft,
+  onSend,
+  onClose,
+}: {
+  peerName: string;
+  messages: ChatMsg[];
+  draft: string;
+  setDraft: (value: string) => void;
+  onSend: () => void;
+  onClose: () => void;
+}) {
+  const scroller = useRef<HTMLDivElement>(null);
+  const lastId = messages[messages.length - 1]?.id;
+  useLayoutEffect(() => {
+    const node = scroller.current;
+    if (!node) return;
+    node.scrollTop = node.scrollHeight;
+  }, [lastId, messages.length]);
+  const initials = peerName
+    .split(" ")
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
+  return (
+    <div className="absolute inset-0 z-30 flex flex-col bg-[#f7f3ee]">
+      <div className="flex items-center px-3 pt-3">
+        <button type="button" aria-label="Tillbaka" onClick={onClose} className="grid size-9 place-items-center">
+          <ArrowLeft className="size-5" />
+        </button>
+        <p className="flex-1 text-center font-serif text-[1.7rem] tracking-[0.28em]">VELIO</p>
+        <span className="size-9" />
+      </div>
+      <div className="flex items-center gap-3 px-4 py-2">
+        <span className="grid size-12 shrink-0 place-items-center rounded-full bg-[#f3ece3] text-sm font-semibold">{initials}</span>
+        <div>
+          <p className="text-lg font-semibold">{peerName}</p>
+          <p className="text-sm text-[#5c564f]">Synkad chatt</p>
+        </div>
+      </div>
+      <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+        {messages.map((message) =>
+          message.text ? (
+            <div key={message.id} className={cn("mt-3 flex", message.from === "me" ? "justify-end" : "justify-start")}>
+              <div
+                className={cn(
+                  "max-w-[85%] rounded-[1.2rem] px-4 py-2.5 text-[15px]",
+                  message.from === "me" ? "rounded-br-md bg-[#6e5636] text-white" : "rounded-bl-md border border-[#efeae4] bg-white",
+                )}
+              >
+                <p>{message.text}</p>
+                <p className={cn("mt-1 text-right text-xs", message.from === "me" ? "text-white/80" : "text-muted")}>{message.time}</p>
+              </div>
+            </div>
+          ) : null,
+        )}
+      </div>
+      <form
+        className="flex items-center gap-2 px-3 pt-2 pb-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSend();
+        }}
+      >
+        <input
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          placeholder="Skriv ett meddelande..."
+          className="min-w-0 flex-1 rounded-full border border-[#e6e1db] bg-white px-4 py-3 text-base outline-none"
+        />
+        <button type="submit" aria-label="Skicka" className="grid size-11 shrink-0 place-items-center rounded-full bg-[#6e5636] text-white">
+          <Send className="size-5" />
+        </button>
+      </form>
+    </div>
+  );
+}
+
 function WorkerChat({ onClose }: { onClose: () => void }) {
   const showToast = useVelio((state) => state.showToast);
   const appendChat = useVelio((state) => state.appendChat);
+  const sendChat = useVelio((state) => state.sendChat);
   const answerRebook = useVelio((state) => state.answerRebook);
-  const customerName = useVelio((state) => state.profile.name) || "kunden";
-  const messages = useVelio((state) => state.chats["st-cleanpro"] ?? []);
+  const providerId = useVelio((state) => state.providerId);
+  const peers = useVelio((state) => state.peers);
+  const threadKey = providerId || "st-cleanpro";
+  const peer = peers[threadKey];
+  const marketplace = providerById(threadKey);
+  const customerName = peer?.name || marketplace?.name || "kunden";
+  const messages = useVelio((state) => state.chats[threadKey] ?? []);
   const [panel, setPanel] = useState<"time" | "price" | null>("time");
   const [when, setWhen] = useState("Idag, 14:00");
   const [slotDate, setSlotDate] = useState<Date | null>(null);
@@ -752,9 +847,18 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
     { icon: CreditCard, label: "Betalning" },
   ];
 
-  const say = (text: string) => appendChat("st-cleanpro", { id: `w-${Date.now()}`, from: "them", text, time: "14:20" });
+  const say = (text: string) => {
+    sendChat(text);
+  };
+  const pushLocal = (message: ChatMsg) => appendChat(threadKey, message);
   const thread = useRef<HTMLDivElement>(null);
   const lastId = messages[messages.length - 1]?.id;
+  const initials = customerName
+    .split(" ")
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 
   useLayoutEffect(() => {
     const node = thread.current;
@@ -778,14 +882,14 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
       </div>
       <div className="flex items-center gap-3 px-4 py-2">
         <span className="relative grid size-12 shrink-0 place-items-center rounded-full bg-[#f3ece3] text-sm font-semibold">
-          CP
+          {initials}
           <span className="absolute right-0.5 bottom-0.5 size-2.5 rounded-full border-2 border-[#f7f3ee] bg-[#3d8f4a]" />
         </span>
         <div>
           <p className="flex items-center gap-1 text-lg font-semibold">
-            CleanPro <BadgeCheck className="size-4 fill-[#c4a15a] text-[#f7f3ee]" />
+            {customerName} <BadgeCheck className="size-4 fill-[#c4a15a] text-[#f7f3ee]" />
           </p>
-          <p className="text-sm text-[#5c564f]">Städning</p>
+          <p className="text-sm text-[#5c564f]">Kund</p>
         </div>
       </div>
       <div className="mx-4 mt-1 flex items-start">
@@ -844,8 +948,8 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
                     <button
                       type="button"
                       onClick={() => {
-                        answerRebook("st-cleanpro", message.id, "declined");
-                        appendChat("st-cleanpro", { id: `no-${Date.now()}`, from: "them", text: "Jag kan tyvärr inte ta jobbet.", time: "21:50" });
+                        answerRebook(threadKey, message.id, "declined");
+                        pushLocal({ id: `no-${Date.now()}`, from: "me", text: "Jag kan tyvärr inte ta jobbet.", time: "21:50" });
                         showToast("Förfrågan nekad");
                       }}
                       className="rounded-full border border-[#e6dfd6] py-2.5 text-sm font-semibold"
@@ -856,8 +960,8 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
                       type="button"
                       onClick={() => {
                         const job = message.card?.kind === "rebook" ? message.card : null;
-                        answerRebook("st-cleanpro", message.id, "accepted");
-                        appendChat("st-cleanpro", { id: `yes-${Date.now()}`, from: "them", text: `Jag tar uppdraget: ${job?.service ?? ""} ${job?.when ?? ""}.`, time: "21:50" });
+                        answerRebook(threadKey, message.id, "accepted");
+                        pushLocal({ id: `yes-${Date.now()}`, from: "me", text: `Jag tar uppdraget: ${job?.service ?? ""} ${job?.when ?? ""}.`, time: "21:50" });
                         showToast("Förfrågan godkänd");
                       }}
                       className="rounded-full bg-[#6e5636] py-2.5 text-sm font-semibold text-white"
@@ -892,7 +996,7 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
                 </div>
               </div>
             ) : message.card?.kind === "paid" ? (
-              <div className="flex justify-end">
+              <div className="flex justify-start">
                 <div className="max-w-[88%] rounded-[1.2rem] border border-[#efeae4] bg-white px-3 py-2.5">
                   <div className="flex items-center gap-2">
                     <span className="grid size-8 place-items-center rounded-full bg-[#f6f1ea]"><CreditCard className="size-4" /></span>
@@ -901,7 +1005,7 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
                       <span className="block text-sm text-[#5c564f]">{message.card.amount.toLocaleString("sv-SE")} kr har betalats av kunden.</span>
                     </span>
                   </div>
-                  <p className="mt-1 text-right text-xs text-[#5c564f]">{message.time} ✓✓</p>
+                  <p className="mt-1 text-right text-xs text-[#5c564f]">{message.time}</p>
                 </div>
               </div>
             ) : message.card?.kind === "reschedule" ? (
@@ -911,23 +1015,16 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
                 <p className="text-sm text-[#5c564f]">{message.card.when}</p>
                 <p className="text-sm text-[#5c564f]">{message.card.place}</p>
                 <div className="mt-3 grid grid-cols-2 gap-2">
-                  <button type="button" onClick={() => { appendChat("st-cleanpro", { id: `no-${Date.now()}`, from: "them", text: "Jag kan tyvärr inte den tiden.", time: "21:50" }); showToast("Förfrågan avböjd"); }} className="rounded-full border border-[#e6dfd6] py-2 text-sm font-semibold">Avböj</button>
-                  <button type="button" onClick={() => { appendChat("st-cleanpro", { id: `yes-${Date.now()}`, from: "them", text: `Jag tar den nya tiden: ${message.card && message.card.kind === "reschedule" ? message.card.when : ""}.`, time: "21:50" }); showToast("Ny tid accepterad"); }} className="rounded-full bg-[#6e5636] py-2 text-sm font-semibold text-white">Acceptera</button>
-                </div>
-              </div>
-            ) : message.text?.startsWith("Tack, jag har skickat") ? (
-              <div className="flex justify-start">
-                <div className="max-w-[85%] rounded-[1.2rem] rounded-bl-md border border-[#efeae4] bg-white px-4 py-2.5 text-[15px]">
-                  <p className="whitespace-pre-line">{message.text}</p>
-                  <p className="mt-1 text-right text-xs text-muted">{message.time}</p>
+                  <button type="button" onClick={() => { pushLocal({ id: `no-${Date.now()}`, from: "me", text: "Jag kan tyvärr inte den tiden.", time: "21:50" }); showToast("Förfrågan avböjd"); }} className="rounded-full border border-[#e6dfd6] py-2 text-sm font-semibold">Avböj</button>
+                  <button type="button" onClick={() => { pushLocal({ id: `yes-${Date.now()}`, from: "me", text: `Jag tar den nya tiden: ${message.card && message.card.kind === "reschedule" ? message.card.when : ""}.`, time: "21:50" }); showToast("Ny tid accepterad"); }} className="rounded-full bg-[#6e5636] py-2 text-sm font-semibold text-white">Acceptera</button>
                 </div>
               </div>
             ) : (
-              <div className={message.from === "them" ? "flex justify-end" : "flex justify-start"}>
-                <div className={message.from === "them" ? "max-w-[78%] rounded-[1.2rem] rounded-br-md bg-[#6e5636] px-4 py-2.5 text-[15px] text-white" : "max-w-[85%] rounded-[1.2rem] rounded-bl-md border border-[#efeae4] bg-white px-4 py-2.5 text-[15px]"}>
-                  <p>{message.text}</p>
-                  <p className={message.from === "them" ? "mt-1 text-right text-xs text-white/80" : "mt-1 text-right text-xs text-muted"}>
-                    {message.time} {message.from === "them" ? "✓✓" : ""}
+              <div className={message.from === "me" ? "flex justify-end" : "flex justify-start"}>
+                <div className={message.from === "me" ? "max-w-[78%] rounded-[1.2rem] rounded-br-md bg-[#6e5636] px-4 py-2.5 text-[15px] text-white" : "max-w-[85%] rounded-[1.2rem] rounded-bl-md border border-[#efeae4] bg-white px-4 py-2.5 text-[15px]"}>
+                  <p className="whitespace-pre-line">{message.text}</p>
+                  <p className={message.from === "me" ? "mt-1 text-right text-xs text-white/80" : "mt-1 text-right text-xs text-muted"}>
+                    {message.time} {message.from === "me" ? "✓✓" : ""}
                   </p>
                 </div>
               </div>
@@ -963,18 +1060,13 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
               if (!slotDate || !slotTime) return showToast("Välj datum och tid");
               const label = `${slotDate.toLocaleDateString("sv-SE", { day: "numeric", month: "short" }).replace(".", "")}, ${slotTime}`;
               setWhen(label);
-              appendChat("st-cleanpro", {
+              pushLocal({
                 id: `slot-${Date.now()}`,
-                from: "them",
+                from: "me",
                 time: "14:05",
                 card: { kind: "slot", when: label, place: "Södermalm", service: "Städning" },
               });
-              appendChat("st-cleanpro", {
-                id: `thanks-${Date.now()}`,
-                from: "them",
-                time: "14:05",
-                text: "Tack, jag har skickat min tidsbekräftelse.\nSer fram emot att hjälpa dig!",
-              });
+              sendChat("Tack, jag har skickat min tidsbekräftelse. Ser fram emot att hjälpa dig!");
               setPanel(null);
               showToast("Bekräftelse skickad");
             }}
@@ -997,16 +1089,13 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
             onSend={() => {
               const amount = Number(price);
               if (!amount) return showToast("Ange ett slutpris");
-              appendChat("st-cleanpro", {
+              pushLocal({
                 id: `quote-${Date.now()}`,
-                from: "them",
+                from: "me",
                 time: "14:08",
                 card: { kind: "quote", amount, service: "Städning", hours: hoursBetween(when), when, place: "Södermalm" },
               });
-              window.setTimeout(() => {
-                appendChat("st-cleanpro", { id: `pay-note-${Date.now()}`, from: "me", time: "14:12", text: "Perfekt! Jag betalar nu." });
-                appendChat("st-cleanpro", { id: `paid-${Date.now()}`, from: "them", time: "14:13", card: { kind: "paid", amount } });
-              }, 700);
+              sendChat(`Slutpris: ${amount.toLocaleString("sv-SE")} kr`);
               setPanel(null);
               showToast("Pris skickat till kunden");
             }}

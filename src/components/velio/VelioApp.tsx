@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Home, MessageCircle, User } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { useVelio, erikThread, type Screen } from "@/lib/velio/store";
+import { useVelio, type Screen } from "@/lib/velio/store";
 import { Home as HomeScreen, HomeSheets, InboxScreen, SearchScreen } from "@/components/velio/home";
 import { HistoryScreen } from "@/components/velio/history";
 import { ServiceScreen } from "@/components/velio/service";
@@ -37,6 +37,8 @@ export function VelioApp() {
   const mainRef = useRef<HTMLElement>(null);
   const [ready, setReady] = useState(false);
   const bootstrapAuth = useVelio((state) => state.bootstrapAuth);
+  const refreshSync = useVelio((state) => state.refreshSync);
+  const loggedIn = useVelio((state) => state.loggedIn);
 
   useLayoutEffect(() => {
     const el = mainRef.current;
@@ -47,54 +49,18 @@ export function VelioApp() {
   useEffect(() => {
     void Promise.resolve(useVelio.persist.rehydrate())
       .then(async () => {
-        const { chats } = useVelio.getState();
-        const clean = chats["st-cleanpro"];
-        if (!clean?.length || (clean.length === 1 && clean[0]?.text?.includes("Hej Anna"))) {
-          useVelio.setState({
-            chats: {
-              ...chats,
-              "st-cleanpro": [
-                { id: "c1", from: "me", text: "Hej! Kan du komma idag klockan 14?", time: "14:02" },
-                { id: "c2", from: "them", text: "Ja, det passar mig.", time: "14:05" },
-              ],
-            },
-          });
-        } else if (!clean[0]?.time) {
-          useVelio.setState({
-            chats: {
-              ...chats,
-              "st-cleanpro": clean.map((message, index) => (index === 0 ? { ...message, time: "14:02" } : message)),
-            },
-          });
-        }
-        const next = useVelio.getState().chats;
-        if (!next["el-erik"]?.some((message) => message.card)) {
-          useVelio.setState({ chats: { ...next, "el-erik": erikThread } });
-        }
-        const bookings = useVelio.getState().bookings;
-        if (!bookings.some((item) => item.id === "b-erik" || (item.providerId === "el-erik" && item.whenLabel === "Idag 14:00"))) {
-          useVelio.setState({
-            bookings: [
-              ...bookings,
-              {
-                id: "b-erik",
-                serviceId: "el",
-                providerId: "el-erik",
-                whenLabel: "Idag 14:00",
-                cost: 890,
-                tip: null,
-                location: "Östermalm",
-                rating: null,
-                status: "done",
-                holdKr: 890,
-              },
-            ],
-          });
-        }
         await bootstrapAuth();
       })
       .finally(() => setReady(true));
   }, [bootstrapAuth]);
+
+  useEffect(() => {
+    if (!loggedIn) return;
+    const timer = window.setInterval(() => {
+      void refreshSync();
+    }, 4000);
+    return () => window.clearInterval(timer);
+  }, [loggedIn, refreshSync]);
 
   const nav: { id: Screen; label: string; icon: typeof Home }[] = [
     { id: "home", label: "Hem", icon: Home },
@@ -110,7 +76,6 @@ export function VelioApp() {
   };
   const showChrome = screen !== "home" && screen !== "service" && screen !== "history" && screen !== "inbox";
   const unread = useVelio((state) => Object.keys(state.chats).length > 0);
-  const loggedIn = useVelio((state) => state.loggedIn);
 
   if (!ready) {
     return (

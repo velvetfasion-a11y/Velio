@@ -1,16 +1,17 @@
 import { useState, type ReactNode } from "react";
 import { useVelio } from "@/lib/velio/store";
+import type { AuthProvider } from "@/lib/velio/auth-api";
 
 export function LoginScreen() {
-  const loginWithCursor = useVelio((state) => state.loginWithCursor);
+  const loginWithProvider = useVelio((state) => state.loginWithProvider);
   const authError = useVelio((state) => state.authError);
   const [busy, setBusy] = useState(false);
 
-  const onContinue = async () => {
+  const onContinue = async (provider: AuthProvider) => {
     if (busy) return;
     setBusy(true);
     try {
-      await loginWithCursor();
+      await loginWithProvider(provider);
     } finally {
       setBusy(false);
     }
@@ -31,10 +32,10 @@ export function LoginScreen() {
 
         <div className="mt-8 rounded-[1.7rem] border border-white/80 bg-white/45 p-3 shadow-[0_18px_50px_rgba(70,50,20,0.08)] backdrop-blur-xl">
           <div className="space-y-2.5">
-            <Method label="Fortsätt med BankID" onClick={() => void onContinue()} icon={<BankIdMark />} disabled={busy} />
-            <Method label="Fortsätt med Google" onClick={() => void onContinue()} icon={<GoogleMark />} disabled={busy} />
-            <Method label="Fortsätt med Apple" onClick={() => void onContinue()} icon={<AppleMark />} disabled={busy} />
-            <Method label="Fortsätt med mobilnummer" onClick={() => void onContinue()} icon={<PhoneMark />} disabled={busy} />
+            <Method label="Fortsätt med BankID" onClick={() => void onContinue("bankid")} icon={<BankIdMark />} disabled={busy} />
+            <Method label="Fortsätt med Google" onClick={() => void onContinue("google")} icon={<GoogleMark />} disabled={busy} />
+            <Method label="Fortsätt med Apple" onClick={() => void onContinue("apple")} icon={<AppleMark />} disabled={busy} />
+            <Method label="Fortsätt med mobilnummer" onClick={() => void onContinue("phone")} icon={<PhoneMark />} disabled={busy} />
           </div>
         </div>
 
@@ -47,7 +48,7 @@ export function LoginScreen() {
         <button
           type="button"
           disabled={busy}
-          onClick={() => void onContinue()}
+          onClick={() => void onContinue("bankid")}
           className="mt-4 h-12 w-full rounded-full border border-white/90 bg-white/70 text-[15px] font-semibold text-[#2a211c] shadow-sm backdrop-blur-md disabled:opacity-60"
         >
           {busy ? "Loggar in…" : "Skapa konto"}

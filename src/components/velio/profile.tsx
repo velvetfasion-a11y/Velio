@@ -70,6 +70,7 @@ export function ProfileScreens() {
   const addCard = useVelio((state) => state.addCard);
   const bookings = useVelio((state) => state.bookings);
   const posted = useVelio((state) => state.posted);
+  const accountId = useVelio((state) => state.accountId);
   const openReceipt = useVelio((state) => state.openReceipt);
   const listing = useVelio((state) => state.listing);
   const accountMode = useVelio((state) => state.accountMode);
@@ -157,6 +158,7 @@ export function ProfileScreens() {
   }
 
   if (screen === "posted") {
+    const mine = posted.filter((job) => !accountId || job.ownerId === accountId);
     const images: Record<string, string> = {
       stad: "/velio/tile-stad.jpg",
       ren: "/velio/tile-ren.jpg",
@@ -166,9 +168,9 @@ export function ProfileScreens() {
     return (
       <div className="px-4 pt-4">
         <ScreenHeader title="Mina uppdrag" onBack={() => go("profile")} />
-        {posted.length ? (
+        {mine.length ? (
           <div className="space-y-3">
-            {posted.map((job) => {
+            {mine.map((job) => {
               const service = serviceById(job.serviceId);
               return (
                 <article key={job.id} className="flex gap-3 rounded-[1.3rem] border border-[#efeae4] bg-white/80 p-3">
@@ -347,7 +349,7 @@ export function ProfileScreens() {
   const address = "Strandvägen 12, 114 56 Stockholm";
   const quick = [
     { icon: Calendar, label: "Bokningar", badge: bookings.length, onClick: () => go("bookings") },
-    { icon: ClipboardList, label: "Mina uppdrag", badge: posted.length, onClick: () => go("posted") },
+    { icon: ClipboardList, label: "Mina uppdrag", badge: posted.filter((job) => !accountId || job.ownerId === accountId).length, onClick: () => go("posted") },
     { icon: Heart, label: "Favoriter", onClick: () => showToast("Inga sparade favoriter ännu") },
     { icon: MapPin, label: "Adresser", onClick: () => showToast(address) },
   ];

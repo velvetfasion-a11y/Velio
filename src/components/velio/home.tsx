@@ -377,6 +377,7 @@ function ProviderHits({ query, onOpen }: { query: string; onOpen: (id: string) =
 
 export function InboxScreen() {
   const chats = useVelio((state) => state.chats);
+  const peers = useVelio((state) => state.peers);
   const openThread = useVelio((state) => state.openThread);
   const threads = Object.entries(chats).filter(([, messages]) => messages.length);
 
@@ -389,29 +390,39 @@ export function InboxScreen() {
         <div className="space-y-3">
           {threads.map(([providerId, messages]) => {
             const provider = providerById(providerId);
+            const peer = peers[providerId];
+            const name = provider?.name ?? peer?.name ?? "Kontakt";
+            const initials =
+              provider?.initials ??
+              name
+                .split(" ")
+                .map((part) => part[0])
+                .join("")
+                .slice(0, 2)
+                .toUpperCase();
             const last = messages[messages.length - 1];
             const card = [...messages].reverse().find((message) => message.card)?.card;
             const active = (provider?.etaMin ?? 99) <= 20;
-            const presence = card?.kind === "enroute" ? "På väg" : card?.kind === "done" ? "På plats" : active ? "Aktiv nu" : `Om ${provider?.etaMin ?? 0} min`;
+            const presence = card?.kind === "enroute" ? "På väg" : card?.kind === "done" ? "På plats" : active ? "Aktiv nu" : provider ? `Om ${provider.etaMin} min` : "Synkad";
             return (
               <button
                 key={providerId}
                 type="button"
-                onClick={() => openThread(providerId)}
+                onClick={() => openThread(providerId, peer && !provider ? { accountId: peer.id } : undefined)}
                 className="flex w-full items-start gap-3 rounded-[1.4rem] border border-line bg-paper/50 px-3 py-3 text-left"
               >
                 {provider?.photo ? (
                   <img src={provider.photo} alt="" className="size-12 shrink-0 rounded-full object-cover" />
                 ) : (
                   <span className="grid size-12 shrink-0 place-items-center rounded-full bg-sand text-sm font-semibold">
-                    {provider?.initials ?? "—"}
+                    {initials || "—"}
                   </span>
                 )}
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center justify-between gap-2">
                     <span className="flex min-w-0 items-center gap-1 font-semibold">
-                      <span className="truncate">{provider?.name ?? "Utförare"}</span>
-                      <BadgeCheck className="size-4 shrink-0 fill-gold text-paper" />
+                      <span className="truncate">{name}</span>
+                      {provider ? <BadgeCheck className="size-4 shrink-0 fill-gold text-paper" /> : null}
                     </span>
                     <span className={cn("flex shrink-0 items-center gap-1.5 text-sm font-medium", active ? "text-ok" : "text-muted")}>
                       <span className={cn("size-2 rounded-full", active ? "bg-ok" : "bg-muted")} />

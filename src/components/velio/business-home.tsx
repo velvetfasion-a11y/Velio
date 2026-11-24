@@ -13,6 +13,7 @@ type Offer = {
   price: string;
   image: string;
   status: "new" | "active" | "done";
+  ownerId?: string;
 };
 
 const seedOffers: Offer[] = [
@@ -70,6 +71,7 @@ export function BusinessHome() {
   const setAccountMode = useVelio((state) => state.setAccountMode);
   const showToast = useVelio((state) => state.showToast);
   const openThread = useVelio((state) => state.openThread);
+  const accountId = useVelio((state) => state.accountId);
   const posted = useVelio((state) => state.posted);
   const [open, setOpen] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -80,32 +82,42 @@ export function BusinessHome() {
   const [breakOn, setBreakOn] = useState(true);
   const [breakFrom, setBreakFrom] = useState("12:00");
   const [breakTo, setBreakTo] = useState("13:00");
+  const openJobs = posted.filter((job) => !skipped.includes(job.id) && job.ownerId !== accountId);
   const first = profile.name.split(" ")[0] || profile.name;
   const current = weeks[weekKey(mondayOf(0))] ?? defaultDays();
   const todayIndex = (new Date().getDay() + 6) % 7;
   const todayHours = current[todayIndex];
 
-  const newCount = offers.filter((offer) => offer.status === "new").length + posted.filter((job) => !skipped.includes(job.id)).length;
+  const newCount = offers.filter((offer) => offer.status === "new").length + openJobs.length;
 
   if (offersOpen) {
     return (
       <OffersPage
         offers={offers}
-        posted={posted.filter((job) => !skipped.includes(job.id)).map((job) => ({
+        posted={openJobs.map((job) => ({
           id: job.id,
           title: job.text,
           place: job.address,
           when: job.when,
-          tag: "Kund",
+          tag: job.ownerName || "Kund",
           price: `${job.price.toLocaleString("sv-SE")} kr`,
           image: job.serviceId === "ren" ? "/velio/tile-ren.jpg" : job.serviceId === "el" ? "/velio/tile-el.jpg" : job.serviceId === "trad" ? "/velio/tile-trad.jpg" : "/velio/tile-stad.jpg",
           status: "new" as const,
+          ownerId: job.ownerId,
         }))}
         onBack={() => setOffersOpen(false)}
         onAccept={(id) => {
-          if (offers.some((offer) => offer.id === id)) setOffers(offers.map((offer) => (offer.id === id ? { ...offer, status: "active" } : offer)));
-          else setSkipped([...skipped, id]);
+          if (offers.some((offer) => offer.id === id)) {
+            setOffers(offers.map((offer) => (offer.id === id ? { ...offer, status: "active" } : offer)));
+            showToast("Uppdrag accepterat");
+            return;
+          }
+          const job = posted.find((entry) => entry.id === id);
+          setSkipped([...skipped, id]);
           showToast("Uppdrag accepterat");
+          if (job?.ownerId) {
+            openThread(job.ownerId, { accountId: job.ownerId });
+          }
         }}
         onDecline={(id) => {
           if (offers.some((offer) => offer.id === id)) setOffers(offers.filter((offer) => offer.id !== id));

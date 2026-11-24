@@ -1,7 +1,6 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import {
-  autoReply,
   kr,
   providerById,
   providers,
@@ -9,7 +8,17 @@ import {
   type Slot,
   type SortKey,
 } from "@/lib/velio/data";
-import { fetchMe, saveRemoteState } from "@/lib/velio/auth-api";
+import {
+  createJobRemote,
+  fetchMe,
+  fetchMessages,
+  loginWithProvider as loginRemote,
+  logoutRemote,
+  openConversation,
+  type AuthProvider,
+  type ConversationDto,
+  type JobDto,
+} from "@/lib/velio/auth-api";
 
 export type Screen =
   | "home"
@@ -117,6 +126,14 @@ export type PostedJob = {
   address: string;
   rate: "hour" | "fixed";
   price: number;
+  ownerId?: string;
+  ownerName?: string;
+};
+
+export type PeerInfo = {
+  id: string;
+  name: string;
+  providerId: string | null;
 };
 
 const seedBookings: Booking[] = [
@@ -191,9 +208,11 @@ type VelioState = {
   loggedIn: boolean;
   loginIntro: boolean;
   authReady: boolean;
-  authSimulated: boolean;
-  authViewer: { name: string; email: string } | null;
   authError: string | null;
+  accountId: string | null;
+  authProvider: string | null;
+  conversationByProvider: Record<string, string>;
+  peers: Record<string, PeerInfo>;
   locationOn: boolean;
   notifications: boolean;
   search: string;
@@ -218,7 +237,7 @@ type VelioState = {
   go: (screen: Screen) => void;
   openService: (serviceId: ServiceId) => void;
   openProvider: (providerId: string) => void;
-  openThread: (providerId: string) => void;
+  openThread: (peerKey: string, opts?: { accountId?: string }) => void;
   closeSheet: () => void;
   setSheet: (sheet: Sheet) => void;
   setSearch: (search: string) => void;
@@ -228,8 +247,8 @@ type VelioState = {
   setArea: (area: string | null) => void;
   showToast: (toast: string) => void;
   bootstrapAuth: () => Promise<void>;
-  loginWithCursor: () => Promise<void>;
-  syncRemote: () => Promise<void>;
+  loginWithProvider: (provider: AuthProvider) => Promise<void>;
+  refreshSync: () => Promise<void>;
   login: () => void;
   logout: () => void;
   allowLocation: () => void;
@@ -270,6 +289,54 @@ function clock() {
 
 function uid() {
   return crypto.randomUUID();
+}
+
+function jobsToPosted(jobs: JobDto[]): PostedJob[] {
+  return jobs.map((job) => ({
+    id: job.id,
+    serviceId: job.serviceId as ServiceId,
+    text: job.text,
+    when: job.when,
+    address: job.address,
+    rate: job.rate,
+    price: job.price,
+    ownerId: job.ownerId,
+    ownerName: job.ownerName,
+  }));
+}
+
+function applyConversations(
+  conversations: ConversationDto[],
+  chats: Record<string, ChatMsg[]>,
+  peers: Record<string, PeerInfo>,
+): {
+  conversationByProvider: Record<string, string>;
+  chats: Record<string, ChatMsg[]>;
+  peers: Record<string, PeerInfo>;
+} {
+  const conversationByProvider: Record<string, string> = {};
+  const nextChats = { ...chats };
+  const nextPeers = { ...peers };
+  for (const item of conversations) {
+    const key = item.providerId || item.peerId;
+    conversationByProvider[key] = item.id;
+    nextPeers[key] = {
+      id: item.peerId,
+      name: item.peerName,
+      providerId: item.providerId,
+    };
+    if (!nextChats[key]?.length && item.lastMessage) {
+      nextChats[key] = [
+        {
+          id: `preview-${item.id}`,
+          from: "them",
+          text: item.lastMessage,
+          time: new Date(item.lastAt).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" }),
+        },
+      ];
+    }
+  }
+  return { conversationByProvider, chats: nextChats, peers: nextPeers };
 }
 
 export const erikThread: ChatMsg[] = [
@@ -345,9 +412,11 @@ export const useVelio = create<VelioState>()(
       loggedIn: false,
       loginIntro: false,
       authReady: false,
-      authSimulated: false,
-      authViewer: null,
       authError: null,
+      accountId: null,
+      authProvider: null,
+      conversationByProvider: {},
+      peers: {},
       locationOn: false,
       notifications: true,
       search: "",
@@ -394,7 +463,49 @@ export const useVelio = create<VelioState>()(
           time: "anytime",
         }),
       openProvider: (providerId) => set({ providerId, sheet: "provider" }),
-      openThread: (providerId) => set({ providerId, sheet: "chat" }),
+      openThread: (peerKey, opts) => {
+        set({ providerId: peerKey, sheet: "chat" });
+        void (async () => {
+          const marketplace = providerById(peerKey);
+          const opened = await openConversation(
+            opts?.accountId
+              ? { accountId: opts.accountId }
+              : marketplace
+                ? { providerId: peerKey }
+                : { accountId: peerKey },
+          );
+          if (!opened) {
+            get().showToast("Kunde inte öppna chatten");
+            return;
+          }
+          const threadKey = opened.threadKey || peerKey;
+          const messages = await fetchMessages(opened.conversationId);
+          set({
+            providerId: threadKey,
+            conversationByProvider: {
+              ...get().conversationByProvider,
+              [threadKey]: opened.conversationId,
+            },
+            peers: {
+              ...get().peers,
+              [threadKey]: {
+                id: opened.peer.id,
+                name: opened.peer.name,
+                providerId: opened.peer.providerId,
+              },
+            },
+            chats: {
+              ...get().chats,
+              [threadKey]: messages.map((message) => ({
+                id: message.id,
+                from: message.from,
+                text: message.text,
+                time: message.time,
+              })),
+            },
+          });
+        })();
+      },
       closeSheet: () => set({ sheet: null }),
       setSheet: (sheet) => set({ sheet }),
       setSearch: (search) => set({ search }),
@@ -413,37 +524,30 @@ export const useVelio = create<VelioState>()(
           if (!me.authenticated) {
             set({
               authReady: true,
-              authViewer: null,
-              authSimulated: false,
               authError: null,
               loggedIn: false,
+              accountId: null,
+              authProvider: null,
             });
             return;
           }
-          const remoteProfile = me.profile;
-          const remoteState = me.state ?? {};
+          const mapped = applyConversations(me.conversations, get().chats, get().peers);
           set({
             authReady: true,
-            authViewer: me.viewer,
-            authSimulated: me.simulated,
             authError: null,
-            loggedIn: false,
+            loggedIn: true,
+            accountId: me.account.id,
+            authProvider: me.account.provider,
             profile: {
-              name: remoteProfile.name || me.viewer.name || get().profile.name,
-              phone: remoteProfile.phone || get().profile.phone,
-              email: remoteProfile.email || me.viewer.email || get().profile.email,
+              name: me.account.name,
+              phone: me.account.phone,
+              email: me.account.email,
             },
-            accountMode: me.accountMode ?? remoteState.accountMode ?? get().accountMode,
-            locationOn: remoteState.locationOn ?? get().locationOn,
-            notifications: remoteState.notifications ?? get().notifications,
-            cards: (remoteState.cards as PayCard[] | undefined) ?? get().cards,
-            cart: (remoteState.cart as CartItem[] | undefined) ?? get().cart,
-            chats: (remoteState.chats as Record<string, ChatMsg[]> | undefined) ?? get().chats,
-            bookings: (remoteState.bookings as Booking[] | undefined) ?? get().bookings,
-            posted: (remoteState.posted as PostedJob[] | undefined) ?? get().posted,
-            listing: (remoteState.listing as Listing | null | undefined) ?? get().listing,
-            businessForm: (remoteState.businessForm as BusinessForm | null | undefined) ?? get().businessForm,
-            activeBookingId: remoteState.activeBookingId ?? get().activeBookingId,
+            accountMode: me.account.accountMode,
+            posted: jobsToPosted(me.jobs),
+            conversationByProvider: mapped.conversationByProvider,
+            chats: mapped.chats,
+            peers: mapped.peers,
           });
         } catch {
           set({
@@ -453,84 +557,91 @@ export const useVelio = create<VelioState>()(
           });
         }
       },
-      loginWithCursor: async () => {
-        const me = await fetchMe();
+      loginWithProvider: async (provider) => {
+        const me = await loginRemote(provider);
         if (!me.authenticated) {
           set({
             authError: "Inloggningen kunde inte slutföras. Försök igen.",
             loggedIn: false,
-            authViewer: null,
           });
           return;
         }
+        const mapped = applyConversations(me.conversations, {}, {});
         set({
-          authViewer: me.viewer,
-          authSimulated: me.simulated,
           authError: null,
           loggedIn: true,
           loginIntro: true,
           sheet: null,
           screen: "home",
+          accountId: me.account.id,
+          authProvider: me.account.provider,
           profile: {
-            name: me.profile.name || me.viewer.name || get().profile.name,
-            phone: me.profile.phone || get().profile.phone,
-            email: me.profile.email || me.viewer.email || get().profile.email,
+            name: me.account.name,
+            phone: me.account.phone,
+            email: me.account.email,
           },
-          accountMode: me.accountMode ?? get().accountMode,
+          accountMode: me.account.accountMode,
+          posted: jobsToPosted(me.jobs),
+          conversationByProvider: mapped.conversationByProvider,
+          chats: mapped.chats,
+          peers: mapped.peers,
         });
-        await get().syncRemote();
-        get().showToast("Inloggad");
+        get().showToast(`Inloggad som ${me.account.name}`);
       },
-      syncRemote: async () => {
+      refreshSync: async () => {
         if (!get().loggedIn) return;
-        const {
-          profile,
-          accountMode,
-          locationOn,
-          notifications,
-          cards,
-          cart,
-          chats,
-          bookings,
-          posted,
-          listing,
-          businessForm,
-          activeBookingId,
-        } = get();
-        await saveRemoteState({
-          profile: { ...profile, accountMode },
-          state: {
-            profile: { ...profile, accountMode },
-            accountMode,
-            locationOn,
-            notifications,
-            cards,
-            cart,
-            chats,
-            bookings,
-            posted,
-            listing,
-            businessForm,
-            activeBookingId,
+        const me = await fetchMe();
+        if (!me.authenticated) return;
+        const mapped = applyConversations(me.conversations, get().chats, get().peers);
+        const nextChats = { ...mapped.chats };
+        const activeProvider = get().providerId;
+        const activeConversation = activeProvider ? mapped.conversationByProvider[activeProvider] : null;
+        if (activeConversation && get().sheet === "chat" && activeProvider) {
+          const messages = await fetchMessages(activeConversation);
+          nextChats[activeProvider] = messages.map((message) => ({
+            id: message.id,
+            from: message.from,
+            text: message.text,
+            time: message.time,
+          }));
+        }
+        set({
+          posted: jobsToPosted(me.jobs),
+          conversationByProvider: mapped.conversationByProvider,
+          chats: nextChats,
+          peers: mapped.peers,
+          profile: {
+            name: me.account.name,
+            phone: me.account.phone || get().profile.phone,
+            email: me.account.email,
           },
+          accountMode: me.account.accountMode,
         });
       },
       login: () => {
-        void get().loginWithCursor();
+        void get().loginWithProvider("bankid");
       },
-      logout: () => set({ loggedIn: false, screen: "home", sheet: null }),
+      logout: () => {
+        void logoutRemote();
+        set({
+          loggedIn: false,
+          screen: "home",
+          sheet: null,
+          accountId: null,
+          authProvider: null,
+          conversationByProvider: {},
+          peers: {},
+        });
+      },
       allowLocation: () => {
         set({ locationOn: true, sheet: null });
         get().showToast("Plats delad. Visar utförare nära Östermalm.");
-        void get().syncRemote();
       },
       setNotifications: (notifications) => {
         set({ notifications });
-        void get().syncRemote();
       },
       setProfile: (profile) => {
         set({ profile });
-        void get().syncRemote();
       },
       addCard: (card) => set({ cards: [...get().cards, card] }),
       addToCart: () => {
@@ -579,58 +690,67 @@ export const useVelio = create<VelioState>()(
       },
       openChat: () => {
         const providerId = get().providerId;
-        const provider = providerById(providerId);
-        if (!providerId || !provider) return;
-        const related = get().bookings.filter((item) => item.providerId === providerId);
-        const waiting = related.find((item) => item.status === "requested");
-        const canChat = related.some((item) => item.status === "accepted" || item.status === "enroute" || item.status === "scheduled" || item.status === "done");
-        if (waiting && !canChat) {
-          set({ activeBookingId: waiting.id, sheet: "request" });
-          get().showToast("Väntar på att personen accepterar");
-          return;
-        }
-        if (!canChat) {
-          set({ sheet: "book" });
-          get().showToast("Boka först. Chatten öppnas när personen accepterar.");
-          return;
-        }
-        const existing = get().chats[providerId];
-        if (!existing?.length) {
-          set({
-            chats: {
-              ...get().chats,
-              [providerId]: [
-                {
-                  id: uid(),
-                  from: "them",
-                  text: `Hej! Jag är ${provider.name.split(" ")[0]} och har accepterat uppdraget. Vad behöver du hjälp med?`,
-                  time: clock(),
-                },
-              ],
-            },
-          });
-        }
-        set({ sheet: "chat" });
+        if (!providerId) return;
+        get().openThread(providerId);
       },
       sendChat: (text) => {
         const providerId = get().providerId;
-        const provider = providerById(providerId);
         const trimmed = text.trim();
-        if (!providerId || !provider || !trimmed) return;
-        const mine: ChatMsg = { id: uid(), from: "me", text: trimmed, time: clock() };
-        const prev = get().chats[providerId] ?? [];
-        set({ chats: { ...get().chats, [providerId]: [...prev, mine] } });
-        const reply = autoReply(trimmed, provider);
-        window.setTimeout(() => {
-          const current = get().chats[providerId] ?? [];
-          if (current.some((message) => message.id === mine.id) === false) return;
+        if (!providerId || !trimmed) return;
+        void (async () => {
+          let conversationId = get().conversationByProvider[providerId];
+          if (!conversationId) {
+            const marketplace = providerById(providerId);
+            const peerMeta = get().peers[providerId];
+            const opened = await openConversation(
+              marketplace
+                ? { providerId }
+                : { accountId: peerMeta?.id || providerId },
+            );
+            if (!opened) {
+              get().showToast("Kunde inte skicka meddelandet");
+              return;
+            }
+            conversationId = opened.conversationId;
+            const threadKey = opened.threadKey || providerId;
+            set({
+              providerId: threadKey,
+              conversationByProvider: {
+                ...get().conversationByProvider,
+                [threadKey]: conversationId,
+              },
+              peers: {
+                ...get().peers,
+                [threadKey]: {
+                  id: opened.peer.id,
+                  name: opened.peer.name,
+                  providerId: opened.peer.providerId,
+                },
+              },
+            });
+          }
+          const threadKey = get().providerId || providerId;
+          const optimistic: ChatMsg = { id: uid(), from: "me", text: trimmed, time: clock() };
+          const prev = get().chats[threadKey] ?? [];
+          set({ chats: { ...get().chats, [threadKey]: [...prev, optimistic] } });
+          const { sendMessageRemote } = await import("@/lib/velio/auth-api");
+          const saved = await sendMessageRemote(conversationId, trimmed);
+          if (!saved) {
+            get().showToast("Meddelandet synkades inte");
+            return;
+          }
+          const current = get().chats[threadKey] ?? [];
           set({
             chats: {
               ...get().chats,
-              [providerId]: [...current, { id: uid(), from: "them", text: reply, time: clock() }],
+              [threadKey]: current.map((message) =>
+                message.id === optimistic.id
+                  ? { id: saved.id, from: "me", text: saved.text, time: saved.time }
+                  : message,
+              ),
             },
           });
-        }, 700);
+        })();
       },
       appendChat: (providerId, message) => {
         const prev = get().chats[providerId] ?? [];
@@ -667,30 +787,15 @@ export const useVelio = create<VelioState>()(
           activeBookingId: booking.id,
           sheet: "request",
         });
-        void get().syncRemote();
         get().showToast(`${kr(provider.price)} reserverat. Inget dras om arbetet inte utförs.`);
         const first = provider.name.split(" ")[0];
         window.setTimeout(() => {
           const current = get().bookings.find((item) => item.id === booking.id);
           if (!current || current.status !== "requested") return;
-          const prev = get().chats[provider.id] ?? [];
           set({
             bookings: get().bookings.map((item) => (item.id === booking.id ? { ...item, status: "accepted" } : item)),
-            chats: {
-              ...get().chats,
-              [provider.id]: prev.length
-                ? prev
-                : [
-                    {
-                      id: uid(),
-                      from: "them",
-                      text: `Hej! Jag tar uppdraget. ${kr(provider.price)} är bara reserverat och dras inte om arbetet inte blir av.`,
-                      time: clock(),
-                    },
-                  ],
-            },
           });
-          void get().syncRemote();
+          void get().openThread(provider.id);
           get().showToast(`${first} har accepterat. Nu kan ni chatta.`);
         }, 2400);
       },
@@ -751,19 +856,19 @@ export const useVelio = create<VelioState>()(
       finishOnboard: (listing) => {
         set({ listing, accountMode: "business", sheet: null, screen: "business" });
         get().showToast("Profil skickad. Granskas inom 24 timmar.");
-        void get().syncRemote();
       },
       saveBusinessForm: (businessForm) => {
         set({ businessForm });
-        void get().syncRemote();
       },
       setAccountMode: (accountMode) => {
         set({ accountMode });
-        void get().syncRemote();
       },
       addPosted: (job) => {
-        set({ posted: [{ ...job, id: `job-${Date.now()}` }, ...get().posted] });
-        void get().syncRemote();
+        void (async () => {
+          const jobs = await createJobRemote(job);
+          set({ posted: jobsToPosted(jobs) });
+          get().showToast("Uppdraget är publicerat");
+        })();
       },
     }),
     {
