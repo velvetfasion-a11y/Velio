@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Home, MessageCircle, User } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useVelio, erikThread, type Screen } from "@/lib/velio/store";
@@ -34,6 +34,11 @@ export function VelioApp() {
   const accountMode = useVelio((state) => state.accountMode);
   const mapMode = useVelio((state) => state.mapMode);
   const fullMap = screen === "service" && mapMode;
+  const mainRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    mainRef.current?.scrollTo({ top: 0 });
+  }, [screen]);
 
   useEffect(() => {
     void Promise.resolve(useVelio.persist.rehydrate()).then(() => {
@@ -110,7 +115,10 @@ export function VelioApp() {
           <>
         {showChrome ? <AppHeader /> : null}
 
-        <main className={cn("min-h-0 flex-1", fullMap ? "flex flex-col overflow-hidden" : "overflow-y-auto pb-24")}>
+        <main
+          ref={mainRef}
+          className={cn("min-h-0 flex-1", fullMap ? "flex flex-col overflow-hidden" : "overflow-y-auto pb-24")}
+        >
           {screen === "home" ? (accountMode === "business" ? <BusinessHome /> : <HomeScreen />) : null}
           {screen === "search" ? <SearchScreen /> : null}
           {screen === "inbox" ? <InboxScreen /> : null}
