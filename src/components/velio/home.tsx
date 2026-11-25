@@ -64,14 +64,6 @@ const popular: { id: ServiceId; label: string; icon: LucideIcon; image: string }
   { id: "til", label: "Tillsyn & Service", icon: ClipboardList, image: asset("/velio/til.jpg") },
 ];
 
-const featured = [
-  { id: "ren-ali", photo: asset("/velio/ali.jpg?v=3") },
-  { id: "st-cleanpro", photo: asset("/velio/clean.jpg?v=3") },
-  { id: "tr-gron", photo: asset("/velio/garden.jpg?v=3") },
-];
-
-const moreProviders = ["el-erik", "st-sofia", "tr-johan"];
-
 export function ServiceIcon({ name, className }: { name: ServiceIcon; className?: string }) {
   const Icon = icons[name];
   return <Icon className={className} aria-hidden="true" />;
@@ -113,15 +105,22 @@ export function Home() {
   const setSearch = useVelio((state) => state.setSearch);
   const setSheet = useVelio((state) => state.setSheet);
   const openService = useVelio((state) => state.openService);
+  const go = useVelio((state) => state.go);
   const profile = useVelio((state) => state.profile);
-  const firstName = profile.name.split(" ")[0] || "Anna";
+  const directory = useVelio((state) => state.directory);
+  const firstName = profile.name.split(" ")[0] || "du";
   const [showAll, setShowAll] = useState(false);
-  const [showMore, setShowMore] = useState(false);
   const [saved, setSaved] = useState<Record<string, boolean>>({});
   const query = search.trim().toLowerCase();
   const cards = popular.filter((item) => !query || item.label.toLowerCase().includes(query));
   const extra = services.filter((service) => !popular.some((item) => item.id === service.id));
-  const people = [...featured, ...(showMore ? moreProviders.map((id) => ({ id, photo: "" })) : [])];
+  const people = directory.filter(
+    (person) =>
+      !query ||
+      person.name.toLowerCase().includes(query) ||
+      person.area.toLowerCase().includes(query) ||
+      serviceById(person.serviceId)?.name.toLowerCase().includes(query),
+  );
 
   return (
     <div className="bg-cream">
@@ -213,29 +212,42 @@ export function Home() {
 
       <section className="px-4 pt-4 pb-2">
         <div className="mb-3 flex items-end justify-between">
-          <h2 className="min-w-0 font-serif text-[1.35rem] leading-tight font-medium">Rekommenderade tjänsteutövare</h2>
-          <button type="button" onClick={() => setShowMore(true)} className="shrink-0 text-sm text-muted">
-            Visa fler →
+          <h2 className="min-w-0 font-serif text-[1.35rem] leading-tight font-medium">Tjänsteutövare nära dig</h2>
+          <button type="button" onClick={() => go("profile")} className="shrink-0 text-sm text-muted">
+            Bli utförare →
           </button>
         </div>
-        <div className="flex gap-3 overflow-x-auto pb-2">
-          {people.map((item) => {
-            const provider = providerById(item.id);
-            if (!provider) return null;
-            return (
+        {people.length === 0 ? (
+          <div className="rounded-[1.4rem] border border-dashed border-line bg-paper/60 px-4 py-5">
+            <p className="font-semibold">Inga publicerade profiler ännu</p>
+            <p className="mt-1 text-sm leading-relaxed text-muted">
+              VELIO visar bara riktiga personer. Skapa ett konto, verifiera dig och publicera din profil — eller posta ett uppdrag så att utförare kan hitta dig.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button type="button" onClick={() => go("profile")} className="rounded-full bg-ink px-4 py-2 text-sm font-semibold text-paper">
+                Skapa profil
+              </button>
+              <button type="button" onClick={() => setSheet("job")} className="rounded-full border border-line px-4 py-2 text-sm font-semibold">
+                Posta uppdrag
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex gap-3 overflow-x-auto pb-2">
+            {people.map((provider) => (
               <ProviderCard
-                key={item.id}
+                key={provider.id}
                 name={provider.name}
                 rating={provider.rating}
                 reviews={provider.reviews}
-                photo={item.photo}
-                saved={Boolean(saved[item.id])}
-                onSave={() => setSaved((current) => ({ ...current, [item.id]: !current[item.id] }))}
-                onOpen={() => useVelio.getState().openProvider(item.id)}
+                photo={provider.photo ?? ""}
+                saved={Boolean(saved[provider.id])}
+                onSave={() => setSaved((current) => ({ ...current, [provider.id]: !current[provider.id] }))}
+                onOpen={() => useVelio.getState().openProvider(provider.id)}
               />
-            );
-          })}
-        </div>
+            ))}
+          </div>
+        )}
       </section>
     </div>
   );
@@ -349,29 +361,30 @@ export function SearchScreen() {
 }
 
 function ProviderHits({ query, onOpen }: { query: string; onOpen: (id: string) => void }) {
+  const directory = useVelio((state) => state.directory);
   if (!query) return null;
-  const hits = ["ren-ali", "st-cleanpro", "tr-gron", "el-erik", "st-sofia", "tr-johan"]
-    .map((id) => providerById(id))
-    .filter((provider) => provider && (provider.name.toLowerCase().includes(query) || serviceById(provider.serviceId)?.name.toLowerCase().includes(query)));
-  if (!hits.length) return <p className="mt-4 text-sm text-muted">Inga träffar.</p>;
+  const hits = directory.filter(
+    (provider) =>
+      provider.name.toLowerCase().includes(query) ||
+      serviceById(provider.serviceId)?.name.toLowerCase().includes(query),
+  );
+  if (!hits.length) return <p className="mt-4 text-sm text-muted">Inga träffar bland publicerade profiler.</p>;
   return (
     <div className="mt-4 space-y-2">
-      {hits.map((provider) =>
-        provider ? (
-          <button
-            key={provider.id}
-            type="button"
-            onClick={() => onOpen(provider.id)}
-            className="flex w-full items-center justify-between rounded-2xl bg-paper px-4 py-3 text-left"
-          >
-            <span>
-              <span className="block font-semibold">{provider.name}</span>
-              <span className="text-sm text-muted">{serviceById(provider.serviceId)?.name}</span>
-            </span>
-            <span className="text-sm">{ratingLabel(provider.rating)}</span>
-          </button>
-        ) : null,
-      )}
+      {hits.map((provider) => (
+        <button
+          key={provider.id}
+          type="button"
+          onClick={() => onOpen(provider.id)}
+          className="flex w-full items-center justify-between rounded-2xl bg-paper px-4 py-3 text-left"
+        >
+          <span>
+            <span className="block font-semibold">{provider.name}</span>
+            <span className="text-sm text-muted">{serviceById(provider.serviceId)?.name}</span>
+          </span>
+          <span className="text-sm">{ratingLabel(provider.rating)}</span>
+        </button>
+      ))}
     </div>
   );
 }

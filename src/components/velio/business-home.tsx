@@ -17,15 +17,7 @@ type Offer = {
   ownerId?: string;
 };
 
-const seedOffers: Offer[] = [
-  { id: "o1", title: "Hemstädning", place: "Södermalm, Stockholm", when: "Idag, 14:00 – 16:00", tag: "Städning", price: "1 200 kr", image: asset("/velio/tile-stad.jpg"), status: "new" },
-  { id: "o2", title: "Flyttstädning", place: "Solna, Stockholm", when: "Imorgon, 10:00 – 14:00", tag: "Städning", price: "2 800 kr", image: asset("/velio/tile-flytt.jpg"), status: "new" },
-  { id: "o3", title: "Renovering – Målning", place: "Vasastan, Stockholm", when: "Tors 20 nov, 08:00 – 17:00", tag: "Renovering", price: "5 500 kr", image: asset("/velio/tile-ren.jpg"), status: "new" },
-  { id: "o4", title: "Trädgårdsskötsel", place: "Djursholm", when: "Fre 21 nov, 13:00 – 17:00", tag: "Trädgård", price: "2 000 kr", image: asset("/velio/tile-trad.jpg"), status: "new" },
-  { id: "o5", title: "Elektriker", place: "Lidingö", when: "Mån 24 nov, 09:00 – 12:00", tag: "Elektriker", price: "3 200 kr", image: asset("/velio/tile-el.jpg"), status: "new" },
-  { id: "o6", title: "Hemstädning", place: "Östermalm", when: "Idag, 14:00 – 16:00", tag: "Städning", price: "1 200 kr", image: asset("/velio/stad.jpg"), status: "active" },
-  { id: "o7", title: "Flyttstädning", place: "Kungsholmen", when: "Imorgon, 10:00 – 14:00", tag: "Städning", price: "2 800 kr", image: asset("/velio/clean.jpg"), status: "active" },
-];
+const seedOffers: Offer[] = [];
 
 const dayLabels = ["Mån", "Tis", "Ons", "Tor", "Fre", "Lör", "Sön"];
 const monthLabels = ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "aug", "sep", "okt", "nov", "dec"];
@@ -71,7 +63,7 @@ export function BusinessHome() {
   const profile = useVelio((state) => state.profile);
   const setAccountMode = useVelio((state) => state.setAccountMode);
   const showToast = useVelio((state) => state.showToast);
-  const openThread = useVelio((state) => state.openThread);
+  const go = useVelio((state) => state.go);
   const takePostedJob = useVelio((state) => state.takePostedJob);
   const accountId = useVelio((state) => state.accountId);
   const posted = useVelio((state) => state.posted);
@@ -237,7 +229,7 @@ export function BusinessHome() {
                 {index === 0 ? <Check className="size-3.5 text-[#2f7a3a]" /> : <Clock className="size-3.5 text-[#8a6a3d]" />}
               </p>
             </div>
-            <button type="button" aria-label="Chatt" onClick={() => openThread("st-cleanpro")} className="grid size-9 place-items-center rounded-xl border border-[#efeae4]">
+            <button type="button" aria-label="Meddelanden" onClick={() => go("inbox")} className="grid size-9 place-items-center rounded-xl border border-[#efeae4]">
               <MessageCircle className="size-4" />
             </button>
           </div>

@@ -12,7 +12,7 @@ import {
 import { useVelio, bookingStatusLabel, type Booking, type ChatMsg } from "@/lib/velio/store";
 import { cn } from "@/lib/cn";
 import { AppHeader } from "@/components/velio/header";
-import { CityMap } from "@/components/velio/map";
+import { CityMap } from "@/components/velio/osm-map";
 import { Avatar, BottomSheet, Btn, FullScreen } from "@/components/velio/ui";
 import { asset } from "@/lib/velio/asset";
 
@@ -849,11 +849,11 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
   const answerRebook = useVelio((state) => state.answerRebook);
   const providerId = useVelio((state) => state.providerId);
   const peers = useVelio((state) => state.peers);
-  const threadKey = providerId || "st-cleanpro";
-  const peer = peers[threadKey];
-  const marketplace = providerById(threadKey);
+  const threadKey = providerId || "";
+  const peer = threadKey ? peers[threadKey] : null;
+  const marketplace = threadKey ? providerById(threadKey) : null;
   const customerName = peer?.name || marketplace?.name || "kunden";
-  const messages = useVelio((state) => state.chats[threadKey] ?? EMPTY_CHAT);
+  const messages = useVelio((state) => (threadKey ? state.chats[threadKey] ?? EMPTY_CHAT : EMPTY_CHAT));
   const [panel, setPanel] = useState<"time" | "price" | null>("time");
   const [when, setWhen] = useState("Idag, 14:00");
   const [slotDate, setSlotDate] = useState<Date | null>(null);

@@ -1,10 +1,13 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import {
+  initialsOf,
   kr,
   providerById,
   providers,
   serviceById,
+  setProviders,
+  type Provider,
   type ServiceId,
   type Slot,
   type SortKey,
@@ -169,120 +172,39 @@ export type PeerInfo = {
   providerId: string | null;
 };
 
-const seedBookings: Booking[] = [
-  {
-    id: "b1",
-    serviceId: "stad",
-    providerId: "st-sofia",
-    whenLabel: "17 nov 2026, 14:30–15:45",
-    cost: 650,
-    tip: 50,
-    location: "Södermalm",
-    rating: 4.8,
-    status: "done",
-  },
-  {
-    id: "b2",
-    serviceId: "el",
-    providerId: "el-erik",
-    whenLabel: "15 nov 2026, 09:15–10:30",
-    cost: 890,
-    tip: 0,
-    location: "Östermalm",
-    rating: 4.9,
-    status: "done",
-  },
-  {
-    id: "b3",
-    serviceId: "trad",
-    providerId: "tr-johan",
-    whenLabel: "10 nov 2026, 11:00–12:30",
-    cost: 720,
-    tip: 50,
-    location: "Vasastan",
+const seedBookings: Booking[] = [];
+const seedNotifications: AppNotification[] = [];
+const seedCart: CartItem[] = [];
+
+function listingToProvider(input: {
+  id: string;
+  name: string;
+  serviceId: ServiceId;
+  desc: string;
+  price: number;
+  area?: string;
+}): Provider {
+  return {
+    id: input.id,
+    name: input.name,
+    initials: initialsOf(input.name) || "V",
+    serviceId: input.serviceId,
     rating: 5,
-    status: "done",
-  },
-  {
-    id: "b4",
-    serviceId: "rep",
-    providerId: "re-lisa",
-    whenLabel: "4 nov 2026, 16:45–17:30",
-    cost: 540,
-    tip: 20,
-    location: "Kungsholmen",
-    rating: 4.7,
-    status: "done",
-  },
-  {
-    id: "b-erik",
-    serviceId: "el",
-    providerId: "el-erik",
-    whenLabel: "Idag 14:00",
-    cost: 890,
-    tip: null,
-    location: "Östermalm",
-    rating: null,
-    status: "done",
-    holdKr: 890,
-  },
-  {
-    id: "b-declined",
-    serviceId: "stad",
-    providerId: "st-cleanpro",
-    whenLabel: "I morgon 10:00",
-    cost: 620,
-    tip: null,
-    location: "Södermalm",
-    rating: null,
-    status: "declined",
-    holdKr: 620,
-  },
-];
+    reviews: 0,
+    etaMin: 20,
+    price: input.price,
+    area: input.area || "Stockholm",
+    about: input.desc,
+    quote: "Ny profil på VELIO",
+    reviewer: "—",
+    reviewAgo: "nyligen",
+    slots: ["morning", "afternoon", "evening"],
+  };
+}
 
-const seedChats: Record<string, ChatMsg[]> = {
-  "st-cleanpro": [
-    { id: "c1", from: "me", text: "Hej! Kan du komma idag klockan 14?", time: "14:02" },
-    { id: "c2", from: "them", text: "Ja, det passar mig.", time: "14:05" },
-  ],
-};
-
-const seedNotifications: AppNotification[] = [
-  {
-    id: "n-accepted-erik",
-    kind: "booking_accepted",
-    title: "Bokning accepterad",
-    body: "Erik Lind har accepterat din bokning för elektriker.",
-    bookingId: "b-erik",
-    createdAt: "2026-11-25T12:10:00.000Z",
-    read: false,
-  },
-  {
-    id: "n-declined-clean",
-    kind: "booking_declined",
-    title: "Bokning nekad",
-    body: "CleanPro kunde tyvärr inte ta din städning imorgon.",
-    bookingId: "b-declined",
-    createdAt: "2026-11-25T11:40:00.000Z",
-    read: false,
-  },
-  {
-    id: "n-done-sofia",
-    kind: "booking_done",
-    title: "Uppdrag klart",
-    body: "Sofia har markerat städningen som klar.",
-    bookingId: "b1",
-    createdAt: "2026-11-17T15:50:00.000Z",
-    read: true,
-  },
-];
-
-const seedCart: CartItem[] = [
-  { id: "c1", serviceId: "el", providerId: "el-erik" },
-  { id: "c2", serviceId: "stad", providerId: "st-sofia" },
-  { id: "c3", serviceId: "trad", providerId: "tr-johan" },
-  { id: "c4", serviceId: "sak", providerId: "sa-karin" },
-];
+function syncDirectory(directory: Provider[]) {
+  setProviders(directory);
+}
 
 type VelioState = {
   screen: Screen;
@@ -307,6 +229,7 @@ type VelioState = {
   time: Slot | "anytime";
   area: string | null;
   listing: Listing | null;
+  directory: Provider[];
   businessForm: BusinessForm | null;
   accountMode: "customer" | "business";
   idVerified: boolean;
@@ -414,34 +337,27 @@ function localThreadSeed(providerId: string, booking?: Booking | null): ChatMsg[
   const when = booking?.whenLabel ?? "Så snart som möjligt";
   const place = booking?.location ?? provider?.area ?? "Stockholm";
   const price = booking?.cost ?? provider?.price ?? 0;
-  const first = provider?.name.split(" ")[0] ?? "Utföraren";
   return [
     {
       id: uid(),
       from: "system",
       day: "Idag",
       time: clock(),
-      text: "Bokning accepterad",
+      text: "Bokning skapad",
       card: {
         kind: "request",
         service: service?.name ?? "Tjänst",
         when,
         place,
         price,
-        status: "accepted",
+        status: booking?.status === "declined" ? "declined" : "accepted",
       },
-    },
-    {
-      id: uid(),
-      from: "them",
-      time: clock(),
-      text: `Hej! Jag har accepterat din bokning. Skriv här om du har frågor — jag svarar så snart jag kan.`,
     },
     {
       id: uid(),
       from: "system",
       time: clock(),
-      text: `${first} är redo att chatta`,
+      text: "Skriv till varandra här. Endast ni två ser konversationen.",
     },
   ];
 }
@@ -480,71 +396,6 @@ function applyConversations(
   return { conversationByProvider, chats: nextChats, peers: nextPeers };
 }
 
-export const erikThread: ChatMsg[] = [
-  {
-    id: "e1",
-    from: "system",
-    day: "Idag 10:24",
-    time: "10:24",
-    text: "Bokningsförfrågan",
-    card: { kind: "request", service: "Elektriker", when: "Så snart som möjligt", place: "Östermalm", price: 890 },
-  },
-  {
-    id: "e2",
-    from: "me",
-    time: "10:24",
-    text: "Hej Erik! Jag skulle gärna boka en elektriker för att installera ett nytt uttag hemma. Passar det för dig?",
-  },
-  {
-    id: "e3",
-    from: "them",
-    day: "Idag 10:31",
-    time: "10:31",
-    text: "När passar det bäst för dig? Jag har en tid idag kl. 14:00 om det fungerar.",
-  },
-  {
-    id: "e4",
-    from: "me",
-    time: "10:32",
-    text: "Ja, kl. 14:00 passar perfekt!",
-  },
-  {
-    id: "e5",
-    from: "system",
-    time: "10:32",
-    text: "Tid bekräftad",
-    card: { kind: "confirmed", date: "Idag", time: "14:00", place: "Östermalm" },
-  },
-  {
-    id: "e6",
-    from: "them",
-    day: "Idag 13:50",
-    time: "13:50",
-    text: "Jag är på väg nu och beräknas vara hos dig om ca 10 minuter.",
-  },
-  {
-    id: "e7",
-    from: "system",
-    time: "13:50",
-    text: "På väg",
-    card: { kind: "enroute", eta: "ca 10 min" },
-  },
-  {
-    id: "e8",
-    from: "them",
-    day: "Idag 14:58",
-    time: "14:58",
-    text: "Nu är jobbet klart! 🎉 Jag har installerat det nya uttaget och kontrollerat att allt fungerar som det ska.",
-  },
-  {
-    id: "e9",
-    from: "system",
-    time: "14:58",
-    text: "Jobb slutfört",
-    card: { kind: "done", service: "Elektriker", desc: "Installation av nytt uttag", price: 890 },
-  },
-];
-
 export const useVelio = create<VelioState>()(
   persist(
     (set, get) => ({
@@ -570,24 +421,19 @@ export const useVelio = create<VelioState>()(
       time: "anytime",
       area: null,
       listing: null,
+      directory: [],
       businessForm: null,
       accountMode: "customer",
       idVerified: false,
       idMethod: null,
       profile: {
-        name: "Anna Karlsson",
-        phone: "+46 70 123 45 67",
-        email: "anna.karlsson@velio.se",
+        name: "",
+        phone: "",
+        email: "",
       },
-      cards: [
-        { id: "swish", label: "Swish", detail: "070-123 45 67" },
-        { id: "visa", label: "Visa · 4242", detail: "Utgår 12/28" },
-      ],
+      cards: [],
       cart: seedCart,
-      chats: {
-        ...seedChats,
-        "el-erik": erikThread,
-      },
+      chats: {},
       bookings: seedBookings,
       posted: [],
       activeBookingId: null,
@@ -1287,7 +1133,26 @@ export const useVelio = create<VelioState>()(
           get().showToast("Verifiera dig med BankID eller pass först");
           return;
         }
-        set({ listing, accountMode: "business", sheet: null, screen: "business" });
+        const profile = get().profile;
+        const id = get().accountId ? `biz-${get().accountId}` : `biz-${uid()}`;
+        const published = listingToProvider({
+          id,
+          name: profile.name || "Mitt företag",
+          serviceId: listing.serviceId,
+          desc: listing.desc,
+          price: listing.price,
+          area: "Stockholm",
+        });
+        const directory = [...get().directory.filter((item) => item.id !== id), published];
+        syncDirectory(directory);
+        set({
+          listing,
+          directory,
+          accountMode: "business",
+          sheet: null,
+          screen: "business",
+          providerId: id,
+        });
         void updateProfileRemote({ accountMode: "business" })
           .then((saved) => {
             if (saved) set({ accountMode: saved.accountMode, idVerified: Boolean(saved.idVerified) });
@@ -1295,7 +1160,7 @@ export const useVelio = create<VelioState>()(
           .catch(() => {
             set({ screen: "verify-id" });
           });
-        get().showToast("Profil skickad. Granskas inom 24 timmar.");
+        get().showToast("Din profil är publicerad. Kunder kan nu hitta dig.");
       },
       saveBusinessForm: (businessForm) => {
         set({ businessForm });
@@ -1333,7 +1198,7 @@ export const useVelio = create<VelioState>()(
       },
     }),
     {
-      name: "velio-v4",
+      name: "velio-v5",
       skipHydration: true,
       storage: createJSONStorage(() => (typeof window === "undefined" ? memoryStorage : localStorage)),
       partialize: (state) => ({
@@ -1345,30 +1210,33 @@ export const useVelio = create<VelioState>()(
         conversationByProvider: state.conversationByProvider,
         appNotifications: state.appNotifications,
         bookings: state.bookings,
+        directory: state.directory,
+        listing: state.listing,
+        profile: state.profile,
+        cards: state.cards,
+        accountMode: state.accountMode,
+        idVerified: state.idVerified,
+        idMethod: state.idMethod,
       }),
       merge: (persisted, current) => {
         const saved = (persisted ?? {}) as Partial<VelioState>;
-        const chats = { ...current.chats, ...(saved.chats ?? {}) };
-        // Restore demo threads if a previous session wiped the inbox empty.
-        if (!Object.keys(chats).some((key) => (chats[key]?.length ?? 0) > 0)) {
-          Object.assign(chats, seedChats, { "el-erik": erikThread });
-        }
-        const appNotifications =
-          saved.appNotifications && saved.appNotifications.length
-            ? saved.appNotifications
-            : current.appNotifications;
-        const bookings = saved.bookings && saved.bookings.length ? saved.bookings : current.bookings;
+        const chats = { ...(saved.chats ?? {}) };
+        const appNotifications = saved.appNotifications ?? [];
+        const bookings = saved.bookings ?? [];
+        const directory = saved.directory ?? [];
+        syncDirectory(directory);
         return {
           ...current,
           ...saved,
           chats,
-          peers: { ...current.peers, ...(saved.peers ?? {}) },
+          peers: { ...(saved.peers ?? {}) },
           conversationByProvider: {
-            ...current.conversationByProvider,
             ...(saved.conversationByProvider ?? {}),
           },
           appNotifications,
           bookings,
+          directory,
+          cart: [],
         };
       },
     },

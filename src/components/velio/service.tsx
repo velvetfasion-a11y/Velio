@@ -27,7 +27,7 @@ import {
 import { useVelio } from "@/lib/velio/store";
 import { AppHeader } from "@/components/velio/header";
 import { cn } from "@/lib/cn";
-import { CityMap } from "@/components/velio/map";
+import { CityMap } from "@/components/velio/osm-map";
 import { asset } from "@/lib/velio/asset";
 
 const intros: Record<ServiceId, string> = {
@@ -94,7 +94,9 @@ export function ServiceScreen() {
   const setSheet = useVelio((state) => state.setSheet);
   const openProvider = useVelio((state) => state.openProvider);
   const bookings = useVelio((state) => state.bookings);
+  const directory = useVelio((state) => state.directory);
   const openThread = useVelio((state) => state.openThread);
+  const go = useVelio((state) => state.go);
   const locationOn = useVelio((state) => state.locationOn);
   const showToast = useVelio((state) => state.showToast);
   const service = serviceById(serviceId);
@@ -107,20 +109,11 @@ export function ServiceScreen() {
   const [hour, setHour] = useState<string | null>(null);
   const [custom, setCustom] = useState(false);
   const chosenDate = quick === "today" ? shiftDate(0) : quick === "tomorrow" ? shiftDate(1) : picked;
-  const people = filterProviders({ serviceId, time, sort, area }).filter((person) => isOpenAt(person, chosenDate, hour));
+  const people = filterProviders({ serviceId, time, sort, area, list: directory }).filter((person) =>
+    isOpenAt(person, chosenDate, hour),
+  );
   const visible = tag ? people.filter((person) => tagsOf(person).includes(tag)) : people;
-  const ordered =
-    serviceId === "stad" && sort === "best"
-      ? [...visible].sort((a, b) => {
-          const rank = ["st-cleanpro", "st-leila"];
-          const ai = rank.indexOf(a.id);
-          const bi = rank.indexOf(b.id);
-          if (ai === -1 && bi === -1) return 0;
-          if (ai === -1) return 1;
-          if (bi === -1) return -1;
-          return ai - bi;
-        })
-      : visible;
+  const ordered = visible;
   const live = bookings.find(
     (item) => item.serviceId === serviceId && (item.status === "accepted" || item.status === "enroute" || item.status === "scheduled"),
   );
@@ -368,9 +361,25 @@ export function ServiceScreen() {
       ) : (
         <div className="space-y-3 px-4 pt-3 pb-4">
           {visible.length === 0 ? (
-            <p className="rounded-2xl bg-paper px-4 py-6 text-sm text-muted">
-              Ingen är ledig den dagen och tiden. Prova ett annat datum eller en annan tid.
-            </p>
+            <div className="rounded-2xl bg-paper px-4 py-6 text-sm text-muted">
+              {directory.length === 0 ? (
+                <>
+                  <p className="font-semibold text-ink">Inga riktiga utförare publicerade ännu</p>
+                  <p className="mt-1 leading-relaxed">
+                    Här visas bara personer som skapat konto och publicerat sin profil. Bli utförare själv eller posta ett uppdrag.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => go("profile")}
+                    className="mt-3 rounded-full bg-ink px-4 py-2 text-sm font-semibold text-paper"
+                  >
+                    Skapa profil
+                  </button>
+                </>
+              ) : (
+                <p>Ingen är ledig den dagen och tiden. Prova ett annat datum eller en annan tid.</p>
+              )}
+            </div>
           ) : (
             ordered.map((person) => (
               <article key={person.id} className="rounded-[1.35rem] bg-white p-3 shadow-sm">
