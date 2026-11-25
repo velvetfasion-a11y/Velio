@@ -6,9 +6,15 @@ import { stripeClient } from "../../lib/stripe.js";
 export const config = { api: { bodyParser: false } };
 
 async function rawBody(req) {
+  // Read the stream before anything touches req.body, so the signature is
+  // checked against the exact bytes Stripe sent.
+  if (req.readable !== false && !req.readableEnded) {
+    const raw = Buffer.from(await buffer(req));
+    if (raw.length) return raw;
+  }
   if (Buffer.isBuffer(req.body)) return req.body;
   if (typeof req.body === "string") return Buffer.from(req.body);
-  return Buffer.from(await buffer(req));
+  return Buffer.alloc(0);
 }
 
 export default async function handler(req, res) {
@@ -16,11 +22,20 @@ export default async function handler(req, res) {
   const stripe = stripeClient();
   const signature = req.headers["stripe-signature"];
   let event;
-  try {
-    event = stripe.webhooks.constructEvent(await rawBody(req), signature, process.env.STRIPE_WEBHOOK_SECRET || "");
-  } catch (error) {
-    return res.status(400).json({ error: error.message || "Invalid signature" });
+  const body = await rawBody(req);
+  // Platform events and connected-account (Connect) events use two endpoints
+  // with separate signing secrets.
+  const secrets = [process.env.STRIPE_WEBHOOK_SECRET, process.env.STRIPE_CONNECT_WEBHOOK_SECRET].filter(Boolean);
+  let lastError;
+  for (const secret of secrets) {
+    try {
+      event = stripe.webhooks.constructEvent(body, signature, secret);
+      break;
+    } catch (error) {
+      lastError = error;
+    }
   }
+  if (!event) return res.status(400).json({ error: lastError?.message || "Invalid signature" });
   const db = adminDb();
   try {
     if (event.type === "payment_intent.succeeded" || event.type === "payment_intent.payment_failed") {
@@ -45,7 +60,9 @@ export default async function handler(req, res) {
     if (event.type === "account.updated") {
       const account = event.data.object;
       const uid = account.metadata?.velioUid;
-      const transfers = account.capabilities?.transfers === "active";
+      const transfers =
+        account.capabilities?.transfers === "active" ||
+        account.configuration?.recipient?.capabilities?.stripe_balance?.stripe_transfers?.status === "active";
       const status = transfers ? "complete" : "pending";
       if (uid) {
         await db.collection("users").doc(uid).set(

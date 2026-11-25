@@ -3,7 +3,7 @@
   "crons": [
     {
       "path": "/api/cron/release-payouts",
-      "schedule": "15 * * * *"
+      "schedule": "15 4 * * *"
     }
   ]
 }

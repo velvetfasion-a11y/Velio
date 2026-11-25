@@ -1,7 +1,7 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { applyCors } from "../../lib/cors.js";
 import { adminDb, userFromRequest } from "../../lib/firebase.js";
-import { stripeClient } from "../../lib/stripe.js";
+import { stripeV2 } from "../../lib/stripe.js";
 
 export default async function handler(req, res) {
   if (applyCors(req, res)) return;
@@ -18,16 +18,20 @@ export default async function handler(req, res) {
         onboardingStatus: snap.data()?.stripeOnboardingStatus || "pending",
       });
     }
-    const stripe = stripeClient();
-    const account = await stripe.accounts.create({
-      country: "SE",
-      email: user.email || undefined,
-      capabilities: { transfers: { requested: true } },
-      controller: {
-        stripe_dashboard: { type: "express" },
-        fees: { payer: "application" },
-        losses: { payments: "application" },
-        requirement_collection: "stripe",
+    // Recipient account: VELIO charges the customer, then transfers 90% here.
+    // Express dashboard, Stripe collects KYC in the embedded onboarding.
+    const account = await stripeV2("POST", "/v2/core/accounts", {
+      contact_email: user.email || undefined,
+      display_name: user.name || undefined,
+      dashboard: "express",
+      identity: { country: "se", entity_type: "individual" },
+      configuration: {
+        recipient: { capabilities: { stripe_balance: { stripe_transfers: { requested: true } } } },
+      },
+      defaults: {
+        currency: "sek",
+        locales: ["sv-SE"],
+        responsibilities: { fees_collector: "application", losses_collector: "application" },
       },
       metadata: { velioUid: user.uid },
     });
