@@ -1,5 +1,5 @@
 import { useRef, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from "react";
-import { ArrowLeft, Pencil, Star } from "lucide-react";
+import { ArrowLeft, Camera, Lock, Pencil, Plus, ShieldCheck, Star } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { initialsOf, publicDisplayName } from "@/lib/velio/data";
 import { useVelio } from "@/lib/velio/store";
@@ -14,8 +14,8 @@ export function Btn({
     <button
       type={type}
       className={cn(
-        "flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3.5 text-base font-semibold transition active:scale-[0.99] disabled:opacity-40",
-        variant === "primary" && "bg-ink text-paper",
+        "flex min-h-12 w-full items-center justify-center gap-2 rounded-full px-4 py-3.5 text-base font-semibold transition active:scale-[0.98] disabled:opacity-40",
+        variant === "primary" && "bg-brown text-paper shadow-soft",
         variant === "secondary" && "border border-line bg-paper text-ink",
         variant === "bank" && "bg-bank text-paper",
         className,
@@ -65,28 +65,29 @@ function readAvatarFile(file: File) {
   });
 }
 
-export function ProfilePhoto({ large = false }: { large?: boolean }) {
+export function ProfilePhoto({ large = false, prompt = false }: { large?: boolean; prompt?: boolean }) {
   const profile = useVelio((state) => state.profile);
   const setAvatar = useVelio((state) => state.setAvatar);
   const showToast = useVelio((state) => state.showToast);
   const inputRef = useRef<HTMLInputElement>(null);
   const initials = initialsOf(publicDisplayName(profile.name) || "V") || "V";
+  const hasPhoto = Boolean(profile.avatar);
 
   return (
     <div className="relative shrink-0">
       <button
         type="button"
-        aria-label="Byt bild"
+        aria-label={hasPhoto ? "Byt profilbild" : "Lägg upp profilbild"}
         onClick={() => inputRef.current?.click()}
         className={cn(
-          "grid place-items-center overflow-hidden rounded-full bg-[#f3ece3] font-serif text-ink",
+          "grid place-items-center overflow-hidden rounded-full bg-sand font-serif text-ink",
           large ? "size-[6.6rem] text-3xl ring-[3px] ring-white" : "size-14 text-lg",
         )}
       >
-        {profile.avatar ? <img src={profile.avatar} alt="" className="h-full w-full object-cover" /> : initials}
+        {profile.avatar ? <img src={profile.avatar} alt="" className="h-full w-full object-cover" /> : prompt ? <Camera className={large ? "size-8" : "size-5"} /> : initials}
       </button>
       <span className="pointer-events-none absolute right-0 bottom-0 grid size-7 place-items-center rounded-full bg-white shadow">
-        <Pencil className="size-3.5" />
+        {prompt && !hasPhoto ? <Plus className="size-3.5" /> : <Pencil className="size-3.5" />}
       </span>
       <input
         ref={inputRef}
@@ -100,7 +101,7 @@ export function ProfilePhoto({ large = false }: { large?: boolean }) {
           void readAvatarFile(file)
             .then((avatar) => {
               setAvatar(avatar);
-              showToast("Bilden är uppdaterad");
+              showToast("Förhandsvisning här. Uppladdning kommer snart.");
             })
             .catch(() => showToast("Bilden kunde inte läsas"));
         }}
@@ -116,7 +117,7 @@ export function Stars({ value }: { value: number }) {
       {Array.from({ length: 5 }, (_, index) => (
         <Star
           key={index}
-          className={cn("size-3.5 text-ink", index < filled ? "fill-ink" : "fill-transparent")}
+          className={cn("size-3.5 text-gold", index < filled ? "fill-gold" : "fill-transparent")}
           aria-hidden="true"
         />
       ))}
@@ -132,7 +133,7 @@ export function Field({
     <label className="mb-4 block">
       <span className="mb-1.5 block text-sm font-medium">{label}</span>
       <input
-        className="w-full rounded-xl border border-line bg-paper px-3.5 py-3 text-base outline-none focus:border-ink"
+        className="w-full rounded-2xl border border-line bg-paper px-3.5 py-3 text-base outline-none focus:border-brown"
         {...props}
       />
     </label>
@@ -156,7 +157,7 @@ export function ScreenHeader({ title, onBack }: { title: string; onBack?: () => 
   return (
     <div className="mb-5 flex items-center gap-2">
       {onBack ? <BackButton onClick={onBack} /> : null}
-      <h2 className="font-display text-xl font-semibold tracking-tight">{title}</h2>
+      <h2 className="ios-section text-xl">{title}</h2>
     </div>
   );
 }
@@ -173,7 +174,7 @@ export function FullScreen({
   footer?: ReactNode;
 }) {
   return (
-    <div className="sheet-in absolute inset-0 z-30 flex flex-col bg-paper">
+    <div className="sheet-in absolute inset-0 z-30 flex flex-col bg-cream">
       <div className="flex items-center gap-2 border-b border-line px-3 py-2">
         <BackButton onClick={onBack} />
         {title ? <h2 className="font-display text-lg font-semibold">{title}</h2> : <span className="sr-only">Stäng</span>}
@@ -194,15 +195,15 @@ export function BottomSheet({
   children: ReactNode;
 }) {
   return (
-    <div className="absolute inset-0 z-40 flex flex-col justify-end bg-ink/40" onClick={onClose}>
+    <div className="absolute inset-0 z-40 flex flex-col justify-end bg-ink/35 backdrop-blur-[2px]" onClick={onClose}>
       <div
         role="dialog"
         aria-label={title}
-        className="sheet-in max-h-[86%] overflow-y-auto rounded-t-3xl bg-paper px-5 pt-3 pb-8"
+        className="sheet-in max-h-[86%] overflow-y-auto rounded-t-[1.75rem] bg-paper px-5 pt-3 pb-8 shadow-soft"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="mx-auto mb-4 h-1 w-9 rounded-full bg-line" />
-        <h2 className="mb-4 font-display text-xl font-semibold tracking-tight">{title}</h2>
+        <h2 className="ios-section mb-4 text-xl">{title}</h2>
         {children}
       </div>
     </div>
@@ -217,9 +218,44 @@ export function Toast() {
       <div
         role="status"
         aria-live="polite"
-        className="max-w-full rounded-xl bg-ink px-4 py-2.5 text-center text-sm text-paper shadow-lg"
+        className="toast-in max-w-full rounded-full bg-ink px-4 py-2.5 text-center text-sm text-paper shadow-soft"
       >
         {toast}
+      </div>
+    </div>
+  );
+}
+
+export function TrustNote({ children }: { children: ReactNode }) {
+  return (
+    <p className="flex gap-2 rounded-2xl bg-sand px-3 py-3 text-sm leading-snug text-ink">
+      <ShieldCheck className="mt-0.5 size-4 shrink-0 text-brown" aria-hidden="true" />
+      <span>{children}</span>
+    </p>
+  );
+}
+
+export function SecurePayNote() {
+  return (
+    <p className="flex items-center gap-2 text-xs leading-snug text-muted">
+      <Lock className="size-3.5 shrink-0 text-brown" aria-hidden="true" />
+      Säker betalning. Beloppet dras när jobbet är klart. Inget dras om arbetet inte utförs.
+    </p>
+  );
+}
+
+export function StepProgress({ step, total, label }: { step: number; total: number; label: string }) {
+  const width = `${Math.max(8, Math.round((step / total) * 100))}%`;
+  return (
+    <div className="mb-4">
+      <div className="mb-2 flex items-center justify-between text-xs font-medium text-muted">
+        <span>
+          Steg {step} av {total}
+        </span>
+        <span>{label}</span>
+      </div>
+      <div className="h-1 overflow-hidden rounded-full bg-line" aria-hidden="true">
+        <div className="h-full rounded-full bg-brown transition-[width] duration-300" style={{ width }} />
       </div>
     </div>
   );

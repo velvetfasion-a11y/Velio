@@ -1,12 +1,14 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Home, MessageCircle, User } from "lucide-react";
+import { Home, MessageCircle, User, Wallet } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useVelio, type Screen } from "@/lib/velio/store";
 import { Home as HomeScreen, HomeSheets, InboxScreen, SearchScreen } from "@/components/velio/home";
 import { HistoryScreen } from "@/components/velio/history";
 import { NotificationsScreen } from "@/components/velio/notifications";
 import { ServiceScreen } from "@/components/velio/service";
-import { OnboardSheet, ProfileScreens } from "@/components/velio/profile";
+import { ProfileScreens } from "@/components/velio/profile";
+import { BusinessSetup } from "@/components/velio/business-setup";
+import { WalletScreen } from "@/components/velio/wallet";
 import { LoginScreen } from "@/components/velio/login";
 import { AppHeader } from "@/components/velio/header";
 import { BusinessHome } from "@/components/velio/business-home";
@@ -25,12 +27,16 @@ import {
   TrackSheet,
 } from "@/components/velio/flows";
 import { Toast } from "@/components/velio/ui";
+import { PaymentSheet } from "@/components/velio/payment-sheet";
+import { CallHost } from "@/components/velio/call-host";
+import { SupportHost } from "@/components/velio/support-sheet";
 
-const profileScreens: Screen[] = ["profile", "edit", "payments", "bookings", "posted", "business", "verify-id", "settings", "help"];
+const profileScreens: Screen[] = ["profile", "edit", "payments", "bookings", "posted", "business", "verify-id", "settings", "help", "favorites", "addresses", "wallet"];
 
 export function VelioApp() {
   const screen = useVelio((state) => state.screen);
   const sheet = useVelio((state) => state.sheet);
+  const addressOpen = useVelio((state) => state.addressOpen);
   const go = useVelio((state) => state.go);
   const accountMode = useVelio((state) => state.accountMode);
   const mapMode = useVelio((state) => state.mapMode);
@@ -40,6 +46,10 @@ export function VelioApp() {
   const bootstrapAuth = useVelio((state) => state.bootstrapAuth);
   const refreshSync = useVelio((state) => state.refreshSync);
   const loggedIn = useVelio((state) => state.loggedIn);
+  const checkout = useVelio((state) => state.checkout);
+  const checkoutOpen = useVelio((state) => state.checkoutOpen);
+  const closeCheckout = useVelio((state) => state.closeCheckout);
+  const acceptOffer = useVelio((state) => state.acceptOffer);
 
   useLayoutEffect(() => {
     const el = mainRef.current;
@@ -50,6 +60,7 @@ export function VelioApp() {
   useEffect(() => {
     void Promise.resolve(useVelio.persist.rehydrate())
       .then(async () => {
+        useVelio.getState().reconcileNotifications();
         await bootstrapAuth();
       })
       .finally(() => setReady(true));
@@ -63,16 +74,25 @@ export function VelioApp() {
     return () => window.clearInterval(timer);
   }, [loggedIn, refreshSync]);
 
-  const nav: { id: Screen; label: string; icon: typeof Home }[] = [
-    { id: "home", label: "Hem", icon: Home },
-    { id: "inbox", label: "Meddelanden", icon: MessageCircle },
-    { id: "profile", label: "Profil", icon: User },
-  ];
+  const nav: { id: Screen; label: string; icon: typeof Home }[] =
+    accountMode === "business"
+      ? [
+          { id: "home", label: "Hem", icon: Home },
+          { id: "wallet", label: "Saldo", icon: Wallet },
+          { id: "inbox", label: "Meddelanden", icon: MessageCircle },
+          { id: "profile", label: "Profil", icon: User },
+        ]
+      : [
+          { id: "home", label: "Hem", icon: Home },
+          { id: "inbox", label: "Meddelanden", icon: MessageCircle },
+          { id: "profile", label: "Profil", icon: User },
+        ];
 
   const navActive = (id: Screen) => {
     if (id === "home") return screen === "home" || screen === "service";
     if (id === "inbox") return screen === "inbox";
-    if (id === "profile") return profileScreens.includes(screen);
+    if (id === "wallet") return screen === "wallet";
+    if (id === "profile") return profileScreens.includes(screen) && screen !== "wallet";
     return screen === id;
   };
   const showChrome =
@@ -93,15 +113,15 @@ export function VelioApp() {
 
   return (
     <div className="flex min-h-dvh justify-center bg-stage md:items-center md:p-4">
-      <div className="relative flex h-dvh w-full max-w-phone flex-col overflow-hidden bg-cream md:h-[calc(100dvh-2rem)] md:rounded-3xl md:shadow-2xl">
+      <div className="relative flex h-dvh w-full max-w-phone flex-col overflow-hidden bg-cream md:h-[calc(100dvh-2rem)] md:rounded-[2rem] md:shadow-2xl">
         {loggedIn ? (
           <>
-            {showChrome ? <AppHeader /> : null}
+            {showChrome && sheet !== "onboard" && sheet !== "job" ? <AppHeader /> : null}
 
             <main
               key={screen}
               ref={mainRef}
-              className={cn("min-h-0 flex-1", fullMap ? "flex flex-col overflow-hidden" : "overflow-y-auto pb-24")}
+              className={cn("rise-in min-h-0 flex-1", fullMap ? "flex flex-col overflow-hidden" : "overflow-y-auto pb-28")}
             >
               {screen === "home" ? (accountMode === "business" ? <BusinessHome /> : <HomeScreen />) : null}
               {screen === "search" ? <SearchScreen /> : null}
@@ -109,10 +129,12 @@ export function VelioApp() {
               {screen === "notifications" ? <NotificationsScreen /> : null}
               {screen === "service" ? <ServiceScreen /> : null}
               {screen === "history" ? <HistoryScreen /> : null}
-              {profileScreens.includes(screen) ? <ProfileScreens /> : null}
+              {screen === "wallet" ? <WalletScreen /> : null}
+              {screen !== "wallet" && profileScreens.includes(screen) ? <ProfileScreens /> : null}
             </main>
 
-            <nav className="absolute inset-x-0 bottom-0 z-20 flex items-end justify-around border-t border-ink/5 bg-cream px-1 pt-1.5 pb-3">
+            {sheet ? null : (
+            <nav className="glass absolute inset-x-3 bottom-2 z-20 flex items-stretch justify-around rounded-[1.6rem] px-1 py-1">
               {nav.map((item) => {
                 const Icon = item.icon;
                 const active = navActive(item.id);
@@ -122,12 +144,12 @@ export function VelioApp() {
                     type="button"
                     onClick={() => go(item.id)}
                     className={cn(
-                      "flex min-w-14 flex-col items-center gap-0.5 rounded-2xl px-2 py-1.5 text-[10px] font-medium text-muted",
-                      active && "bg-sand text-ink",
+                      "flex min-h-14 min-w-16 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl px-2 text-[11px] font-medium text-muted",
+                      active && "bg-brown/10 text-brown",
                     )}
                   >
                     <span className="relative">
-                      <Icon className="size-5" strokeWidth={active ? 2.2 : 1.8} />
+                      <Icon className="size-6" strokeWidth={active ? 2.2 : 1.8} />
                       {item.id === "inbox" && unread ? (
                         <span className="absolute -top-0.5 -right-1 size-2 rounded-full bg-gold" />
                       ) : null}
@@ -137,6 +159,7 @@ export function VelioApp() {
                 );
               })}
             </nav>
+            )}
 
             <Toast />
             {sheet === "provider" ? <ProviderSheet /> : null}
@@ -149,10 +172,34 @@ export function VelioApp() {
             {sheet === "track" ? <TrackSheet /> : null}
             {sheet === "pay" ? <PaySheet /> : null}
             {sheet === "rate" ? <RateSheet /> : null}
-            {sheet === "location" ? <LocationSheet /> : null}
+            {addressOpen ? (
+              <div className="absolute inset-0 z-50">
+                <LocationSheet />
+              </div>
+            ) : null}
             {sheet === "bankid" ? <BankIdSheet /> : null}
-            {sheet === "onboard" ? <OnboardSheet /> : null}
+            {sheet === "onboard" ? <BusinessSetup /> : null}
             <HomeSheets />
+            <CallHost />
+            <SupportHost />
+            {checkoutOpen && checkout ? (
+              <PaymentSheet
+                contained
+                open
+                order={{
+                  offerId: checkout.offerId,
+                  jobId: checkout.jobId,
+                  jobTitle: checkout.jobTitle,
+                  workerName: checkout.workerName,
+                  whenLabel: checkout.whenLabel,
+                  priceSek: checkout.priceSek,
+                }}
+                onClose={() => closeCheckout()}
+                onPaid={() => {
+                  if (checkout.offerId !== "demo") acceptOffer(checkout.offerId);
+                }}
+              />
+            ) : null}
           </>
         ) : (
           <LoginScreen />

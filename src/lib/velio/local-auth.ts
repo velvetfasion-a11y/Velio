@@ -82,6 +82,13 @@ export function clearLocalSession() {
   localStorage.removeItem(SESSION_KEY);
 }
 
+export function localDeleteAccount() {
+  const account = getLocalSessionAccount();
+  if (account) writeAccounts(readAccounts().filter((item) => item.id !== account.id));
+  clearLocalSession();
+  localStorage.removeItem("velio-schedule-v1");
+}
+
 function readAttempts(challengeId: string): number {
   try {
     const raw = JSON.parse(localStorage.getItem(OTP_ATTEMPTS_KEY) || "{}") as Record<string, number>;
@@ -279,7 +286,7 @@ export function localBankIdSignIn(input?: { name?: string; personalNumber?: stri
       id: uid(),
       provider: "bankid",
       name,
-      email: `${uid()}@bankid.velio.local`,
+      email: "",
       phone: "",
       providerId,
       accountMode: "customer",
@@ -297,6 +304,38 @@ export function localBankIdSignIn(input?: { name?: string; personalNumber?: stri
       idMethod: "bankid",
     };
     const idx = accounts.findIndex((a) => a.id === account!.id);
+    accounts[idx] = account;
+  }
+  writeAccounts(accounts);
+  localStorage.setItem(SESSION_KEY, account.id);
+  return account;
+}
+
+export function localSignInWithEmail(email: string, name?: string): LocalAccount {
+  const normalized = email.trim().toLowerCase();
+  const accounts = readAccounts();
+  const chosen = name?.trim() || "";
+  const localPart = normalized.split("@")[0] || "";
+  const fallback = /[a-zåäö]/i.test(localPart) ? localPart : "";
+  let account = accounts.find((item) => item.email.toLowerCase() === normalized);
+  if (!account) {
+    account = {
+      id: uid(),
+      provider: "email",
+      name: chosen || fallback,
+      email: normalized,
+      phone: "",
+      providerId: null,
+      accountMode: "customer",
+      emailVerified: true,
+      phoneVerified: false,
+      idVerified: false,
+      idMethod: null,
+    };
+    accounts.push(account);
+  } else if (chosen) {
+    account = { ...account, name: chosen, emailVerified: true };
+    const idx = accounts.findIndex((item) => item.id === account!.id);
     accounts[idx] = account;
   }
   writeAccounts(accounts);

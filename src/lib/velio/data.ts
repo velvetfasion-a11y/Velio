@@ -35,6 +35,23 @@ export type Provider = {
   photo?: string;
   place?: string;
   experience?: string;
+  title?: string;
+  serviceIds?: ServiceId[];
+  otherTrade?: string;
+  photos?: string[];
+  offers?: { name: string; hours: string; price: number }[];
+  includes?: string[];
+  qualifications?: string[];
+  extras?: { name: string; price: number }[];
+  areas?: string[];
+  /** Self-reported company details. Not a verification. */
+  companyName?: string;
+  orgNumber?: string;
+  fTax?: "yes" | "no" | "unsure";
+  /** Private people have no company block on the public profile. */
+  sellerKind?: "company" | "private";
+  /** Shown instead of a verified badge. Not an identity check. */
+  demo?: boolean;
 };
 
 /** Public “Om” text: the description the person wrote, without a leading account name. */
@@ -83,6 +100,16 @@ export function coordsForArea(area: string | null | undefined) {
   return areaCoords[area] ?? areaCoords.Stockholm;
 }
 
+export function distanceKm(from: { lat: number; lng: number }, to: { lat: number; lng: number }) {
+  const rad = Math.PI / 180;
+  const dLat = (to.lat - from.lat) * rad;
+  const dLng = (to.lng - from.lng) * rad;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(from.lat * rad) * Math.cos(to.lat * rad) * Math.sin(dLng / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 
 export const whenOptions = ["Så snart som möjligt", "Idag", "Imorgon", "Välj tid i chatten"] as const;
 
@@ -115,6 +142,20 @@ export function publicDisplayName(name: string | null | undefined) {
   if (!trimmed) return "";
   if (/bankid|google-användare|apple-användare|^användare$/i.test(trimmed)) return "";
   return trimmed;
+}
+
+/** Drop generated stand-in addresses. A chosen address is kept. */
+export function contactEmail(email: string | null | undefined) {
+  const value = (email ?? "").trim();
+  if (!value || /@(?:bankid\.|users\.)?velio\.local$/i.test(value)) return "";
+  return value;
+}
+
+/** An address the person chooses, including one that is not a real mailbox, such as namn@.com. */
+export function isSignInEmail(email: string | null | undefined) {
+  const value = contactEmail(email).toLowerCase();
+  if (!/^[^\s@]+@[^\s@]*\.[^\s@]+$/.test(value)) return "";
+  return value;
 }
 
 export function greetingName(name: string | null | undefined) {
@@ -175,6 +216,19 @@ function openWeekdays(provider: Provider) {
   return days;
 }
 
+export function providerTradeNames(provider: Pick<Provider, "serviceId" | "serviceIds" | "otherTrade">) {
+  const ids = provider.serviceIds ?? [provider.serviceId];
+  const names: string[] = ids.map((id) => serviceById(id)?.name ?? "").filter((name) => name.length > 0);
+  if (provider.otherTrade?.trim()) names.push(provider.otherTrade.trim());
+  return names;
+}
+
+export function providerWorksIn(provider: Provider, area: string) {
+  const areas = provider.areas ?? [];
+  if (areas.includes("Överallt") || provider.place === "Överallt" || provider.place === "Hela Stockholm") return true;
+  return provider.area === area || provider.place === area || areas.includes(area);
+}
+
 export function filterProviders(options: {
   serviceId?: string | null;
   time: Slot | "anytime";
@@ -186,15 +240,26 @@ export function filterProviders(options: {
   const query = options.query?.trim().toLowerCase() ?? "";
   const source = options.list ?? providers;
   const list = source.filter((provider) => {
-    if (options.serviceId && provider.serviceId !== options.serviceId) return false;
+    if (options.serviceId) {
+      const ids = provider.serviceIds ?? [provider.serviceId];
+      if (!ids.includes(options.serviceId as ServiceId)) return false;
+    }
     if (options.time !== "anytime" && !provider.slots.includes(options.time)) return false;
-    if (options.area && provider.area !== options.area && provider.place !== "Hela Stockholm") return false;
+    if (options.area && !providerWorksIn(provider, options.area)) return false;
     if (!query) return true;
-    return (
-      provider.name.toLowerCase().includes(query) ||
-      provider.area.toLowerCase().includes(query) ||
-      serviceById(provider.serviceId)?.name.toLowerCase().includes(query) === true
-    );
+    const haystack = [
+      provider.name,
+      provider.area,
+      provider.place,
+      provider.title,
+      provider.otherTrade,
+      ...(provider.areas ?? []),
+      ...providerTradeNames(provider),
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    return haystack.includes(query);
   });
 
   return list.sort((a, b) => {
