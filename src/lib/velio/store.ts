@@ -172,6 +172,7 @@ export type BusinessForm = {
   desc: string;
   level: string;
   certs: string[];
+  minSum: number;
   photos: string[];
   offers: { id: string; name: string; hours: string; price: number; on: boolean }[];
   includes: string[];

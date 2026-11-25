@@ -136,6 +136,7 @@ export function ProviderSheet() {
             <span className="mt-1 h-10 w-px bg-line" />
             <div className="text-right">
               <div className="text-lg font-semibold">fr. {kr(provider.price)}</div>
+              <p className="text-[11px] text-muted">Minsta summa</p>
               <div className="mt-1 flex items-center justify-end gap-1.5 text-sm font-medium text-ok">
                 <span className="size-2 rounded-full bg-ok" />
                 {available ? "Tillgänglig nu" : `Om ${provider.etaMin} min`}

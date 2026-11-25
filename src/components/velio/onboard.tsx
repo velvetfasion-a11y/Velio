@@ -37,7 +37,7 @@ const blurbs = [
   "Fyll i dina uppgifter så att kunder kan hitta, boka och anlita dig.",
   "Fyll i vilka tjänster du erbjuder och dina kvalifikationer.",
   "Ange önskad plats och radien du tar uppdrag inom.",
-  "Sätt dina priser, hantera betalning och välj hur du får dina utbetalningar.",
+  "Skriv minsta summan du tar betalt för ett uppdrag.",
 ];
 
 type Offer = { id: string; name: string; hours: string; price: number; on: boolean };
@@ -73,6 +73,7 @@ export function OnboardSheet() {
   const [level, setLevel] = useState(saved?.level || listing?.experience || "");
   const [certs, setCerts] = useState<string[]>(saved?.certs ?? listing?.qualifications ?? []);
   const [certDraft, setCertDraft] = useState("");
+  const [minSum, setMinSum] = useState(saved?.minSum ? String(saved.minSum) : listing?.price ? String(listing.price) : "");
   const [photos, setPhotos] = useState<string[]>((saved?.photos ?? listing?.photos ?? []).filter((src) => src.startsWith("data:")));
   const [offers, setOffers] = useState<Offer[]>(
     saved?.offers?.length
@@ -142,6 +143,7 @@ export function OnboardSheet() {
       desc,
       level,
       certs,
+      minSum: Number(minSum) || 0,
       photos,
       offers,
       includes,
@@ -158,7 +160,7 @@ export function OnboardSheet() {
       terms,
     };
     saveBusinessForm(form);
-  }, [serviceIds, otherOn, otherTrade, title, desc, level, certs, photos, offers, includes, extras, areaMode, areas, km, days, from, to, offs, notice, payout, terms, saveBusinessForm]);
+  }, [serviceIds, otherOn, otherTrade, title, desc, level, certs, minSum, photos, offers, includes, extras, areaMode, areas, km, days, from, to, offs, notice, payout, terms, saveBusinessForm]);
 
   const next = () => {
     if (step === 1) {
@@ -175,10 +177,10 @@ export function OnboardSheet() {
 
   const publish = () => {
     const active = offers.filter((offer) => offer.on);
-    const amount = active[0]?.price || 0;
+    const minimum = Number(minSum);
     if (!serviceIds.length && !(otherOn && otherTrade.trim())) return showToast("Välj minst ett yrke");
     if (!terms) return showToast("Godkänn villkoren för att publicera");
-    if (amount <= 0) return showToast("Ange ett pris");
+    if (!/^\d+$/.test(minSum) || minimum < 1) return showToast("Skriv minsta summa i hela kronor");
     const primary = serviceIds[0] ?? "rep";
     saveWeekTemplate(days, from, to);
     finishOnboard({
@@ -187,7 +189,7 @@ export function OnboardSheet() {
       otherTrade: otherOn ? otherTrade.trim() : "",
       title: title.trim(),
       desc: desc.trim(),
-      price: amount,
+      price: minimum,
       experience: level,
       photos,
       offers: active.slice(0, 10).map(({ name, hours, price }) => ({ name, hours, price })),
@@ -326,6 +328,8 @@ export function OnboardSheet() {
           ) : null}
           {step === 4 ? (
             <StepPay
+              minSum={minSum}
+              onMinSum={setMinSum}
               payout={payout}
               terms={terms}
               onPayout={setPayout}
@@ -792,6 +796,8 @@ function Rule({ label, value, options, onChange }: { label: string; value: strin
 }
 
 function StepPay(props: {
+  minSum: string;
+  onMinSum: (value: string) => void;
   payout: boolean;
   terms: boolean;
   onPayout: (on: boolean) => void;
@@ -800,6 +806,21 @@ function StepPay(props: {
 }) {
   return (
     <div className="space-y-4">
+      <div className="rounded-2xl border border-[#e6dfd6] bg-white p-3">
+        <Label icon={Wallet}>Minsta summa *</Label>
+        <p className="mb-2 text-sm text-muted">Skriv det lägsta beloppet du tar betalt för ett uppdrag, i hela kronor. Till exempel 500.</p>
+        <label className="flex items-center gap-2 rounded-2xl border border-[#e6dfd6] px-4">
+          <input
+            inputMode="numeric"
+            value={props.minSum}
+            onChange={(event) => props.onMinSum(event.target.value.replace(/\D/g, "").slice(0, 6))}
+            placeholder="500"
+            aria-label="Minsta summa i kronor"
+            className="h-12 min-w-0 flex-1 bg-transparent text-lg font-semibold outline-none"
+          />
+          <span className="text-sm font-semibold text-muted">kr</span>
+        </label>
+      </div>
       <p className="flex gap-2 rounded-2xl bg-[#f6f1ea] px-3 py-3 text-sm">
         <Info className="mt-0.5 size-4 shrink-0" />
         Det slutliga priset bestäms i samråd med kunden innan arbetet bekräftas.
