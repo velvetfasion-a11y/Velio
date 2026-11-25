@@ -1404,7 +1404,7 @@ export function PaySheet() {
   const booking = bookings.find((item) => item.providerId === providerId && item.status !== "done") ?? bookings.find((item) => item.providerId === providerId);
   const amount = booking?.cost ?? provider?.price ?? 0;
   const savedCard = cards.find((item) => item.id !== "swish") ?? cards[0];
-  const [method, setMethod] = useState<"apple" | "card" | "swish">("apple");
+  const [method, setMethod] = useState<"apple" | "card" | "swish" | "cash">("apple");
   const [cardNumber, setCardNumber] = useState("");
   const [expiry, setExpiry] = useState("");
   const [cvc, setCvc] = useState("");
@@ -1500,6 +1500,10 @@ export function PaySheet() {
     finishPaid("Swish");
   };
 
+  const payWithCash = () => {
+    finishPaid("kontant");
+  };
+
   return (
     <div className="absolute inset-0 z-40 flex flex-col justify-end bg-black/30" onClick={() => setSheet("chat")}>
       <div role="dialog" aria-label="Betala" className="sheet-in rounded-t-[1.7rem] bg-[#fffcfa] px-5 pt-3 pb-6" onClick={(event) => event.stopPropagation()}>
@@ -1514,12 +1518,13 @@ export function PaySheet() {
           <p className="mt-2 text-sm text-muted">Reservationen på {kr(booking?.holdKr ?? amount)} växlas till en dragning nu.</p>
         </div>
 
-        <div className="mt-4 grid grid-cols-3 gap-2">
+        <div className="mt-4 grid grid-cols-2 gap-2">
           {(
             [
               { id: "apple" as const, label: "Apple Pay" },
               { id: "card" as const, label: "Kort" },
               { id: "swish" as const, label: "Swish" },
+              { id: "cash" as const, label: "Kontant" },
             ] as const
           ).map((item) => (
             <button
@@ -1580,6 +1585,10 @@ export function PaySheet() {
           <p className="mt-4 text-sm text-muted">Använder Apple Pay via webbläsarens Payment Request när det finns en plånbok.</p>
         ) : null}
 
+        {method === "cash" ? (
+          <p className="mt-4 text-sm text-muted">Betala kontant på plats till utföraren. Markera som betalt när ni är överens.</p>
+        ) : null}
+
         {error ? <p className="mt-3 text-sm text-red-700">{error}</p> : null}
 
         <button
@@ -1588,7 +1597,8 @@ export function PaySheet() {
           onClick={() => {
             if (method === "apple") void payWithApple();
             else if (method === "card") payWithCard();
-            else payWithSwish();
+            else if (method === "swish") payWithSwish();
+            else payWithCash();
           }}
           className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#2a211c] font-semibold text-white disabled:opacity-60"
         >
@@ -1601,8 +1611,10 @@ export function PaySheet() {
             </>
           ) : method === "card" ? (
             `Betala ${kr(amount)} med kort`
-          ) : (
+          ) : method === "swish" ? (
             `Betala ${kr(amount)} med Swish`
+          ) : (
+            `Bekräfta kontant ${kr(amount)}`
           )}
         </button>
       </div>

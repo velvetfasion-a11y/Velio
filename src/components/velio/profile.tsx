@@ -44,7 +44,7 @@ const faqs = [
   },
   {
     q: "Hur betalar jag?",
-    a: "Swish eller kort. Du hanterar metoderna under Jag och Betalningsmetoder.",
+    a: "Apple Pay, kort, Swish eller kontant. Du hanterar metoderna under Jag och Betalningsmetoder.",
   },
 ];
 
@@ -133,6 +133,10 @@ export function ProfileScreens() {
           <div className="rounded-2xl border border-line p-4">
             <div className="font-semibold">Apple Pay</div>
             <div className="text-sm text-muted">Används vid betalning när Wallet finns i webbläsaren</div>
+          </div>
+          <div className="rounded-2xl border border-line p-4">
+            <div className="font-semibold">Kontant</div>
+            <div className="text-sm text-muted">Betala på plats till utföraren</div>
           </div>
           {cards.map((card) => (
             <div key={card.id} className="rounded-2xl border border-line p-4">
