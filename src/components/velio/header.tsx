@@ -24,9 +24,9 @@ export function PlaceLink({ tone = "cream" }: { tone?: "cream" | "glass" }) {
       aria-label={placeLabel}
       onClick={onPlaceClick}
       className={cn(
-        "block max-w-[12rem] truncate text-left text-[10px] leading-none font-medium tracking-wide",
-        glass ? "text-paper/80" : "text-muted",
-        locationOn && (glass ? "text-[#b7e6c2]" : "text-[#2f7a3c]"),
+        "inline-flex max-w-[12rem] truncate rounded-full px-2.5 py-1 text-left text-[11px] leading-none font-medium tracking-wide",
+        glass ? "glass-dark text-paper" : "text-muted",
+        locationOn && (glass ? "text-[#d7f5df]" : "text-ok"),
       )}
     >
       {placeLabel}
@@ -63,8 +63,8 @@ export function AppHeader({ tone = "cream", onBack }: { tone?: "cream" | "glass"
           aria-label="Tillbaka"
           onClick={back}
           className={cn(
-            "grid size-9 place-items-center justify-self-start",
-            glass ? "text-paper" : "text-ink",
+            "grid size-10 place-items-center justify-self-start rounded-full",
+            glass ? "glass-dark text-paper" : "text-ink",
           )}
         >
           <ArrowLeft className="size-5" strokeWidth={1.8} />
@@ -86,8 +86,8 @@ export function AppHeader({ tone = "cream", onBack }: { tone?: "cream" | "glass"
           aria-label="Notiser"
           onClick={() => go("notifications")}
           className={cn(
-            "relative grid size-9 place-items-center justify-self-end",
-            glass ? "text-paper" : "text-ink",
+            "relative grid size-10 place-items-center justify-self-end rounded-full",
+            glass ? "glass-dark text-paper" : "text-ink",
           )}
         >
           <Bell className="size-[1.15rem]" strokeWidth={1.8} />

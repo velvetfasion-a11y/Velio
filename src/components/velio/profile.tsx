@@ -26,7 +26,7 @@ import { HistoryCard } from "@/components/velio/history";
 import { VerifyIdScreen } from "@/components/velio/verify-id";
 import { ownBusiness, useVelio, type Booking, type SavedAddress } from "@/lib/velio/store";
 import { cn } from "@/lib/cn";
-import { Btn, Field, ProfilePhoto, ScreenHeader } from "@/components/velio/ui";
+import { Btn, Field, ProfilePhoto, ScreenHeader, SecurePayNote } from "@/components/velio/ui";
 import { asset } from "@/lib/velio/asset";
 
 const faqs: { q: string; a: string; settings?: boolean }[] = [
@@ -76,6 +76,58 @@ const faqs: { q: string; a: string; settings?: boolean }[] = [
   },
 ];
 
+function ProfileCompleteness({
+  name,
+  avatar,
+  phone,
+  email,
+  verified,
+  onVerify,
+}: {
+  name: string;
+  avatar: boolean;
+  phone: boolean;
+  email: boolean;
+  verified: boolean;
+  onVerify: () => void;
+}) {
+  const checks = [
+    { label: "Namn", ok: Boolean(name) },
+    { label: "Profilbild", ok: avatar },
+    { label: "Telefon", ok: phone },
+    { label: "E-post", ok: email },
+    { label: "Identitet", ok: verified },
+  ];
+  const done = checks.filter((item) => item.ok).length;
+  const pct = Math.round((done / checks.length) * 100);
+  return (
+    <section className="mt-4 rounded-[1.3rem] border border-line bg-paper p-4 shadow-soft">
+      <div className="flex items-center justify-between gap-3">
+        <p className="font-semibold">Profilen är {pct}% klar</p>
+        <span className={verified ? "rounded-full bg-ok/15 px-2 py-0.5 text-[11px] font-semibold text-ok" : "rounded-full bg-sand px-2 py-0.5 text-[11px] font-semibold text-brown"}>
+          {verified ? "Identitet verifierad" : "Inte verifierad"}
+        </span>
+      </div>
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-line" aria-hidden="true">
+        <div className="h-full rounded-full bg-brown" style={{ width: `${pct}%` }} />
+      </div>
+      <ul className="mt-3 space-y-1 text-sm">
+        {checks.map((item) => (
+          <li key={item.label} className="flex items-center justify-between">
+            <span>{item.label}</span>
+            <span className={item.ok ? "text-ok" : "text-muted"}>{item.ok ? "Klar" : "Saknas"}</span>
+          </li>
+        ))}
+      </ul>
+      {verified ? null : (
+        <button type="button" onClick={onVerify} className="mt-3 h-11 w-full rounded-full bg-brown text-sm font-semibold text-paper">
+          Verifiera med BankID
+        </button>
+      )}
+    </section>
+  );
+}
+
 export function BookingRows({ items, onOpen }: { items: Booking[]; onOpen: (id: string) => void }) {
   const rebook = useVelio((state) => state.rebook);
   if (!items.length) return <p className="text-sm text-muted">Inga bokningar ännu.</p>;
@@ -105,12 +157,12 @@ function AddressScreen({
   return (
     <div className="px-4 pt-4">
       <ScreenHeader title="Adresser" />
-      <div className="rounded-[1.3rem] border border-[#efeae4] bg-white/80 p-4">
-        <p className="text-sm text-[#5c564f]">Spara hem, jobb eller en annan plats. Den används när du bokar.</p>
+      <div className="rounded-[1.3rem] border border-line bg-paper/80 backdrop-blur-xl p-4">
+        <p className="text-sm text-muted">Spara hem, jobb eller en annan plats. Den används när du bokar.</p>
         <label className="mt-3 block text-sm font-medium">Namn</label>
-        <input value={label} onChange={(event) => setLabel(event.target.value)} placeholder="Hem" className="mt-1 h-11 w-full rounded-full border border-[#e6dfd6] px-4 text-sm outline-none" />
+        <input value={label} onChange={(event) => setLabel(event.target.value)} placeholder="Hem" className="mt-1 h-11 w-full rounded-full border border-line px-4 text-sm outline-none" />
         <label className="mt-3 block text-sm font-medium">Adress</label>
-        <input value={line} onChange={(event) => setLine(event.target.value)} placeholder="Gata, postnummer och ort" className="mt-1 h-11 w-full rounded-full border border-[#e6dfd6] px-4 text-sm outline-none" />
+        <input value={line} onChange={(event) => setLine(event.target.value)} placeholder="Gata, postnummer och ort" className="mt-1 h-11 w-full rounded-full border border-line px-4 text-sm outline-none" />
         <button
           type="button"
           onClick={() => {
@@ -122,7 +174,7 @@ function AddressScreen({
               setLine("");
             }
           }}
-          className="mt-3 h-11 rounded-full bg-[#2a211c] px-5 text-sm font-semibold text-white"
+          className="mt-3 h-11 rounded-full bg-brown px-5 text-sm font-semibold text-white"
         >
           Spara
         </button>
@@ -130,21 +182,21 @@ function AddressScreen({
       {addresses.length ? (
         <div className="mt-4 space-y-3">
           {addresses.map((item) => (
-            <article key={item.id} className="rounded-[1.3rem] border border-[#efeae4] bg-white/80 p-4">
+            <article key={item.id} className="rounded-[1.3rem] border border-line bg-paper/80 backdrop-blur-xl p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="font-semibold">{item.label}</p>
-                  <p className="mt-1 text-sm text-[#5c564f]">{item.line}</p>
+                  <p className="mt-1 text-sm text-muted">{item.line}</p>
                 </div>
-                {item.primary ? <span className="shrink-0 rounded-full bg-[#e7f3e4] px-2 py-0.5 text-[11px] text-[#2f7a3a]">Standard</span> : null}
+                {item.primary ? <span className="shrink-0 rounded-full bg-ok/15 px-2 py-0.5 text-[11px] text-ok">Standard</span> : null}
               </div>
               <div className="mt-3 flex gap-2">
                 {item.primary ? null : (
-                  <button type="button" onClick={() => onPrimary(item.id)} className="h-9 rounded-full border border-[#e6dfd6] px-3 text-sm font-semibold">
+                  <button type="button" onClick={() => onPrimary(item.id)} className="h-9 rounded-full border border-line px-3 text-sm font-semibold">
                     Gör till standard
                   </button>
                 )}
-                <button type="button" onClick={() => onRemove(item.id)} className="h-9 rounded-full border border-[#e6dfd6] px-3 text-sm font-semibold">
+                <button type="button" onClick={() => onRemove(item.id)} className="h-9 rounded-full border border-line px-3 text-sm font-semibold">
                   Ta bort
                 </button>
               </div>
@@ -215,6 +267,9 @@ export function ProfileScreens() {
     return (
       <div className="px-5 pt-4">
         <ScreenHeader title="Betalningsmetoder" />
+        <div className="mb-4">
+          <SecurePayNote />
+        </div>
         <div className="mb-4 space-y-2">
           <div className="rounded-2xl border border-line p-4">
             <div className="font-semibold">Apple Pay</div>
@@ -270,16 +325,16 @@ export function ProfileScreens() {
         {people.length ? (
           <div className="space-y-3">
             {people.map((person) => (
-              <article key={person.id} className="flex items-center gap-3 rounded-[1.3rem] border border-[#efeae4] bg-white/80 p-3">
+              <article key={person.id} className="flex items-center gap-3 rounded-[1.3rem] border border-line bg-paper/80 backdrop-blur-xl p-3">
                 <button type="button" onClick={() => openProvider(person.id)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
                   {person.photo ? (
                     <img src={person.photo} alt="" className="size-14 shrink-0 rounded-2xl object-cover" />
                   ) : (
-                    <span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-[#f3ece3] font-serif text-xl">{person.initials}</span>
+                    <span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-sand font-serif text-xl">{person.initials}</span>
                   )}
                   <span className="min-w-0">
                     <span className="block truncate font-semibold">{person.name}</span>
-                    <span className="mt-0.5 block truncate text-sm text-[#5c564f]">{providerTradeNames(person).join(" · ") || serviceById(person.serviceId)?.name}</span>
+                    <span className="mt-0.5 block truncate text-sm text-muted">{providerTradeNames(person).join(" · ") || serviceById(person.serviceId)?.name}</span>
                     <span className="mt-0.5 block text-sm">fr. {kr(person.price)}</span>
                   </span>
                 </button>
@@ -290,10 +345,10 @@ export function ProfileScreens() {
             ))}
           </div>
         ) : (
-          <div className="rounded-[1.3rem] border border-[#efeae4] bg-white/80 px-4 py-8 text-center">
+          <div className="rounded-[1.3rem] border border-line bg-paper/80 backdrop-blur-xl px-4 py-8 text-center">
             <p className="font-semibold">Inga favoriter ännu</p>
             <p className="mt-1 text-sm text-muted">Öppna en utförare och tryck på hjärtat. Personen hamnar här.</p>
-            <button type="button" onClick={() => go("home")} className="mt-4 h-11 rounded-full bg-[#6e5636] px-5 text-sm font-semibold text-white">
+            <button type="button" onClick={() => go("home")} className="mt-4 h-11 rounded-full bg-brown px-5 text-sm font-semibold text-white">
               Hitta utförare
             </button>
           </div>
@@ -322,23 +377,23 @@ export function ProfileScreens() {
             {mine.map((job) => {
               const service = serviceById(job.serviceId);
               return (
-                <article key={job.id} className="flex gap-3 rounded-[1.3rem] border border-[#efeae4] bg-white/80 p-3">
+                <article key={job.id} className="flex gap-3 rounded-[1.3rem] border border-line bg-paper/80 backdrop-blur-xl p-3">
                   <img src={images[job.serviceId] || `/velio/${job.serviceId}.jpg`} alt="" className="size-16 rounded-xl object-cover" />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-2">
                       <p className="font-semibold">{service?.name}</p>
-                      <span className="shrink-0 rounded-full bg-[#e7f3e4] px-2 py-0.5 text-[11px] text-[#2f7a3a]">Publicerad</span>
+                      <span className="shrink-0 rounded-full bg-ok/15 px-2 py-0.5 text-[11px] text-ok">Publicerad</span>
                     </div>
-                    <p className="mt-1 line-clamp-2 text-sm text-[#5c564f]">{job.text}</p>
-                    <p className="mt-1 text-xs text-[#5c564f]">{job.when}</p>
-                    <p className="text-xs text-[#5c564f]">{job.address}</p>
+                    <p className="mt-1 line-clamp-2 text-sm text-muted">{job.text}</p>
+                    <p className="mt-1 text-xs text-muted">{job.when}</p>
+                    <p className="text-xs text-muted">{job.address}</p>
                   </div>
                 </article>
               );
             })}
           </div>
         ) : (
-          <div className="rounded-[1.3rem] border border-[#efeae4] bg-white/80 px-4 py-8 text-center">
+          <div className="rounded-[1.3rem] border border-line bg-paper/80 backdrop-blur-xl px-4 py-8 text-center">
             <p className="font-semibold">Inga publicerade uppdrag ännu</p>
             <p className="mt-1 text-sm text-muted">När du lägger upp ett uppdrag syns det här.</p>
           </div>
@@ -355,8 +410,11 @@ export function ProfileScreens() {
     const own = ownBusiness({ accountId, directory, loggedIn: true });
     const activeListing = listing ?? (own ? { serviceId: own.serviceId, desc: own.about, price: own.price } : null);
     const listed = activeListing ? serviceById(activeListing.serviceId) : null;
-    const verifyLabel =
-      idMethod === "passport" ? "Verifierad\nmed pass" : "Verifierad\nmed BankID";
+    const verifyLabel = !idVerified
+      ? "Identitet\nkrävs"
+      : idMethod === "passport"
+        ? "Verifierad\nmed pass"
+        : "Verifierad\nmed BankID";
     const points = [
       { icon: ShieldCheck, label: verifyLabel },
       { icon: Layers, label: "Få uppdrag\ndirekt i appen" },
@@ -369,22 +427,22 @@ export function ProfileScreens() {
           <img src={asset("/velio/business.jpg")} alt="" className="h-52 w-full object-cover" />
           <div className="absolute inset-0 bg-gradient-to-r from-black/55 via-black/25 to-transparent" />
           <div className="absolute inset-0 flex flex-col justify-center px-5 text-white">
-            <p className="text-[11px] tracking-[0.28em] text-[#e6d3a1]">VELIO BUSINESS</p>
-            <h3 className="mt-2 font-serif text-[2rem] leading-none">Arbeta med VELIO</h3>
-            <p className="mt-2 max-w-[16rem] text-sm leading-snug text-white/90">
+            <p className="scrim-text text-[11px] tracking-[0.28em] text-wheat">VELIO BUSINESS</p>
+            <h3 className="ios-section scrim-text mt-2 text-[1.7rem] text-white">Arbeta med VELIO</h3>
+            <p className="scrim-text mt-2 max-w-[16rem] text-sm leading-snug text-white">
               Bli utförare, ta emot uppdrag och bygg ditt professionella nätverk.
             </p>
           </div>
         </div>
         {!idVerified && !own ? (
-          <div className="mt-5 rounded-[1.2rem] border border-[#efeae4] bg-[#fbf8f4] p-4">
-            <p className="text-sm leading-relaxed text-[#5c564f]">
+          <div className="mt-5 rounded-[1.2rem] border border-line bg-soft p-4">
+            <p className="text-sm leading-relaxed text-muted">
               Business kräver identifiering. Verifiera dig med BankID eller pass innan du lägger upp jobb.
             </p>
             <button
               type="button"
               onClick={() => go("verify-id")}
-              className="mt-3 h-11 w-full rounded-full bg-[#6e5636] text-sm font-semibold text-white"
+              className="mt-3 h-11 w-full rounded-full bg-brown text-sm font-semibold text-white"
             >
               Verifiera nu
             </button>
@@ -394,16 +452,16 @@ export function ProfileScreens() {
           {points.map((item, index) => {
             const Icon = item.icon;
             return (
-              <div key={item.label} className={index === 0 ? "px-1 text-center" : "border-l border-[#e6dfd6] px-1 text-center"}>
-                <Icon className="mx-auto size-7 text-[#9a7b45]" strokeWidth={1.4} />
+              <div key={item.label} className={index === 0 ? "px-1 text-center" : "border-l border-line px-1 text-center"}>
+                <Icon className="mx-auto size-7 text-brown" strokeWidth={1.4} />
                 <p className="mt-2 text-xs leading-snug whitespace-pre-line">{item.label}</p>
               </div>
             );
           })}
         </div>
         {activeListing && listed ? (
-          <div className="mt-5 rounded-[1.2rem] border border-[#efeae4] bg-white p-4">
-            <p className="text-xs tracking-wide text-[#9a7b45]">PUBLICERAD</p>
+          <div className="mt-5 rounded-[1.2rem] border border-line bg-white p-4">
+            <p className="text-xs tracking-wide text-brown">PUBLICERAD</p>
             <p className="mt-1 font-semibold">{own?.name || listed.name}</p>
             <p className="mt-1 text-sm text-muted">fr. {kr(activeListing.price)} · syns på hemsidan</p>
             <button
@@ -411,7 +469,7 @@ export function ProfileScreens() {
               onClick={() => {
                 if (own) useVelio.getState().openProvider(own.id);
               }}
-              className="mt-3 h-11 w-full rounded-full bg-[#6e5636] text-sm font-semibold text-white"
+              className="mt-3 h-11 w-full rounded-full bg-brown text-sm font-semibold text-white"
             >
               Öppna min profil
             </button>
@@ -421,7 +479,7 @@ export function ProfileScreens() {
                 setAccountMode("business");
                 go("home");
               }}
-              className="mt-2 h-11 w-full rounded-full border border-[#e6dfd6] text-sm font-semibold"
+              className="mt-2 h-11 w-full rounded-full border border-line text-sm font-semibold"
             >
               Gå till arbetsläget
             </button>
@@ -430,7 +488,7 @@ export function ProfileScreens() {
         <button
           type="button"
           onClick={() => (idVerified || own ? setSheet("onboard") : go("verify-id"))}
-          className="mt-6 flex h-14 w-full items-center justify-center gap-3 rounded-full bg-[#1c1917] text-base font-semibold text-white"
+          className="mt-6 flex h-14 w-full items-center justify-center gap-3 rounded-full bg-ink text-base font-semibold text-white"
         >
           <Briefcase className="size-5" strokeWidth={1.6} />
           {!idVerified && !own ? "Verifiera för att fortsätta" : activeListing ? "Uppdatera jobb" : "Lägg upp ditt jobb"}
@@ -454,12 +512,12 @@ export function ProfileScreens() {
       <div className="px-5 pt-2 pb-8">
         <ScreenHeader title="Inställningar" />
         {legal ? (
-          <div className="rounded-[1.4rem] border border-[#efeae4] bg-white px-4 py-4">
-            <button type="button" onClick={() => setLegal(null)} className="text-sm font-semibold text-[#5c564f]">
+          <div className="rounded-[1.4rem] border border-line bg-white px-4 py-4">
+            <button type="button" onClick={() => setLegal(null)} className="text-sm font-semibold text-muted">
               Tillbaka
             </button>
             <h2 className="mt-3 font-serif text-[1.7rem] leading-none">{legal === "privacy" ? "Integritetspolicy" : "Användarvillkor"}</h2>
-            <p className="mt-3 text-sm leading-relaxed text-[#5c564f]">
+            <p className="mt-3 text-sm leading-relaxed text-muted">
               {legal === "privacy"
                 ? "VELIO använder namn, telefon och e-post för att visa din profil och koppla dig till uppdrag. Plats används bara när du själv delar den, för att hitta jobb i ditt område. Under Inställningar kan du ta bort VELIO Business eller radera hela kontot från den här enheten."
                 : "Ett uppdrag gäller den tid och det pris som båda har bekräftat. Avbokning görs från uppdraget. Betalning sker med den metod som valts för jobbet. Du kan avsluta VELIO Business eller radera kontot när du vill, under Inställningar."}
@@ -468,8 +526,8 @@ export function ProfileScreens() {
         ) : (
           <div className="space-y-5">
             <section>
-              <h2 className="mb-2 px-1 text-xs font-semibold tracking-wide text-[#8a8178]">KONTAKT</h2>
-              <div className="divide-y divide-[#f0ebe6] overflow-hidden rounded-[1.4rem] border border-[#efeae4] bg-white">
+              <h2 className="mb-2 px-1 text-xs font-semibold tracking-wide text-muted">KONTAKT</h2>
+              <div className="divide-y divide-[#f0ebe6] overflow-hidden rounded-[1.4rem] border border-line bg-white">
                 <ContactRow
                   label="Namn"
                   value={knownName}
@@ -507,8 +565,8 @@ export function ProfileScreens() {
             </section>
 
             <section>
-              <h2 className="mb-2 px-1 text-xs font-semibold tracking-wide text-[#8a8178]">ENHETEN</h2>
-              <div className="divide-y divide-[#f0ebe6] overflow-hidden rounded-[1.4rem] border border-[#efeae4] bg-white">
+              <h2 className="mb-2 px-1 text-xs font-semibold tracking-wide text-muted">ENHETEN</h2>
+              <div className="divide-y divide-[#f0ebe6] overflow-hidden rounded-[1.4rem] border border-line bg-white">
                 <div>
                   <button
                     type="button"
@@ -528,16 +586,16 @@ export function ProfileScreens() {
                   >
                     <span className="min-w-0 flex-1">
                       <span className="block text-[15px]">Notifikationer</span>
-                      <span className="mt-0.5 block text-xs text-[#8a8178]">{notifications ? "På" : "Av"}</span>
+                      <span className="mt-0.5 block text-xs text-muted">{notifications ? "På" : "Av"}</span>
                     </span>
                     <SettingSwitch on={notifications} />
                   </button>
                   {noticeAsk ? (
-                    <div className="border-t border-[#f0ebe6] px-4 py-3.5">
+                    <div className="border-t border-line px-4 py-3.5">
                       <p className="text-[15px] font-semibold">Sätt på notifikationer</p>
-                      <p className="mt-1 text-sm leading-relaxed text-[#5c564f]">Du får aviseringar om uppdrag och meddelanden. Telefonen frågar om lov.</p>
+                      <p className="mt-1 text-sm leading-relaxed text-muted">Du får aviseringar om uppdrag och meddelanden. Telefonen frågar om lov.</p>
                       <div className="mt-3 flex gap-2">
-                        <button type="button" onClick={() => setNoticeAsk(false)} className="h-10 flex-1 rounded-full border border-[#e6dfd6] text-sm font-semibold">
+                        <button type="button" onClick={() => setNoticeAsk(false)} className="h-10 flex-1 rounded-full border border-line text-sm font-semibold">
                           Inte nu
                         </button>
                         <button
@@ -557,7 +615,7 @@ export function ProfileScreens() {
                               })
                               .finally(() => setNoticeBusy(false));
                           }}
-                          className="h-10 flex-1 rounded-full bg-[#2a211c] text-sm font-semibold text-white disabled:opacity-50"
+                          className="h-10 flex-1 rounded-full bg-brown text-sm font-semibold text-white disabled:opacity-50"
                         >
                           Sätt på
                         </button>
@@ -565,9 +623,9 @@ export function ProfileScreens() {
                     </div>
                   ) : null}
                   {noticeFailed && !notifications ? (
-                    <div className="border-t border-[#f0ebe6] px-4 py-3.5">
-                      <p className="text-sm leading-relaxed text-[#8a3d2a]">Det gick inte att slå på notifikationer.</p>
-                      <button type="button" onClick={() => go("help")} className="mt-2 text-sm font-semibold text-[#6e5636]">
+                    <div className="border-t border-line px-4 py-3.5">
+                      <p className="text-sm leading-relaxed text-red-800">Det gick inte att slå på notifikationer.</p>
+                      <button type="button" onClick={() => go("help")} className="mt-2 text-sm font-semibold text-brown">
                         Kontakta support
                       </button>
                     </div>
@@ -582,7 +640,7 @@ export function ProfileScreens() {
                 >
                   <span className="min-w-0 flex-1">
                     <span className="block text-[15px]">Plats</span>
-                    <span className={cn("mt-0.5 block truncate text-xs", locationOn ? "text-[#2f7a3c]" : "text-[#8a8178]")}>
+                    <span className={cn("mt-0.5 block truncate text-xs", locationOn ? "text-ok" : "text-muted")}>
                       {locationOn ? userLocation?.label || "Plats delad" : "Inte delad"}
                     </span>
                   </span>
@@ -592,39 +650,39 @@ export function ProfileScreens() {
             </section>
 
             <section>
-              <h2 className="mb-2 px-1 text-xs font-semibold tracking-wide text-[#8a8178]">OM VELIO</h2>
-              <div className="overflow-hidden rounded-[1.4rem] border border-[#efeae4] bg-white">
+              <h2 className="mb-2 px-1 text-xs font-semibold tracking-wide text-muted">OM VELIO</h2>
+              <div className="overflow-hidden rounded-[1.4rem] border border-line bg-white">
                 <button type="button" onClick={() => go("help")} className="flex w-full items-center gap-3 px-4 py-3.5 text-left">
                   <span className="min-w-0 flex-1">
                     <span className="block text-[15px]">Hjälp och support</span>
-                    <span className="mt-0.5 block text-xs text-[#8a8178]">Vanliga frågor, till exempel hur du raderar kontot</span>
+                    <span className="mt-0.5 block text-xs text-muted">Vanliga frågor, till exempel hur du raderar kontot</span>
                   </span>
-                  <ChevronRight className="size-4 text-[#b7afa6]" />
+                  <ChevronRight className="size-4 text-muted" />
                 </button>
-                <button type="button" onClick={() => setLegal("privacy")} className="flex w-full items-center gap-3 border-t border-[#f0ebe6] px-4 py-3.5 text-left">
+                <button type="button" onClick={() => setLegal("privacy")} className="flex w-full items-center gap-3 border-t border-line px-4 py-3.5 text-left">
                   <span className="min-w-0 flex-1 text-[15px]">Integritetspolicy</span>
-                  <ChevronRight className="size-4 text-[#b7afa6]" />
+                  <ChevronRight className="size-4 text-muted" />
                 </button>
-                <button type="button" onClick={() => setLegal("terms")} className="flex w-full items-center gap-3 border-t border-[#f0ebe6] px-4 py-3.5 text-left">
+                <button type="button" onClick={() => setLegal("terms")} className="flex w-full items-center gap-3 border-t border-line px-4 py-3.5 text-left">
                   <span className="min-w-0 flex-1 text-[15px]">Användarvillkor</span>
-                  <ChevronRight className="size-4 text-[#b7afa6]" />
+                  <ChevronRight className="size-4 text-muted" />
                 </button>
               </div>
             </section>
 
             <section>
-              <h2 className="mb-2 px-1 text-xs font-semibold tracking-wide text-[#8a8178]">KONTO</h2>
+              <h2 className="mb-2 px-1 text-xs font-semibold tracking-wide text-muted">KONTO</h2>
               {confirm ? (
-                <div className="rounded-[1.4rem] border border-[#efeae4] bg-white px-4 py-4">
+                <div className="rounded-[1.4rem] border border-line bg-white px-4 py-4">
                   <h3 className="font-serif text-[1.45rem] leading-none">{confirm === "business" ? "Ta bort VELIO Business?" : "Radera konto"}</h3>
-                  <p className="mt-2 text-sm leading-relaxed text-[#5c564f]">
+                  <p className="mt-2 text-sm leading-relaxed text-muted">
                     {confirm === "business"
                       ? "Företagsprofilen tas bort. Du är kvar som kund och kan logga in som vanligt."
                       : "Namn, kontaktuppgifter och VELIO Business tas bort från den här enheten. Du loggas ut. Skriv RADERA med stora bokstäver för att bekräfta."}
                   </p>
                   {confirm === "account" ? (
                     <label className="mt-3 block">
-                      <span className="mb-1.5 block text-xs font-medium text-[#8a8178]">Skriv RADERA</span>
+                      <span className="mb-1.5 block text-xs font-medium text-muted">Skriv RADERA</span>
                       <input
                         value={deleteWord}
                         onChange={(event) => setDeleteWord(event.target.value)}
@@ -632,7 +690,7 @@ export function ProfileScreens() {
                         autoCorrect="off"
                         spellCheck={false}
                         placeholder="RADERA"
-                        className="h-11 w-full rounded-full border border-[#e6dfd6] px-4 text-sm tracking-wide outline-none"
+                        className="h-11 w-full rounded-full border border-line px-4 text-sm tracking-wide outline-none"
                       />
                     </label>
                   ) : null}
@@ -643,7 +701,7 @@ export function ProfileScreens() {
                         setConfirm(null);
                         setDeleteWord("");
                       }}
-                      className="h-11 flex-1 rounded-full border border-[#e6dfd6] text-sm font-semibold"
+                      className="h-11 flex-1 rounded-full border border-line text-sm font-semibold"
                     >
                       Avbryt
                     </button>
@@ -656,22 +714,22 @@ export function ProfileScreens() {
                         setConfirm(null);
                         setDeleteWord("");
                       }}
-                      className="h-11 flex-1 rounded-full bg-[#8a3d2a] text-sm font-semibold text-white disabled:bg-[#f3eee8] disabled:text-[#b7afa6]"
+                      className="h-11 flex-1 rounded-full bg-red-800 text-sm font-semibold text-white disabled:bg-sand disabled:text-muted"
                     >
                       {confirm === "business" ? "Ta bort" : "Radera konto"}
                     </button>
                   </div>
                 </div>
               ) : (
-                <div className="overflow-hidden rounded-[1.4rem] border border-[#efeae4] bg-white">
+                <div className="overflow-hidden rounded-[1.4rem] border border-line bg-white">
                   <button type="button" onClick={logout} className="flex w-full items-center px-4 py-3.5 text-left text-[15px]">
                     Logga ut
                   </button>
                   {accountMode === "business" || own ? (
-                    <button type="button" onClick={() => setConfirm("business")} className="flex w-full items-center border-t border-[#f0ebe6] px-4 py-3.5 text-left">
+                    <button type="button" onClick={() => setConfirm("business")} className="flex w-full items-center border-t border-line px-4 py-3.5 text-left">
                       <span className="min-w-0 flex-1">
-                        <span className="block text-[15px] text-[#8a3d2a]">Radera VELIO Business</span>
-                        <span className="mt-0.5 block text-xs text-[#8a8178]">Företagskontot tas bort. Kundkontot är kvar.</span>
+                        <span className="block text-[15px] text-red-800">Radera VELIO Business</span>
+                        <span className="mt-0.5 block text-xs text-muted">Företagskontot tas bort. Kundkontot är kvar.</span>
                       </span>
                     </button>
                   ) : null}
@@ -681,16 +739,16 @@ export function ProfileScreens() {
                       setDeleteWord("");
                       setConfirm("account");
                     }}
-                    className="flex w-full items-center border-t border-[#f0ebe6] px-4 py-3.5 text-left"
+                    className="flex w-full items-center border-t border-line px-4 py-3.5 text-left"
                   >
                     <span className="min-w-0 flex-1">
-                      <span className="block text-[15px] text-[#8a3d2a]">Radera konto</span>
-                      <span className="mt-0.5 block text-xs text-[#8a8178]">Allt på den här enheten tas bort och du loggas ut.</span>
+                      <span className="block text-[15px] text-red-800">Radera konto</span>
+                      <span className="mt-0.5 block text-xs text-muted">Allt på den här enheten tas bort och du loggas ut.</span>
                     </span>
                   </button>
                 </div>
               )}
-              <p className="mt-4 text-center text-xs text-[#a39c94]">VELIO 1.0.0</p>
+              <p className="mt-4 text-center text-xs text-muted">VELIO 1.0.0</p>
             </section>
           </div>
         )}
@@ -702,21 +760,21 @@ export function ProfileScreens() {
     return (
       <div className="px-5 pt-2 pb-8">
         <ScreenHeader title="Hjälp och support" />
-        <h2 className="mb-2 px-1 text-xs font-semibold tracking-wide text-[#8a8178]">VANLIGA FRÅGOR</h2>
-        <div className="overflow-hidden rounded-[1.4rem] border border-[#efeae4] bg-white">
+        <h2 className="mb-2 px-1 text-xs font-semibold tracking-wide text-muted">VANLIGA FRÅGOR</h2>
+        <div className="overflow-hidden rounded-[1.4rem] border border-line bg-white">
           {faqs.map((faq, index) => {
             const open = openFaq === index;
             return (
-              <div key={faq.q} className={index === 0 ? "" : "border-t border-[#f0ebe6]"}>
+              <div key={faq.q} className={index === 0 ? "" : "border-t border-line"}>
                 <button type="button" aria-expanded={open} onClick={() => setOpenFaq(open ? null : index)} className="flex w-full items-center gap-3 px-4 py-3.5 text-left">
                   <span className="min-w-0 flex-1 text-[15px]">{faq.q}</span>
-                  <ChevronRight className={cn("size-4 shrink-0 text-[#b7afa6] transition", open && "rotate-90")} />
+                  <ChevronRight className={cn("size-4 shrink-0 text-muted transition", open && "rotate-90")} />
                 </button>
                 {open ? (
                   <div className="px-4 pb-4">
-                    <p className="text-sm leading-relaxed text-[#5c564f]">{faq.a}</p>
+                    <p className="text-sm leading-relaxed text-muted">{faq.a}</p>
                     {faq.settings ? (
-                      <button type="button" onClick={() => go("settings")} className="mt-3 text-sm font-semibold text-[#6e5636]">
+                      <button type="button" onClick={() => go("settings")} className="mt-3 text-sm font-semibold text-brown">
                         Öppna inställningar
                       </button>
                     ) : null}
@@ -726,14 +784,14 @@ export function ProfileScreens() {
             );
           })}
         </div>
-        <h2 className="mt-5 mb-2 px-1 text-xs font-semibold tracking-wide text-[#8a8178]">KONTAKTA OSS</h2>
-        <div className="rounded-[1.4rem] border border-[#efeae4] bg-white px-4 py-4">
+        <h2 className="mt-5 mb-2 px-1 text-xs font-semibold tracking-wide text-muted">KONTAKTA OSS</h2>
+        <div className="rounded-[1.4rem] border border-line bg-white px-4 py-4">
           <label className="block">
             <span className="text-[15px]">Rapportera ett problem</span>
             <textarea
               value={issue}
               onChange={(event) => setIssue(event.target.value)}
-              className="mt-2 h-24 w-full resize-none rounded-2xl border border-[#efeae4] bg-[#fbf8f4] px-3 py-3 text-sm outline-none"
+              className="mt-2 h-24 w-full resize-none rounded-2xl border border-line bg-soft px-3 py-3 text-sm outline-none"
               placeholder="Beskriv vad som hände"
             />
           </label>
@@ -747,7 +805,7 @@ export function ProfileScreens() {
               setIssue("");
               showToast("Tack, vi har tagit emot det");
             }}
-            className="mt-3 h-10 rounded-full bg-[#2a211c] px-4 text-sm font-semibold text-white"
+            className="mt-3 h-10 rounded-full bg-brown px-4 text-sm font-semibold text-white"
           >
             Skicka
           </button>
@@ -802,25 +860,25 @@ export function ProfileScreens() {
           onMode={setAccountMode}
         />
       ) : (
-      <section className="relative overflow-hidden rounded-[1.4rem] border border-[#efeae4] bg-white/80 px-4 py-4">
-        <svg viewBox="0 0 180 220" className="pointer-events-none absolute top-0 right-0 h-full w-36 text-[#f6f1ea]" aria-hidden="true">
+      <section className="relative overflow-hidden rounded-[1.4rem] border border-line bg-paper/80 backdrop-blur-xl px-4 py-4">
+        <svg viewBox="0 0 180 220" className="pointer-events-none absolute top-0 right-0 h-full w-36 text-sand" aria-hidden="true">
           <path d="M70 0c-30 50 40 70-10 130-30 36 40 90 120 90V0H70Z" fill="currentColor" />
         </svg>
         <div className="relative flex items-center gap-4">
           <ProfilePhoto large />
           <div>
             <h2 className="font-serif text-[1.7rem] leading-none font-medium">{publicDisplayName(profile.name) || "Din profil"}</h2>
-            <p className="mt-2 flex items-center gap-1 text-sm font-medium text-[#3d8f4a]">
+            <p className="mt-2 flex items-center gap-1 text-sm font-medium text-ok">
               <span className="grid size-4 place-items-center rounded-full border border-[#3d8f4a] text-[10px]">✓</span>
               {verifyLabel}
             </p>
-            <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-[#f3ece3] px-3 py-1 text-xs font-medium">
+            <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-sand px-3 py-1 text-xs font-medium">
               <Crown className="size-3.5" />
               {roleLabel}
             </span>
           </div>
         </div>
-        <div className="relative mt-4 grid grid-cols-[1fr_auto_1fr] items-start gap-3 border-t border-[#efeae4] pt-3">
+        <div className="relative mt-4 grid grid-cols-[1fr_auto_1fr] items-start gap-3 border-t border-line pt-3">
           <div className="flex gap-2">
             <MapPin className="mt-0.5 size-4 shrink-0" />
             <div>
@@ -828,7 +886,7 @@ export function ProfileScreens() {
               <p className="text-sm leading-snug">{profile.phone || "Ingen telefon"}</p>
             </div>
           </div>
-          <span className="mt-1 h-8 w-px bg-[#efeae4]" />
+          <span className="mt-1 h-8 w-px bg-sand" />
           <div className="flex gap-2">
             <Mail className="mt-0.5 size-4 shrink-0" />
             <div className="min-w-0">
@@ -840,16 +898,25 @@ export function ProfileScreens() {
       </section>
       )}
 
-      <h3 className="mt-6 font-serif text-[1.7rem] font-medium">Snabbval</h3>
+      <ProfileCompleteness
+        name={publicDisplayName(profile.name)}
+        avatar={Boolean(profile.avatar)}
+        phone={Boolean(profile.phone)}
+        email={Boolean(contactEmail(profile.email))}
+        verified={idVerified}
+        onVerify={() => go("verify-id")}
+      />
+
+      <h3 className="ios-section mt-6 text-[1.45rem]">Snabbval</h3>
       <div className="mt-3 grid grid-cols-4 gap-1.5">
         {quick.map((item) => {
           const Icon = item.icon;
           return (
-            <button key={item.label} type="button" onClick={item.onClick} className="rounded-2xl border border-[#efeae4] bg-white/80 px-0.5 py-3">
+            <button key={item.label} type="button" onClick={item.onClick} className="rounded-2xl border border-line bg-paper/80 backdrop-blur-xl px-0.5 py-3">
               <span className="relative mx-auto grid size-8 place-items-center">
                 <Icon className="size-5" strokeWidth={1.6} />
                 {item.badge ? (
-                  <span className="absolute -top-1 -right-2 grid size-4 place-items-center rounded-full bg-[#eadccb] text-[10px] font-semibold">{item.badge}</span>
+                  <span className="absolute -top-1 -right-2 grid size-4 place-items-center rounded-full bg-wheat text-[10px] font-semibold">{item.badge}</span>
                 ) : null}
               </span>
               <span className="mt-1 block text-[10px] leading-tight whitespace-nowrap">{item.label}</span>
@@ -860,7 +927,7 @@ export function ProfileScreens() {
 
       <button type="button" onClick={() => go("business")} className="relative mt-4 block w-full overflow-hidden rounded-[1.4rem] text-left text-white">
         <img src={asset("/velio/business-home.jpg")} alt="" className="absolute inset-0 h-full w-full object-cover object-[70%_center]" />
-        <div className="absolute inset-0 bg-gradient-to-r from-[#3a2a1c]/92 via-[#3a2a1c]/72 to-[#3a2a1c]/10" />
+        <div className="absolute inset-0 bg-gradient-to-r from-brown/92 via-brown/72 to-brown/10" />
         <div className="relative max-w-[16.5rem] px-5 py-5">
           <p className="font-serif text-[1.85rem] leading-none">VELIO Business</p>
           <p className="mt-2 text-[15px] leading-snug">Erbjud dina tjänster och få jobb direkt från kunder.</p>
@@ -869,14 +936,14 @@ export function ProfileScreens() {
             <li>✓ Ta emot uppdrag</li>
             <li>✓ Få säkra utbetalningar</li>
           </ul>
-          <span className="mt-4 inline-flex items-center gap-2 rounded-full bg-[#f3eee6] px-4 py-2.5 text-sm font-semibold text-ink">
+          <span className="mt-4 inline-flex items-center gap-2 rounded-full bg-sand px-4 py-2.5 text-sm font-semibold text-ink">
             Börja jobba med VELIO <span aria-hidden>→</span>
           </span>
         </div>
       </button>
 
-      <h3 className="mt-6 font-serif text-[1.7rem] font-medium">Konto och inställningar</h3>
-      <div className="mt-3 overflow-hidden rounded-[1.4rem] border border-[#efeae4] bg-white/80">
+      <h3 className="ios-section mt-6 text-[1.45rem]">Konto och inställningar</h3>
+      <div className="mt-3 overflow-hidden rounded-[1.4rem] border border-line bg-paper/80 backdrop-blur-xl">
         {rows.map((item, index) => {
           const Icon = item.icon;
           return (
@@ -884,12 +951,12 @@ export function ProfileScreens() {
               key={item.label}
               type="button"
               onClick={item.onClick}
-              className={index === 0 ? "flex w-full items-center gap-3 px-4 py-3.5 text-left" : "flex w-full items-center gap-3 border-t border-[#f0ebe6] px-4 py-3.5 text-left"}
+              className={index === 0 ? "flex w-full items-center gap-3 px-4 py-3.5 text-left" : "flex w-full items-center gap-3 border-t border-line px-4 py-3.5 text-left"}
             >
               <Icon className="size-5 shrink-0" strokeWidth={1.6} />
               <span className="min-w-0 flex-1">
                 <span className="block text-[15px]">{item.label}</span>
-                {"note" in item && item.note ? <span className="block text-xs leading-snug text-[#5c564f]">{item.note}</span> : null}
+                {"note" in item && item.note ? <span className="block text-xs leading-snug text-muted">{item.note}</span> : null}
               </span>
               <ChevronRight className="size-4 text-muted" />
             </button>
@@ -942,13 +1009,13 @@ function ModeSwitch({
         <div className="min-w-0">
           <h3 className="font-serif text-[1.85rem] leading-tight">{name}</h3>
           <p className="mt-1 text-sm">Medlem sedan nov 2026</p>
-          <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-[#e7f3e4] px-3 py-1 text-sm text-[#2f7a3a]">
-            <span className="grid size-4 place-items-center rounded-full bg-[#2f7a3a] text-[10px] text-white">✓</span>
+          <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-ok/15 px-3 py-1 text-sm text-ok">
+            <span className="grid size-4 place-items-center rounded-full bg-ok text-[10px] text-white">✓</span>
             {badge}
           </span>
         </div>
       </div>
-      <div className="mt-5 rounded-[1.35rem] border border-[#efeae4] bg-white/75 p-3">
+      <div className="mt-5 rounded-[1.35rem] border border-line bg-paper/80 backdrop-blur-xl p-3">
         <p className="text-center text-[15px] font-semibold">Välj hur du vill använda VELIO</p>
         <div className="relative mt-3 grid grid-cols-2 gap-2">
           <ModeCard active={mode === "customer"} icon={House} title="VELIO Customer" text="Boka tjänster och få hjälp" onClick={() => pick("customer")} />
@@ -956,7 +1023,7 @@ function ModeSwitch({
             type="button"
             aria-label="Byt läge"
             onClick={() => pick(mode === "customer" ? "business" : "customer")}
-            className="absolute top-1/2 left-1/2 z-10 grid size-9 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-[#efeae4] bg-white shadow-sm"
+            className="absolute top-1/2 left-1/2 z-10 grid size-9 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-line bg-white shadow-sm"
           >
             <ArrowLeftRight className="size-4" />
           </button>
@@ -987,8 +1054,8 @@ function ModeCard({
   onClick: () => void;
 }) {
   return (
-    <button type="button" onClick={onClick} className={cn("relative min-h-[8.4rem] rounded-2xl px-2 py-4 text-center", active ? "bg-[#6e5636] text-white" : "border border-[#efeae4] bg-[#fbf8f4]")}>
-      <span className={cn("absolute top-2.5 right-2.5 grid size-5 place-items-center rounded-full text-[11px]", active ? "bg-white text-[#6e5636]" : "border border-[#d9d1c7]")}>
+    <button type="button" onClick={onClick} className={cn("relative min-h-[8.4rem] rounded-2xl px-2 py-4 text-center", active ? "bg-brown text-white" : "border border-line bg-soft")}>
+      <span className={cn("absolute top-2.5 right-2.5 grid size-5 place-items-center rounded-full text-[11px]", active ? "bg-white text-brown" : "border border-[#d9d1c7]")}>
         {active ? "✓" : ""}
       </span>
       <Icon className="mx-auto size-7" strokeWidth={1.4} />
@@ -1018,13 +1085,13 @@ function ContactRow({
   return (
     <div className="flex items-center gap-2 px-4 py-3">
       <label className="min-w-0 flex-1">
-        <span className="block text-xs font-medium text-[#8a8178]">{label}</span>
+        <span className="block text-xs font-medium text-muted">{label}</span>
         <input
           type={type}
           value={draft}
           placeholder={placeholder}
           onChange={(event) => setDraft(event.target.value)}
-          className="mt-0.5 w-full bg-transparent text-[15px] text-[#2a211c] outline-none placeholder:text-[#c4bbb2]"
+          className="mt-0.5 w-full bg-transparent text-[15px] text-ink outline-none placeholder:text-muted"
         />
       </label>
       <button
@@ -1034,7 +1101,7 @@ function ContactRow({
           setBusy(true);
           void Promise.resolve(onSave(draft.trim())).finally(() => setBusy(false));
         }}
-        className="shrink-0 rounded-full bg-[#2a211c] px-3 py-1.5 text-xs font-semibold text-white disabled:bg-[#f3eee8] disabled:text-[#b7afa6]"
+        className="shrink-0 rounded-full bg-brown px-3 py-1.5 text-xs font-semibold text-white disabled:bg-sand disabled:text-muted"
       >
         Spara
       </button>

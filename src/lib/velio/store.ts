@@ -162,6 +162,9 @@ export type Listing = {
   qualifications?: string[];
   extras?: { name: string; price: number }[];
   areas?: string[];
+  companyName?: string;
+  orgNumber?: string;
+  fTax?: "yes" | "no" | "unsure";
 };
 
 export type BusinessForm = {
@@ -187,6 +190,9 @@ export type BusinessForm = {
   notice: string;
   payout: boolean;
   terms: boolean;
+  companyName?: string;
+  orgNumber?: string;
+  fTax?: "yes" | "no" | "unsure";
 };
 
 export type Profile = { name: string; phone: string; email: string; avatar?: string };
@@ -250,6 +256,9 @@ function listingToProvider(input: {
   qualifications?: string[];
   extras?: Listing["extras"];
   areas?: string[];
+  companyName?: string;
+  orgNumber?: string;
+  fTax?: "yes" | "no" | "unsure";
 }): Provider {
   return {
     id: input.id,
@@ -278,6 +287,9 @@ function listingToProvider(input: {
     qualifications: input.qualifications,
     extras: input.extras,
     areas: input.areas,
+    companyName: input.companyName,
+    orgNumber: input.orgNumber,
+    fTax: input.fTax,
   };
 }
 
@@ -1548,6 +1560,9 @@ export const useVelio = create<VelioState>()(
           qualifications: listing.qualifications,
           extras: listing.extras,
           areas: listing.areas,
+          companyName: listing.companyName,
+          orgNumber: listing.orgNumber,
+          fTax: listing.fTax,
         });
         published.rating = previous?.rating ?? published.rating;
         published.reviews = previous?.reviews ?? published.reviews;

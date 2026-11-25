@@ -273,29 +273,29 @@ export function LoginScreen() {
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden bg-white">
-      <div className="pointer-events-none absolute -top-20 -left-16 size-64 rounded-full bg-[#f4eadc] blur-3xl" />
-      <div className="pointer-events-none absolute top-1/3 -right-20 size-72 rounded-full bg-[#efe4d4] blur-3xl" />
-      <div className="pointer-events-none absolute bottom-0 left-8 size-48 rounded-full bg-[#f7f1e8] blur-3xl" />
+      <div className="pointer-events-none absolute -top-20 -left-16 size-64 rounded-full bg-wheat blur-3xl" />
+      <div className="pointer-events-none absolute top-1/3 -right-20 size-72 rounded-full bg-sand blur-3xl" />
+      <div className="pointer-events-none absolute bottom-0 left-8 size-48 rounded-full bg-cream blur-3xl" />
 
       <div className="relative flex flex-1 flex-col justify-center px-6 pb-8">
         {step !== "methods" ? (
           <button type="button" aria-label="Tillbaka" onClick={back} className="mb-2 grid size-9 place-items-center self-start">
-            <ArrowLeft className="size-5 text-[#2a211c]" />
+            <ArrowLeft className="size-5 text-ink" />
           </button>
         ) : null}
 
-        <p className="text-center font-serif text-[1.55rem] tracking-[0.32em] text-[#2a211c]">VELIO</p>
+        <p className="text-center font-serif text-[1.55rem] tracking-[0.32em] text-ink">VELIO</p>
 
         {step === "methods" ? (
           <>
-            <h1 className="mt-8 text-center font-serif text-[2.7rem] leading-none font-medium text-[#2a211c]">Logga in</h1>
-            <p className="mx-auto mt-3 max-w-[17rem] text-center text-sm leading-snug text-[#6e6964]">
+            <h1 className="mt-8 text-center font-serif text-[2.7rem] leading-none font-medium text-ink">Logga in</h1>
+            <p className="mx-auto mt-3 max-w-[17rem] text-center text-sm leading-snug text-muted">
               {staticHost
                 ? "E-post loggar in med adressen du skriver, även om den inte är en riktig inkorg."
                 : "BankID öppnar BankID-appen. E-post- och SMS-kod skickas till dig — aldrig i appen."}
             </p>
 
-            <div className="mt-8 rounded-[1.7rem] border border-white/80 bg-white/45 p-3 shadow-[0_18px_50px_rgba(70,50,20,0.08)] backdrop-blur-xl">
+            <div className="mt-8 rounded-[1.7rem] border border-white/80 bg-paper/60 backdrop-blur-xl p-3 shadow-[0_18px_50px_rgba(70,50,20,0.08)] backdrop-blur-xl">
               <div className="space-y-2.5">
                 <Method label="Fortsätt med BankID" onClick={() => void startBankId()} icon={<BankIdMark />} disabled={busy} />
                 <Method label="Fortsätt med Google" onClick={() => void onGoogle()} icon={<GoogleMark />} disabled={busy} />
@@ -308,8 +308,8 @@ export function LoginScreen() {
 
         {step === "bankid-open" ? (
           <>
-            <h1 className="mt-4 text-center font-serif text-[2.2rem] leading-none font-medium text-[#2a211c]">BankID</h1>
-            <p className="mx-auto mt-3 max-w-[18rem] text-center text-sm leading-snug text-[#6e6964]">{bankStatus}</p>
+            <h1 className="mt-4 text-center font-serif text-[2.2rem] leading-none font-medium text-ink">BankID</h1>
+            <p className="mx-auto mt-3 max-w-[18rem] text-center text-sm leading-snug text-muted">{bankStatus}</p>
             <div className="mt-5 space-y-3">
               <button
                 type="button"
@@ -319,20 +319,20 @@ export function LoginScreen() {
               >
                 Öppna BankID
               </button>
-              <p className="text-center text-xs text-[#8a847e]">
+              <p className="text-center text-xs text-muted">
                 Identifiera dig i BankID-appen. VELIO hämtar ditt namn därifrån — inget fylls i här.
               </p>
-              {bankOrderRef ? <p className="text-center text-[10px] text-[#c4bbb2]">Order {bankOrderRef.slice(0, 12)}…</p> : null}
+              {bankOrderRef ? <p className="text-center text-[10px] text-muted">Order {bankOrderRef.slice(0, 12)}…</p> : null}
             </div>
           </>
         ) : null}
 
         {step === "email" || step === "email-code" ? (
           <>
-            <h1 className="mt-4 text-center font-serif text-[2.2rem] leading-none font-medium text-[#2a211c]">
+            <h1 className="mt-4 text-center font-serif text-[2.2rem] leading-none font-medium text-ink">
               {step === "email" ? "E-post" : "Bekräfta e-post"}
             </h1>
-            <p className="mx-auto mt-3 max-w-[18rem] text-center text-sm leading-snug text-[#6e6964]">
+            <p className="mx-auto mt-3 max-w-[18rem] text-center text-sm leading-snug text-muted">
               {step === "email"
                 ? staticHost
                   ? "Skriv adressen du vill logga in med, till exempel namn@.com. Ingen kod skickas."
@@ -358,12 +358,12 @@ export function LoginScreen() {
                 <Field label="Verifieringskod från mejlen" value={code} onChange={setCode} placeholder="6 siffror" />
               )}
             </div>
-            {hint ? <p className="mt-3 text-center text-sm text-[#6e6964]">{hint}</p> : null}
+            {hint ? <p className="mt-3 text-center text-sm text-muted">{hint}</p> : null}
             <button
               type="button"
               disabled={busy}
               onClick={() => void (step === "email" ? sendEmail() : confirmEmail())}
-              className="mt-5 h-12 w-full rounded-full bg-[#6e5636] text-[15px] font-semibold text-white disabled:opacity-60"
+              className="mt-5 h-12 w-full rounded-full bg-brown text-[15px] font-semibold text-white disabled:opacity-60"
             >
               {busy ? "Vänta…" : step === "email" ? (staticHost ? "Logga in" : "Skicka kod till mejlen") : "Bekräfta och logga in"}
             </button>
@@ -372,10 +372,10 @@ export function LoginScreen() {
 
         {step === "phone" || step === "phone-code" ? (
           <>
-            <h1 className="mt-4 text-center font-serif text-[2.2rem] leading-none font-medium text-[#2a211c]">
+            <h1 className="mt-4 text-center font-serif text-[2.2rem] leading-none font-medium text-ink">
               {step === "phone" ? "Mobilnummer" : "SMS-kod"}
             </h1>
-            <p className="mx-auto mt-3 max-w-[18rem] text-center text-sm leading-snug text-[#6e6964]">
+            <p className="mx-auto mt-3 max-w-[18rem] text-center text-sm leading-snug text-muted">
               {step === "phone"
                 ? "Vi skickar en SMS-kod till din telefon. Koden visas aldrig i appen."
                 : `Ange koden som skickades till ${phone}.`}
@@ -390,12 +390,12 @@ export function LoginScreen() {
                 <Field label="SMS-kod från telefonen" value={code} onChange={setCode} placeholder="6 siffror" />
               )}
             </div>
-            {hint ? <p className="mt-3 text-center text-sm text-[#6e6964]">{hint}</p> : null}
+            {hint ? <p className="mt-3 text-center text-sm text-muted">{hint}</p> : null}
             <button
               type="button"
               disabled={busy}
               onClick={() => void (step === "phone" ? sendSms() : confirmSms())}
-              className="mt-5 h-12 w-full rounded-full bg-[#6e5636] text-[15px] font-semibold text-white disabled:opacity-60"
+              className="mt-5 h-12 w-full rounded-full bg-brown text-[15px] font-semibold text-white disabled:opacity-60"
             >
               {busy ? "Vänta…" : step === "phone" ? "Skicka SMS" : "Bekräfta och logga in"}
             </button>
@@ -425,13 +425,13 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-sm font-medium text-[#5c564f]">{label}</span>
+      <span className="mb-1 block text-sm font-medium text-muted">{label}</span>
       <input
         type={type}
         value={value}
         placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
-        className="h-12 w-full rounded-full border border-[#efeae4] bg-white/80 px-4 text-[15px] outline-none"
+        className="h-12 w-full rounded-full border border-line bg-paper/80 backdrop-blur-xl px-4 text-[15px] outline-none"
         autoComplete={type === "email" || placeholder?.includes("@") ? "email" : "one-time-code"}
         autoCapitalize={placeholder?.includes("@") ? "off" : undefined}
         autoCorrect={placeholder?.includes("@") ? "off" : undefined}
@@ -457,7 +457,7 @@ function Method({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className="flex h-12 w-full items-center rounded-full border border-white/90 bg-white/75 px-4 text-[15px] font-medium text-[#2a211c] disabled:opacity-60"
+      className="flex h-12 w-full items-center rounded-full border border-white/90 bg-paper/80 backdrop-blur-xl px-4 text-[15px] font-medium text-ink disabled:opacity-60"
     >
       <span className="grid size-6 shrink-0 place-items-center">{icon}</span>
       <span className="-ml-6 flex-1 text-center">{label}</span>

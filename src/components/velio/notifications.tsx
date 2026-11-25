@@ -13,7 +13,7 @@ function iconFor(kind: AppNotification["kind"]) {
 
 function toneFor(kind: AppNotification["kind"]) {
   if (kind === "booking_accepted") return "text-ok";
-  if (kind === "booking_declined") return "text-[#a33a2c]";
+  if (kind === "booking_declined") return "text-red-800";
   return "text-bronze";
 }
 

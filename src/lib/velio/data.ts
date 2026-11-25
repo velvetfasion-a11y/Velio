@@ -44,6 +44,10 @@ export type Provider = {
   qualifications?: string[];
   extras?: { name: string; price: number }[];
   areas?: string[];
+  /** Self-reported company details. Not a verification. */
+  companyName?: string;
+  orgNumber?: string;
+  fTax?: "yes" | "no" | "unsure";
 };
 
 /** Public “Om” text: the description the person wrote, without a leading account name. */

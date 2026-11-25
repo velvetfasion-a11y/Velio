@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   completeBankIdVerification,
   startBankIdVerification,
   submitPassportVerification,
 } from "@/lib/velio/auth-api";
-import { isStaticHost, localMePayload, localVerifyId } from "@/lib/velio/local-auth";
+import { isStaticHost } from "@/lib/velio/local-auth";
 import { useVelio } from "@/lib/velio/store";
 import { ScreenHeader } from "@/components/velio/ui";
 
@@ -18,9 +18,9 @@ export function VerifyIdScreen() {
   const [method, setMethod] = useState<Method>("choose");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [personalNumber, setPersonalNumber] = useState("");
   const [challengeId, setChallengeId] = useState<string | null>(null);
-  const [orderRef, setOrderRef] = useState<string | null>(null);
+  const [launchUrl, setLaunchUrl] = useState("");
+  const [bankStatus, setBankStatus] = useState("BankID är inte kopplat.");
   const [passportNumber, setPassportNumber] = useState("");
   const [country, setCountry] = useState("SE");
   const [fullName, setFullName] = useState(profile.name);
@@ -29,41 +29,51 @@ export function VerifyIdScreen() {
 
   const startBankId = async () => {
     if (busy) return;
-    setBusy(true);
     setError(null);
+    if (staticHost) {
+      setBankStatus("BankID är inte kopplat i den här versionen. Ingen identitet har verifierats.");
+      setError("BankID är inte kopplat. Profilen förblir inte verifierad tills en BankID-leverantör svarar.");
+      return;
+    }
+    setBusy(true);
+    setBankStatus("Startar BankID…");
     try {
-      if (staticHost) {
-        const account = localVerifyId("bankid");
-        applyAccountFlags(localMePayload(account).account);
-        showToast("BankID klart — VELIO Business aktiverat");
-        go("business");
-        return;
-      }
-      const started = await startBankIdVerification(personalNumber || undefined);
+      const started = await startBankIdVerification();
       setChallengeId(started.challengeId);
-      setOrderRef(started.orderRef);
+      setLaunchUrl(started.launchUrl ?? "");
+      setBankStatus(started.message ?? "Öppna BankID-appen och identifiera dig.");
+      if (started.launchUrl) window.open(started.launchUrl, "_blank", "noopener,noreferrer");
     } catch (err) {
+      setBankStatus("BankID är inte kopplat.");
       setError(err instanceof Error ? err.message : "Kunde inte starta BankID");
     } finally {
       setBusy(false);
     }
   };
 
-  const finishBankId = async () => {
-    if (busy || !challengeId) return;
-    setBusy(true);
-    setError(null);
+  const finishBankId = useCallback(async () => {
+    if (!challengeId) return;
     try {
-      const account = await completeBankIdVerification(challengeId, true);
-      applyAccountFlags(account);
-      showToast("BankID klart — VELIO Business aktiverat");
+      const result = await completeBankIdVerification(challengeId, true);
+      if (result.status === "pending") {
+        setBankStatus("Väntar på att du identifierar dig i BankID…");
+        return;
+      }
+      applyAccountFlags(result.account);
+      showToast("BankID klart — identiteten är verifierad");
       go("business");
     } catch (err) {
       setError(err instanceof Error ? err.message : "BankID misslyckades");
-    } finally {
-      setBusy(false);
     }
-  };
+  }, [applyAccountFlags, challengeId, go, showToast]);
+
+  useEffect(() => {
+    if (!challengeId || staticHost) return;
+    const timer = window.setInterval(() => {
+      void finishBankId();
+    }, 2000);
+    return () => window.clearInterval(timer);
+  }, [challengeId, finishBankId, staticHost]);
 
   const finishPassport = async () => {
     if (busy) return;
@@ -71,10 +81,7 @@ export function VerifyIdScreen() {
     setError(null);
     try {
       if (staticHost) {
-        const account = localVerifyId("passport");
-        applyAccountFlags(localMePayload(account).account);
-        showToast("Pass verifierat — VELIO Business aktiverat");
-        go("business");
+        setError("Passgranskning kräver servern. Ingenting har markerats som verifierat.");
         return;
       }
       const result = await submitPassportVerification({
@@ -84,7 +91,7 @@ export function VerifyIdScreen() {
         expiry,
       });
       applyAccountFlags(result.account);
-      showToast(result.message || "Pass skickat för granskning");
+      showToast(result.message || "Pass skickat för granskning. Identiteten är inte verifierad ännu.");
       go("profile");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Passverifiering misslyckades");
@@ -96,8 +103,8 @@ export function VerifyIdScreen() {
   return (
     <div className="px-5 pt-4 pb-8">
       <ScreenHeader title="Verifiera dig" />
-      <p className="mt-2 text-sm leading-relaxed text-[#6e6964]">
-        För VELIO Business krävs BankID eller pass för manuell granskning.
+      <p className="mt-2 text-sm leading-relaxed text-muted">
+        Identiteten behövs så att kunder vet vem som utför jobbet och så att utbetalningar kan kopplas till rätt person. Ingenting markeras som verifierat förrän BankID svarar, eller tills en manuell granskning är godkänd.
       </p>
 
       {method === "choose" ? (
@@ -112,7 +119,7 @@ export function VerifyIdScreen() {
           <button
             type="button"
             onClick={() => setMethod("passport")}
-            className="flex h-14 w-full items-center justify-center rounded-full border border-[#e6dfd6] bg-white text-[15px] font-semibold text-[#2a211c]"
+            className="flex h-14 w-full items-center justify-center rounded-full border border-line bg-white text-[15px] font-semibold text-ink"
           >
             Skicka pass för granskning
           </button>
@@ -123,7 +130,7 @@ export function VerifyIdScreen() {
         <div className="mt-5 space-y-3">
           <button
             type="button"
-            className="text-sm font-medium text-[#6e5636]"
+            className="text-sm font-medium text-brown"
             onClick={() => {
               setMethod("choose");
               setChallengeId(null);
@@ -131,44 +138,26 @@ export function VerifyIdScreen() {
           >
             ← Byt metod
           </button>
-          <label className="block">
-            <span className="mb-1 block text-sm font-medium text-[#5c564f]">Personnummer (valfritt)</span>
-            <input
-              value={personalNumber}
-              onChange={(e) => setPersonalNumber(e.target.value)}
-              placeholder="ÅÅÅÅMMDDXXXX"
-              className="h-12 w-full rounded-full border border-[#efeae4] bg-white/80 px-4 text-[15px] outline-none"
-            />
-          </label>
-          {!challengeId ? (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void startBankId()}
-              className="h-12 w-full rounded-full bg-[#F7C948] text-[15px] font-semibold disabled:opacity-60"
-            >
-              {busy ? "Startar…" : "Starta BankID"}
+          <p className="rounded-2xl bg-sand px-3 py-3 text-sm leading-snug text-ink">{bankStatus}</p>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void startBankId()}
+            className="h-12 w-full rounded-full bg-[#F7C948] text-[15px] font-semibold text-[#1a1a1a] disabled:opacity-60"
+          >
+            {busy ? "Startar…" : "Öppna BankID"}
+          </button>
+          {launchUrl ? (
+            <button type="button" onClick={() => window.open(launchUrl, "_blank", "noopener,noreferrer")} className="h-12 w-full rounded-full border border-line bg-paper text-sm font-semibold">
+              Öppna BankID igen
             </button>
-          ) : (
-            <div className="rounded-[1.2rem] border border-[#efeae4] bg-[#fbf8f4] p-4">
-              <p className="text-sm text-[#5c564f]">Öppna BankID-appen och slutför identifieringen.</p>
-              {orderRef ? <p className="mt-2 text-xs text-[#8a847e]">Order: {orderRef.slice(0, 18)}…</p> : null}
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => void finishBankId()}
-                className="mt-4 h-12 w-full rounded-full bg-[#1c1917] text-[15px] font-semibold text-white disabled:opacity-60"
-              >
-                {busy ? "Bekräftar…" : "Jag har identifierat mig"}
-              </button>
-            </div>
-          )}
+          ) : null}
         </div>
       ) : null}
 
       {method === "passport" ? (
         <div className="mt-5 space-y-3">
-          <button type="button" className="text-sm font-medium text-[#6e5636]" onClick={() => setMethod("choose")}>
+          <button type="button" className="text-sm font-medium text-brown" onClick={() => setMethod("choose")}>
             ← Byt metod
           </button>
           <Field label="Namn som i passet" value={fullName} onChange={setFullName} />
@@ -179,9 +168,9 @@ export function VerifyIdScreen() {
             type="button"
             disabled={busy}
             onClick={() => void finishPassport()}
-            className="h-12 w-full rounded-full bg-[#6e5636] text-[15px] font-semibold text-white disabled:opacity-60"
+            className="h-12 w-full rounded-full bg-brown text-[15px] font-semibold text-white disabled:opacity-60"
           >
-            {busy ? "Skickar…" : staticHost ? "Verifiera pass" : "Skicka för granskning"}
+            {busy ? "Skickar…" : "Skicka för granskning"}
           </button>
         </div>
       ) : null}
@@ -204,12 +193,12 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-sm font-medium text-[#5c564f]">{label}</span>
+      <span className="mb-1 block text-sm font-medium text-muted">{label}</span>
       <input
         value={value}
         placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
-        className="h-12 w-full rounded-full border border-[#efeae4] bg-white/80 px-4 text-[15px] outline-none"
+        className="h-12 w-full rounded-full border border-line bg-paper/80 backdrop-blur-xl px-4 text-[15px] outline-none"
       />
     </label>
   );

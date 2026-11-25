@@ -86,7 +86,7 @@ export function HistoryCard({ booking, onOpen, onRebook }: { booking: Booking; o
   const status = bookingStatusLabel(booking.status);
   const photo = thumbs[booking.serviceId];
   return (
-    <article className="flex items-center gap-3 rounded-[1.25rem] border border-[#ece7e1] bg-white/70 p-2.5">
+    <article className="flex items-center gap-3 rounded-[1.25rem] border border-line bg-paper/75 backdrop-blur-xl p-2.5">
       <button type="button" onClick={onOpen} className="shrink-0">
         {photo ? (
           <img src={photo} alt="" className="size-[4.25rem] rounded-xl object-cover" />
@@ -99,8 +99,8 @@ export function HistoryCard({ booking, onOpen, onRebook }: { booking: Booking; o
         <span className="mt-0.5 block text-[13px] leading-tight text-muted">{booking.whenLabel}</span>
         <span className="mt-0.5 block text-[13px] text-muted">{kr(booking.cost)}</span>
       </button>
-      <span className={cn("text-sm font-medium", booking.status === "done" ? "text-ok" : "text-[#3d3a37]")}>{status}</span>
-      <button type="button" onClick={onRebook} className="shrink-0 rounded-full bg-[#8d7044] px-3.5 py-2 text-sm font-semibold text-white">
+      <span className={cn("text-sm font-medium", booking.status === "done" ? "text-ok" : "text-ink")}>{status}</span>
+      <button type="button" onClick={onRebook} className="shrink-0 rounded-full bg-bronze px-3.5 py-2 text-sm font-semibold text-white">
         Boka om
       </button>
     </article>

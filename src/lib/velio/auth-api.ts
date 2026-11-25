@@ -246,11 +246,12 @@ export async function startBankIdVerification(personalNumber?: string) {
   const data = await json<{
     challengeId?: string;
     orderRef?: string;
+    launchUrl?: string;
     message?: string;
     error?: string;
   }>(response);
   if (!response.ok) throw new Error(data.message || data.error || "Kunde inte starta BankID");
-  return data as { challengeId: string; orderRef: string; message?: string };
+  return data as { challengeId: string; orderRef: string; launchUrl?: string; message?: string };
 }
 
 export async function completeBankIdVerification(challengeId: string, activateBusiness = true) {
@@ -260,9 +261,22 @@ export async function completeBankIdVerification(challengeId: string, activateBu
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ challengeId, activateBusiness }),
   });
-  const data = await json<{ account?: AccountDto; message?: string; error?: string }>(response);
-  if (!response.ok) throw new Error(data.message || data.error || "BankID misslyckades");
-  return data.account!;
+  const data = await json<{
+    status?: string;
+    account?: AccountDto;
+    message?: string;
+    error?: string;
+    hintCode?: string;
+    verified?: boolean;
+  }>(response);
+  if (data.status === "pending") return { status: "pending" as const, hintCode: data.hintCode, message: data.message };
+  if (!response.ok || data.status === "failed") {
+    throw new Error(data.message || data.error || "BankID misslyckades");
+  }
+  if (!data.account || data.verified === false) {
+    throw new Error(data.message || "Identiteten är inte verifierad");
+  }
+  return { status: "complete" as const, account: data.account };
 }
 
 export async function submitPassportVerification(input: {
