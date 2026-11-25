@@ -206,7 +206,7 @@ service cloud.firestore {
 
     function omitsServerPaymentFields() {
       return !request.resource.data.keys().hasAny([
-        'paymentStatus', 'paymentIntentId', 'paidAt', 'payoutStatus', 'transferId', 'offerId', 'workerId'
+        'paymentStatus', 'paymentIntentId', 'paidAt', 'payoutStatus', 'transferId', 'offerId', 'workerId', 'amountOre', 'feeOre', 'workOre', 'currency', 'refundedOre', 'disputeId', 'disputeStatus', 'cancelledBy', 'cancelReason', 'cancelledAt'
       ]);
     }
 
@@ -214,8 +214,27 @@ service cloud.firestore {
       return !request.resource.data.keys().hasAny(['stripeAccountId', 'stripeOnboardingStatus']);
     }
 
+    function omitsAdminUserFields() {
+      return !request.resource.data.keys().hasAny([
+        'status', 'statusReason', 'disabledAt', 'idVerified', 'idMethod',
+        'stripeRequirements', 'stripeAccountState', 'emailLower', 'phoneE164'
+      ]);
+    }
+
     function isPaymentStatus(value) {
-      return value in ['requires_payment', 'processing', 'succeeded', 'failed', 'canceled'];
+      return value in ['requires_payment', 'processing', 'succeeded', 'failed', 'canceled', 'refunded', 'partially_refunded', 'disputed'];
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.admin == true ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function accountIsOpen() {
+      let user = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      return !('status' in user) || user.status == 'active';
     }
 
     function isPayoutStatus(value) {
@@ -331,7 +350,7 @@ service cloud.firestore {
 
     function isValidUser(data) {
       return hasRequiredFields(['uid', 'createdAt', 'updatedAt']) &&
-        hasOnlyAllowedFields(['uid', 'email', 'phone', 'displayName', 'accountType', 'orgNumber', 'nationalId', 'stripeAccountId', 'stripeOnboardingStatus', 'createdAt', 'updatedAt']) &&
+        hasOnlyAllowedFields(['uid', 'email', 'phone', 'displayName', 'accountType', 'orgNumber', 'nationalId', 'stripeAccountId', 'stripeOnboardingStatus', 'stripeAccountState', 'stripeRequirements', 'status', 'statusReason', 'disabledAt', 'idVerified', 'idMethod', 'emailLower', 'phoneE164', 'createdAt', 'updatedAt']) &&
         data.uid is string &&
         data.uid == request.auth.uid &&
         isValidTimestamp(data.createdAt) &&
@@ -344,7 +363,14 @@ service cloud.firestore {
         isValidOptionalString(data, 'orgNumber', 0, 32) &&
         isValidOptionalString(data, 'nationalId', 0, 32) &&
         isValidOptionalString(data, 'stripeAccountId', 1, 64) &&
-        (!('stripeOnboardingStatus' in data) || data.stripeOnboardingStatus in ['none', 'pending', 'complete']);
+        (!('stripeOnboardingStatus' in data) || data.stripeOnboardingStatus in ['none', 'pending', 'complete']) &&
+        (!('status' in data) || data.status in ['active', 'suspended', 'blocked']) &&
+        isValidOptionalString(data, 'statusReason', 0, 500) &&
+        isValidOptionalString(data, 'stripeAccountState', 0, 40) &&
+        isValidOptionalString(data, 'idMethod', 0, 20) &&
+        (!('idVerified' in data) || data.idVerified is bool) &&
+        (!('disabledAt' in data) || isValidTimestamp(data.disabledAt)) &&
+        (!('stripeRequirements' in data) || data.stripeRequirements is list);
     }
 
     function isValidProfile(data) {
@@ -407,7 +433,7 @@ service cloud.firestore {
 
     function isValidJob(data) {
       return hasRequiredFields(['ownerId', 'title', 'category', 'status', 'createdAt', 'updatedAt']) &&
-        hasOnlyAllowedFields(['ownerId', 'title', 'category', 'description', 'locationLabel', 'schedule', 'budget', 'status', 'completedAt', 'paymentStatus', 'paymentIntentId', 'paidAt', 'payoutStatus', 'transferId', 'offerId', 'workerId', 'createdAt', 'updatedAt']) &&
+        hasOnlyAllowedFields(['ownerId', 'title', 'category', 'description', 'locationLabel', 'schedule', 'budget', 'status', 'completedAt', 'paymentStatus', 'paymentIntentId', 'paidAt', 'payoutStatus', 'transferId', 'offerId', 'workerId', 'amountOre', 'feeOre', 'workOre', 'currency', 'refundedOre', 'disputeId', 'disputeStatus', 'cancelledBy', 'cancelReason', 'cancelledAt', 'createdAt', 'updatedAt']) &&
         data.ownerId is string &&
         data.title is string &&
         data.title.size() >= 1 &&
@@ -429,7 +455,17 @@ service cloud.firestore {
         (!('payoutStatus' in data) || isPayoutStatus(data.payoutStatus)) &&
         isValidOptionalString(data, 'transferId', 1, 128) &&
         isValidOptionalString(data, 'offerId', 1, 128) &&
-        isValidOptionalString(data, 'workerId', 1, 128);
+        isValidOptionalString(data, 'workerId', 1, 128) &&
+        (!('amountOre' in data) || data.amountOre is number) &&
+        (!('feeOre' in data) || data.feeOre is number) &&
+        (!('workOre' in data) || data.workOre is number) &&
+        (!('refundedOre' in data) || data.refundedOre is number) &&
+        isValidOptionalString(data, 'currency', 3, 3) &&
+        isValidOptionalString(data, 'disputeId', 1, 128) &&
+        isValidOptionalString(data, 'disputeStatus', 0, 40) &&
+        isValidOptionalString(data, 'cancelledBy', 0, 20) &&
+        isValidOptionalString(data, 'cancelReason', 0, 500) &&
+        (!('cancelledAt' in data) || isValidTimestamp(data.cancelledAt));
     }
 
     function isValidOffer(data) {
@@ -505,18 +541,20 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read, delete: if isOwner(userId);
+      allow read: if isOwner(userId) || isAdmin();
+      allow delete: if isOwner(userId);
       allow create: if isOwner(userId) &&
         request.resource.data.uid == userId &&
         isValidUser(request.resource.data) &&
-        omitsStripeAccountFields();
+        omitsStripeAccountFields() &&
+        omitsAdminUserFields();
       allow update: if isOwner(userId) &&
         isValidUser(request.resource.data) &&
-        areImmutableFieldsUnchanged(['uid', 'createdAt', 'stripeAccountId', 'stripeOnboardingStatus']);
+        areImmutableFieldsUnchanged(['uid', 'createdAt', 'stripeAccountId', 'stripeOnboardingStatus', 'stripeAccountState', 'stripeRequirements', 'status', 'statusReason', 'disabledAt', 'idVerified', 'idMethod', 'emailLower', 'phoneE164']);
     }
 
     match /profiles/{userId} {
-      allow read: if (resource.data.published == true) || isOwner(userId);
+      allow read: if (resource.data.published == true) || isOwner(userId) || isAdmin();
       allow create: if isOwner(userId) &&
         request.resource.data.uid == userId &&
         isValidProfile(request.resource.data);
@@ -526,7 +564,7 @@ service cloud.firestore {
     }
 
     match /businesses/{userId} {
-      allow read: if (resource.data.published == true) || isOwner(userId);
+      allow read: if (resource.data.published == true) || isOwner(userId) || isAdmin();
       allow create: if isOwner(userId) &&
         request.resource.data.uid == userId &&
         isValidBusiness(request.resource.data);
@@ -537,7 +575,7 @@ service cloud.firestore {
 
     match /jobs/{jobId} {
       allow read: if isAuthenticated();
-      allow create: if isAuthenticated() &&
+      allow create: if isAuthenticated() && accountIsOpen() &&
         request.resource.data.ownerId == request.auth.uid &&
         isValidJob(request.resource.data) &&
         omitsServerPaymentFields();
@@ -545,7 +583,7 @@ service cloud.firestore {
         resource.data.ownerId == request.auth.uid &&
         request.resource.data.ownerId == resource.data.ownerId &&
         isValidJob(request.resource.data) &&
-        areImmutableFieldsUnchanged(['ownerId', 'createdAt', 'paymentStatus', 'paymentIntentId', 'paidAt', 'payoutStatus', 'transferId', 'offerId', 'workerId']);
+        areImmutableFieldsUnchanged(['ownerId', 'createdAt', 'paymentStatus', 'paymentIntentId', 'paidAt', 'payoutStatus', 'transferId', 'offerId', 'workerId', 'amountOre', 'feeOre', 'workOre', 'currency', 'refundedOre', 'disputeId', 'disputeStatus']);
       allow delete: if isAuthenticated() &&
         resource.data.ownerId == request.auth.uid;
     }
@@ -553,8 +591,9 @@ service cloud.firestore {
     match /offers/{offerId} {
       allow read: if isAuthenticated() &&
         (request.auth.uid == resource.data.ownerId ||
-         request.auth.uid == resource.data.jobOwnerId);
-      allow create: if isAuthenticated() &&
+         request.auth.uid == resource.data.jobOwnerId ||
+         isAdmin());
+      allow create: if isAuthenticated() && accountIsOpen() &&
         request.resource.data.ownerId == request.auth.uid &&
         request.resource.data.jobOwnerId != request.auth.uid &&
         exists(/databases/$(database)/documents/jobs/$(request.resource.data.jobId)) &&
@@ -596,7 +635,7 @@ service cloud.firestore {
     }
 
     match /addresses/{addressId} {
-      allow read, delete: if isOwner(resource.data.ownerId);
+      allow read, delete: if isOwner(resource.data.ownerId) || isAdmin();
       allow create: if isAuthenticated() &&
         request.resource.data.ownerId == request.auth.uid &&
         isValidAddress(request.resource.data);
@@ -682,9 +721,97 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    match /payouts/{payoutId} {
+    function isValidSupportThread(data) {
+      return hasRequiredFields(['customerId', 'status', 'createdAt', 'updatedAt']) &&
+        hasOnlyAllowedFields(['customerId', 'participantIds', 'status', 'topic', 'jobId', 'offerId', 'assigneeId', 'lastMessageAt', 'lastMessagePreview', 'createdAt', 'updatedAt', 'closedAt']) &&
+        data.customerId == request.auth.uid &&
+        data.status in ['open', 'pending', 'closed'] &&
+        isValidTimestamp(data.createdAt) &&
+        isValidTimestamp(data.updatedAt) &&
+        isValidOptionalString(data, 'topic', 0, 80) &&
+        isValidOptionalString(data, 'jobId', 0, 128) &&
+        isValidOptionalString(data, 'lastMessagePreview', 0, 140);
+    }
+
+    function isValidSupportMessage(data) {
+      return hasRequiredFields(['senderId', 'text', 'createdAt']) &&
+        hasOnlyAllowedFields(['senderId', 'senderRole', 'text', 'createdAt']) &&
+        data.senderId == request.auth.uid &&
+        data.text is string &&
+        data.text.size() >= 1 &&
+        data.text.size() <= 4000 &&
+        isValidTimestamp(data.createdAt);
+    }
+
+    function isValidReport(data) {
+      return hasRequiredFields(['reporterId', 'targetType', 'targetId', 'reason', 'status', 'createdAt']) &&
+        hasOnlyAllowedFields(['reporterId', 'targetType', 'targetId', 'targetUid', 'jobId', 'reason', 'note', 'status', 'createdAt']) &&
+        data.reporterId == request.auth.uid &&
+        data.targetType in ['user', 'job', 'chat'] &&
+        data.reason in ['noshow', 'late', 'quality', 'pay', 'abuse', 'off_platform', 'other'] &&
+        data.status == 'open' &&
+        data.targetId is string &&
+        data.targetId.size() >= 1 &&
+        data.targetId.size() <= 128 &&
+        isValidTimestamp(data.createdAt) &&
+        isValidOptionalString(data, 'note', 0, 4000);
+    }
+
+    function isValidAnalyticsEvent(data) {
+      return hasRequiredFields(['uid', 'name', 'createdAt']) &&
+        hasOnlyAllowedFields(['uid', 'name', 'source', 'createdAt']) &&
+        data.uid == request.auth.uid &&
+        data.name in ['session_start', 'signup', 'profile_published', 'job_posted', 'offer_sent', 'offer_accepted', 'payment_started', 'payment_succeeded', 'payment_failed', 'job_completed', 'job_cancelled', 'support_opened'] &&
+        data.name.size() <= 40 &&
+        isValidTimestamp(data.createdAt) &&
+        (!('source' in data) || data.source == 'web');
+    }
+
+    match /supportThreads/{threadId} {
       allow read: if isAuthenticated() &&
-        request.auth.uid == resource.data.ownerId;
+        (request.auth.uid == resource.data.customerId || isAdmin());
+      allow create: if isAuthenticated() && isValidSupportThread(request.resource.data);
+      allow update: if isAdmin() ||
+        (isAuthenticated() && request.auth.uid == resource.data.customerId &&
+         request.resource.data.customerId == resource.data.customerId &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['updatedAt', 'status', 'lastMessageAt', 'lastMessagePreview', 'closedAt']));
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        allow read: if isAuthenticated() &&
+          (request.auth.uid == get(/databases/$(database)/documents/supportThreads/$(threadId)).data.customerId || isAdmin());
+        allow create: if isAuthenticated() &&
+          request.auth.uid == get(/databases/$(database)/documents/supportThreads/$(threadId)).data.customerId &&
+          isValidSupportMessage(request.resource.data);
+        allow update, delete: if false;
+      }
+    }
+
+    match /reports/{reportId} {
+      allow read: if isAuthenticated() &&
+        (request.auth.uid == resource.data.reporterId || isAdmin());
+      allow create: if isAuthenticated() && isValidReport(request.resource.data);
+      allow update, delete: if false;
+    }
+
+    match /alerts/{alertId} {
+      allow read: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
+    match /auditLogs/{logId} {
+      allow read: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
+    match /analyticsEvents/{eventId} {
+      allow create: if isAuthenticated() && isValidAnalyticsEvent(request.resource.data);
+      allow read: if isAdmin();
+      allow update, delete: if false;
+    }
+
+    match /payouts/{payoutId} {
+      allow read: if (isAuthenticated() && request.auth.uid == resource.data.ownerId) || isAdmin();
       allow create, update, delete: if false;
     }
   }

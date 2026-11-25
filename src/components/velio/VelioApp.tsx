@@ -29,6 +29,7 @@ import {
 import { Toast } from "@/components/velio/ui";
 import { PaymentSheet } from "@/components/velio/payment-sheet";
 import { CallHost } from "@/components/velio/call-host";
+import { SupportHost } from "@/components/velio/support-sheet";
 
 const profileScreens: Screen[] = ["profile", "edit", "payments", "bookings", "posted", "business", "verify-id", "settings", "help", "favorites", "addresses", "wallet"];
 
@@ -180,6 +181,7 @@ export function VelioApp() {
             {sheet === "onboard" ? <BusinessSetup /> : null}
             <HomeSheets />
             <CallHost />
+            <SupportHost />
             {checkoutOpen && checkout ? (
               <PaymentSheet
                 contained

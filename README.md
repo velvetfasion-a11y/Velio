@@ -79,4 +79,10 @@ Miljövariabler på Vercel:
 
 Deploya `firestore.rules` innan fakturorna ska gå att läsa i appen.
 
+## Admin
+
+`/admin/` är skrivbordet. Utan behörighet syns bara Ingen behörighet. Demo läget är märkt Demo och innehåller inga riktiga personer.
+
+Gör ett konto till admin genom att skapa dokumentet `admins/{uid}` i Firestore. Uid finns under Authentication för `velvetfasion@gmail.com`. Alternativt, från en maskin med tjänstekontot: `getAuth().setCustomUserClaims(uid, { admin: true })` och logga in igen så att token förnyas. API:t godkänner båda.
+
 Se även `stripe-api/.env.example`.

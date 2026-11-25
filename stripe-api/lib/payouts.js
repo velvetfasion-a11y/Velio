@@ -106,6 +106,14 @@ async function transferJob(stripe, db, jobId, job) {
     },
     { merge: true },
   );
+  await db.collection("payouts").doc(transfer.id).set({
+    ownerId: workerId || "",
+    jobId,
+    transferId: transfer.id,
+    amount,
+    status: "paid",
+    createdAt: FieldValue.serverTimestamp(),
+  });
   return { jobId, payoutStatus: "paid", transferId: transfer.id, amount };
 }
 

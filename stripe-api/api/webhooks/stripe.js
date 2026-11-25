@@ -1,5 +1,6 @@
 import { buffer } from "node:stream/consumers";
 import { FieldValue } from "firebase-admin/firestore";
+import { upsertAlert } from "../../lib/alerts.js";
 import { adminDb } from "../../lib/firebase.js";
 import { stripeClient } from "../../lib/stripe.js";
 
@@ -46,7 +47,26 @@ export default async function handler(req, res) {
         paymentStatus: status,
         updatedAt: FieldValue.serverTimestamp(),
       };
-      if (status === "succeeded") patch.paidAt = FieldValue.serverTimestamp();
+      if (status === "succeeded") {
+        patch.paidAt = FieldValue.serverTimestamp();
+        const totalOre = intent.amount_received || intent.amount || 0;
+        patch.amountOre = totalOre;
+        patch.feeOre = Math.round(totalOre * 0.1);
+        patch.workOre = totalOre - patch.feeOre;
+        patch.currency = "sek";
+      }
+      if (status === "failed" && intent.metadata?.jobId) {
+        await upsertAlert(db, {
+          key: `payment_failed:${intent.metadata.jobId}`,
+          type: "payment_failed",
+          severity: "critical",
+          title: "Betalning misslyckades",
+          body: intent.last_payment_error?.message || "Betalningen gick inte igenom",
+          jobId: intent.metadata.jobId,
+          userId: intent.metadata.customerId || "",
+          paymentIntentId: intent.id,
+        });
+      }
       const jobId = intent.metadata?.jobId;
       const offerId = intent.metadata?.offerId;
       if (jobId) {
@@ -69,14 +89,64 @@ export default async function handler(req, res) {
         account.configuration?.recipient?.capabilities?.stripe_balance?.stripe_transfers?.status === "active";
       const status = transfers ? "complete" : "pending";
       if (uid) {
+        const due = account.requirements?.currently_due || [];
+        const state = account.requirements?.disabled_reason
+          ? "rejected"
+          : transfers
+            ? "enabled"
+            : due.length
+              ? "restricted"
+              : "pending";
         await db.collection("users").doc(uid).set(
           {
             stripeAccountId: account.id,
             stripeOnboardingStatus: status,
+            stripeAccountState: state,
+            stripeRequirements: due.slice(0, 20),
             updatedAt: FieldValue.serverTimestamp(),
           },
           { merge: true },
         );
+        if (state === "restricted" || state === "rejected") {
+          await upsertAlert(db, {
+            key: `connect_requirements:${uid}`,
+            type: "connect_requirements",
+            severity: state === "rejected" ? "critical" : "warning",
+            title: "Kontot behöver åtgärdas",
+            body: due.slice(0, 3).join(", ") || state,
+            userId: uid,
+          });
+        }
+      }
+    }
+    if (event.type === "charge.dispute.created" || event.type === "charge.dispute.updated" || event.type === "charge.dispute.closed") {
+      const dispute = event.data.object;
+      const paymentIntentId = dispute.payment_intent;
+      if (paymentIntentId) {
+        const jobs = await db.collection("jobs").where("paymentIntentId", "==", paymentIntentId).limit(1).get();
+        const job = jobs.docs[0];
+        if (job) {
+          await job.ref.set(
+            {
+              paymentStatus: dispute.status === "won" ? "succeeded" : "disputed",
+              disputeId: dispute.id,
+              disputeStatus: dispute.status || "",
+              updatedAt: FieldValue.serverTimestamp(),
+            },
+            { merge: true },
+          );
+          if (event.type !== "charge.dispute.closed") {
+            await upsertAlert(db, {
+              key: `dispute_opened:${job.id}`,
+              type: "dispute_opened",
+              severity: "critical",
+              title: "Invändning mot en betalning",
+              body: dispute.reason || "En kund har bestridit betalningen",
+              jobId: job.id,
+              paymentIntentId,
+            });
+          }
+        }
       }
     }
     if (event.type === "transfer.created" || event.type === "transfer.updated") {
@@ -91,6 +161,28 @@ export default async function handler(req, res) {
           },
           { merge: true },
         );
+        await db.collection("payouts").doc(transfer.id).set(
+          {
+            ownerId: transfer.metadata?.workerId || "",
+            jobId,
+            transferId: transfer.id,
+            amount: transfer.amount || 0,
+            status: transfer.reversed ? "reversed" : "paid",
+            createdAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        );
+        if (transfer.reversed) {
+          await upsertAlert(db, {
+            key: `payout_failed:${jobId}`,
+            type: "payout_failed",
+            severity: "critical",
+            title: "Utbetalning misslyckades",
+            body: "Överföringen återfördes",
+            jobId,
+            userId: transfer.metadata?.workerId || "",
+          });
+        }
       }
     }
     return res.status(200).json({ received: true });

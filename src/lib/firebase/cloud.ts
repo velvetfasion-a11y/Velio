@@ -317,6 +317,7 @@ export function stopCloudSession() {
 
 export function startCloudSession(uid: string) {
   stopCloudSession();
+  void import("@/lib/analytics").then(({ logSessionStart }) => logSessionStart(uid));
   setCloudActive(true);
   setProviders([]);
   useVelio.setState({

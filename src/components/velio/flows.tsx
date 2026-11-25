@@ -8,6 +8,7 @@ import { CityMap } from "@/components/velio/osm-map";
 import { Avatar, BottomSheet, Btn, FullScreen } from "@/components/velio/ui";
 import { asset } from "@/lib/velio/asset";
 import { openCallSheet } from "@/components/velio/call-host";
+import { openSupportSheet } from "@/components/velio/support-sheet";
 import { MissedCallCard } from "@/components/velio/call-screen";
 import { MISSED_CALL_TEXT } from "@/lib/calls/ice";
 
@@ -570,6 +571,11 @@ export function ChatSheet() {
                       key={item.id}
                       type="button"
                       onClick={() => {
+                        if (item.id === "support") {
+                          setHelp(null);
+                          openSupportSheet(item.label);
+                          return;
+                        }
                         setIssue(item.label);
                         setNote("");
                         setHelp("sure");
@@ -640,6 +646,7 @@ export function ChatSheet() {
                   onClick={() => {
                     appendChat(provider.id, { id: `report-${Date.now()}`, from: "me", text: note.trim() ? `${issue}: ${note.trim()}` : issue, time: "21:40" });
                     setHelp(null);
+                    openSupportSheet(issue);
                     showToast("Rapporten är skickad");
                   }}
                   className="mt-3 w-full rounded-full bg-brown py-3 font-semibold text-white"

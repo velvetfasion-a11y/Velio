@@ -26,6 +26,7 @@ import { contactEmail, isSignInEmail, kr, providerTradeNames, publicDisplayName,
 import { HistoryCard } from "@/components/velio/history";
 import { VerifyIdScreen } from "@/components/velio/verify-id";
 import { GetPaidCard } from "@/components/velio/get-paid";
+import { openSupportSheet } from "@/components/velio/support-sheet";
 import { ownBusiness, useVelio, type Booking, type SavedAddress } from "@/lib/velio/store";
 import { cn } from "@/lib/cn";
 import { Btn, Field, ProfilePhoto, ScreenHeader, SecurePayNote } from "@/components/velio/ui";
@@ -882,7 +883,7 @@ export function ProfileScreens() {
         <h2 className="mt-5 mb-2 px-1 text-xs font-semibold tracking-wide text-muted">KONTAKTA OSS</h2>
         <div className="rounded-[1.4rem] border border-line bg-white px-4 py-4">
           <label className="block">
-            <span className="text-[15px]">Rapportera ett problem</span>
+            <span className="text-[15px]">Kontakta support</span>
             <textarea
               value={issue}
               onChange={(event) => setIssue(event.target.value)}
@@ -897,8 +898,8 @@ export function ProfileScreens() {
                 showToast("Beskriv problemet kort");
                 return;
               }
+              openSupportSheet(issue.trim());
               setIssue("");
-              showToast("Tack, vi har tagit emot det");
             }}
             className="mt-3 h-10 rounded-full bg-brown px-4 text-sm font-semibold text-white"
           >

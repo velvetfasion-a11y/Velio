@@ -27,3 +27,18 @@ export async function userFromRequest(req) {
   const decoded = await getAuth().verifyIdToken(token);
   return decoded;
 }
+
+export async function requireAdmin(req) {
+  const user = await userFromRequest(req);
+  if (user.admin === true) return user;
+  const snap = await adminDb().collection("admins").doc(user.uid).get();
+  if (snap.exists) return user;
+  const error = new Error("Du har inte behörighet");
+  error.status = 403;
+  throw error;
+}
+
+export function adminAuth() {
+  app();
+  return getAuth();
+}

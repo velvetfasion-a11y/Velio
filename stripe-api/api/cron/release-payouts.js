@@ -1,3 +1,5 @@
+import { scanStuckJobs } from "../../lib/alerts.js";
+import { adminDb } from "../../lib/firebase.js";
 import { releaseDuePayouts } from "../../lib/payouts.js";
 
 export default async function handler(req, res) {
@@ -9,7 +11,8 @@ export default async function handler(req, res) {
   }
   try {
     const results = await releaseDuePayouts();
-    return res.status(200).json({ ok: true, count: results.length, results });
+    const stuck = await scanStuckJobs(adminDb());
+    return res.status(200).json({ ok: true, count: results.length, results, stuck });
   } catch (error) {
     return res.status(500).json({ error: error.message || "Cron failed" });
   }

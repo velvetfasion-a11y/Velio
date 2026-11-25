@@ -10,6 +10,10 @@ export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
   try {
     const user = await userFromRequest(req);
+    const account = await adminDb().collection("users").doc(user.uid).get();
+    if (account.exists && (account.data().status === "suspended" || account.data().status === "blocked")) {
+      return res.status(403).json({ error: "Kontot är pausat" });
+    }
     const offerId = String(req.body?.offerId || "");
     if (!offerId) return res.status(400).json({ error: "offerId saknas" });
     const db = adminDb();
@@ -57,6 +61,11 @@ export default async function handler(req, res) {
       paymentStatus: "requires_payment",
       offerId,
       workerId: offer.ownerId,
+      amountOre: totalOre,
+      feeOre,
+      workOre,
+      currency: "sek",
+      refundedOre: 0,
       updatedAt: FieldValue.serverTimestamp(),
     };
     await db.collection("jobs").doc(offer.jobId).set(patch, { merge: true });
