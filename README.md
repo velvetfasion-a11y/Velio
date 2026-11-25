@@ -2,4 +2,4 @@
 
 Static site for https://velvetfasion-a11y.github.io/Velio/
 
-Source lives on branch `cursor/velio-home-services-app-e34e`.
+Source for this publish lives on branch `cursor/premium-ios-redesign-b730`.
