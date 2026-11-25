@@ -796,7 +796,7 @@ export const useVelio = create<VelioState>()(
       },
       bootstrapAuth: async () => {
         try {
-          const { authErrorSv, authReady, consumeRedirect, watchAuth } = await import("@/lib/firebase/auth");
+          const { authErrorSv, authReady, consumeRedirect, redirectMissMessage, takeRedirectMiss, watchAuth } = await import("@/lib/firebase/auth");
           const { ensureAccount, startCloudSession, stopCloudSession } = await import("@/lib/firebase/cloud");
           await authReady();
           try {
@@ -812,9 +812,11 @@ export const useVelio = create<VelioState>()(
                   if (!user) {
                     stopCloudSession();
                     setProviders([]);
+                    const missedRedirect = takeRedirectMiss();
                     set({
                       loggedIn: false,
                       authReady: true,
+                      ...(missedRedirect ? { authError: redirectMissMessage } : {}),
                       accountId: null,
                       authProvider: null,
                       directory: [],
@@ -830,9 +832,9 @@ export const useVelio = create<VelioState>()(
                     });
                     return;
                   }
-                  await ensureAccount(user);
+                  const displayName = await ensureAccount(user);
                   startCloudSession(user.uid);
-                  const name = publicDisplayName(user.displayName) || publicDisplayName(user.email?.split("@")[0]);
+                  const name = publicDisplayName(displayName) || publicDisplayName(user.displayName) || publicDisplayName(user.email?.split("@")[0]);
                   set({
                     loggedIn: true,
                     authReady: true,

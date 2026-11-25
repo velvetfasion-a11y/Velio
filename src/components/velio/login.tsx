@@ -22,18 +22,17 @@ export function LoginScreen() {
     setStep("methods");
   };
 
-  const onGoogle = async () => {
+  const onGoogle = () => {
     if (busy) return;
-    setBusy(true);
     setLocalError(null);
     setAuthError(null);
-    try {
-      await signInWithGoogle();
-    } catch (error) {
-      setLocalError(authErrorSv(error));
-    } finally {
-      setBusy(false);
-    }
+    // Popup must start before any await. Safari otherwise sends the person
+    // through a full-page redirect and drops them back on this screen.
+    const pending = signInWithGoogle();
+    setBusy(true);
+    void pending
+      .catch((error: unknown) => setLocalError(authErrorSv(error)))
+      .finally(() => setBusy(false));
   };
 
   const onEmail = async (mode: "in" | "up" | "reset") => {

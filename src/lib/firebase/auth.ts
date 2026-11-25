@@ -17,6 +17,8 @@ import {
 import { firebaseAuth } from "@/lib/firebase/client";
 
 let persistenceReady: Promise<void> | null = null;
+let pendingSignupName = "";
+const REDIRECT_FLAG = "velio_google_redirect";
 
 export function authReady() {
   if (!persistenceReady) {
@@ -25,15 +27,19 @@ export function authReady() {
   return persistenceReady;
 }
 
-function prefersRedirect() {
-  if (typeof navigator === "undefined") return false;
-  const ua = navigator.userAgent;
-  const iOS = /iPad|iPhone|iPod/.test(ua);
-  const iPadOs = navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;
-  return iOS || iPadOs;
+/** Remember the name typed on Skapa konto before Auth creates the user. */
+export function rememberSignupName(name: string) {
+  pendingSignupName = name.trim().slice(0, 80);
+}
+
+export function takeSignupName() {
+  const name = pendingSignupName;
+  pendingSignupName = "";
+  return name;
 }
 
 export async function signUpWithEmail(email: string, password: string, name: string) {
+  rememberSignupName(name);
   await authReady();
   const cred = await createUserWithEmailAndPassword(firebaseAuth(), email.trim(), password);
   const displayName = name.trim().slice(0, 80);
@@ -47,25 +53,46 @@ export async function signInWithEmail(email: string, password: string) {
   return cred.user;
 }
 
-export async function signInWithGoogle() {
-  await authReady();
+/**
+ * Start Google sign-in. Call this directly from the click handler, with no
+ * await before it: Safari only allows the popup in that same tap.
+ * Redirect is the fallback when the popup is blocked. On iPad that fallback
+ * often returns to the login page, because the app is not on authDomain.
+ */
+export function signInWithGoogle() {
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: "select_account" });
   const auth = firebaseAuth();
-  if (prefersRedirect()) {
-    await signInWithRedirect(auth, provider);
-    return null;
-  }
+  return signInWithPopup(auth, provider).then(
+    (cred) => cred.user,
+    async (error: unknown) => {
+      const code = errorCode(error);
+      if (code === "auth/popup-blocked" || code === "auth/operation-not-supported-in-this-environment") {
+        try {
+          sessionStorage.setItem(REDIRECT_FLAG, "1");
+        } catch {
+          /* Private mode can block storage. Redirect may still be attempted. */
+        }
+        await signInWithRedirect(auth, provider);
+        return null;
+      }
+      throw error;
+    },
+  );
+}
+
+/** True when a redirect came back without a signed-in user. Clears the flag. */
+export const redirectMissMessage =
+  "Google-inloggningen kom tillbaka utan att du blev inloggad. Tryck på Fortsätt med Google igen, så öppnas ett fönster ovanpå sidan.";
+
+export function takeRedirectMiss() {
+  if (typeof sessionStorage === "undefined") return false;
   try {
-    const cred = await signInWithPopup(auth, provider);
-    return cred.user;
-  } catch (error) {
-    const code = errorCode(error);
-    if (code === "auth/popup-blocked" || code === "auth/operation-not-supported-in-this-environment") {
-      await signInWithRedirect(auth, provider);
-      return null;
-    }
-    throw error;
+    const missed = sessionStorage.getItem(REDIRECT_FLAG) === "1";
+    if (missed) sessionStorage.removeItem(REDIRECT_FLAG);
+    return missed;
+  } catch {
+    return false;
   }
 }
 
@@ -87,8 +114,24 @@ export async function deleteSignedInUser() {
 
 export async function consumeRedirect(): Promise<User | null> {
   await authReady();
-  const cred = await getRedirectResult(firebaseAuth());
-  return cred?.user ?? null;
+  try {
+    const cred = await getRedirectResult(firebaseAuth());
+    if (cred?.user) {
+      try {
+        sessionStorage.removeItem(REDIRECT_FLAG);
+      } catch {
+        /* Ignore storage failures. The user is signed in. */
+      }
+    }
+    return cred?.user ?? null;
+  } catch (error) {
+    try {
+      sessionStorage.removeItem(REDIRECT_FLAG);
+    } catch {
+      /* Ignore. */
+    }
+    throw error;
+  }
 }
 
 export function watchAuth(onUser: (user: User | null) => void) {
@@ -112,7 +155,17 @@ export function authErrorSv(error: unknown) {
   if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") {
     return "Google-fönstret stängdes innan inloggningen var klar.";
   }
+  if (code === "auth/popup-blocked") {
+    return "Webbläsaren blockerade Google-fönstret. Tillåt popup-fönster för den här sidan och försök igen.";
+  }
   if (code === "auth/unauthorized-domain") return "Den här adressen är inte godkänd för inloggning i Firebase.";
+  if (code === "auth/web-storage-unsupported") {
+    return "Webbläsaren blockerar lagringen som Google-inloggningen behöver. Stäng privat läge eller tillåt lagring för sidan.";
+  }
+  const message = error instanceof Error ? error.message : "";
+  if (/missing initial state|sessionStorage/i.test(message)) {
+    return "Google-inloggningen kom tillbaka utan att kunna slutföras i Safari. Tryck på Fortsätt med Google igen, så öppnas ett fönster ovanpå sidan.";
+  }
   if (code === "auth/requires-recent-login") return "Logga in igen och prova att radera kontot direkt efteråt.";
   if (error instanceof Error && error.message) return error.message;
   return "Inloggningen misslyckades.";

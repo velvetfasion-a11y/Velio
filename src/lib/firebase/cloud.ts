@@ -20,7 +20,8 @@ import {
   type Unsubscribe,
 } from "firebase/firestore";
 import { firebaseAuth, firebaseDb } from "@/lib/firebase/client";
-import { errorCode } from "@/lib/firebase/auth";
+import { errorCode, takeSignupName } from "@/lib/firebase/auth";
+import { chooseDisplayName } from "@/lib/firebase/display-name";
 import { setCloudActive, setPreferCustomer, prefersCustomer } from "@/lib/firebase/session";
 import {
   initialsOf,
@@ -259,34 +260,45 @@ function rememberChat(peer: string, id: string, jobId?: string) {
 
 export async function ensureAccount(user: User) {
   const uid = user.uid;
-  const displayName = cleanName(user.displayName, cleanName(user.email?.split("@")[0], "VELIO"));
+  const typed = takeSignupName();
   const email = user.email && EMAIL.test(user.email) ? user.email : "";
   const userRef = doc(db(), "users", uid);
   const profileRef = doc(db(), "profiles", uid);
+  let resolved = chooseDisplayName({ typed, authName: user.displayName, email: user.email });
   await runTransaction(db(), async (tx) => {
     const userSnap = await tx.get(userRef);
     const profileSnap = await tx.get(profileRef);
+    const storedUser = userSnap.exists() ? asString(userSnap.data().displayName) : "";
+    const storedProfile = profileSnap.exists() ? asString(profileSnap.data().displayName) : "";
+    const name = chooseDisplayName({ typed, authName: user.displayName, email: user.email, stored: storedUser });
+    const profileName = chooseDisplayName({ typed, authName: user.displayName, email: user.email, stored: storedProfile });
+    resolved = name;
     if (!userSnap.exists()) {
       const payload: Record<string, unknown> = {
         uid,
-        displayName,
+        displayName: name,
         accountType: "private",
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
       if (email) payload.email = email;
       tx.set(userRef, payload);
+    } else if (name !== storedUser) {
+      tx.update(userRef, { displayName: name, updatedAt: serverTimestamp() });
     }
     if (!profileSnap.exists()) {
       tx.set(profileRef, {
         uid,
-        displayName,
+        displayName: profileName,
         published: false,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
+    } else if (profileName !== storedProfile) {
+      tx.update(profileRef, { displayName: profileName, updatedAt: serverTimestamp() });
     }
   });
+  return resolved;
 }
 
 export function stopCloudSession() {
