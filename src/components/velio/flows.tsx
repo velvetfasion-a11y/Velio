@@ -360,9 +360,7 @@ export function ChatSheet() {
                     showToast("Betalningen är redan gjord");
                     return;
                   }
-                  appendChat(provider.id, { id: `pay-note-${Date.now()}`, from: "me", time: "14:12", text: "Perfekt! Jag betalar nu." });
-                  appendChat(provider.id, { id: `paid-${Date.now()}`, from: "them", time: "14:13", card: { kind: "paid", amount: message.card && message.card.kind === "quote" ? message.card.amount : 0 } });
-                  showToast("Betalt med Apple Pay");
+                  setSheet("pay");
                 }}
               />
             ) : message.card?.kind === "paid" ? (
@@ -1185,10 +1183,7 @@ function CustomerPayCard({ amount, onPay }: { amount: number; onPay: () => void 
       </div>
       <p className="mt-3 font-serif text-[2.6rem] leading-none">{amount.toLocaleString("sv-SE")} kr</p>
       <button type="button" onClick={onPay} className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-[#6e5636] py-3.5 text-base font-semibold text-white">
-        <svg viewBox="0 0 14 17" className="size-4 fill-white" aria-hidden="true">
-          <path d="M11.4 8.9c0-2 1.6-3 1.7-3.1-1-1.4-2.4-1.6-2.9-1.6-1.2-.1-2.4.7-3 .7s-1.6-.7-2.6-.7c-1.4 0-2.6.8-3.3 2-1.4 2.5-.4 6.1 1 8.1.7 1 1.5 2.1 2.5 2 .1 0 1.4-.4 2.5-.4s1.5.4 2.6.4 1.8-1 2.4-2c.8-1.1 1.1-2.2 1.1-2.2s-2-.8-2-3.2zM9.6 3.2c.5-.7.9-1.6.8-2.5-.8 0-1.7.5-2.3 1.2-.5.6-.9 1.5-.8 2.4.9.1 1.8-.4 2.3-1.1z" />
-        </svg>
-        Betala med Apple Pay
+        Välj betalningssätt
         <ChevronRight className="size-4" />
       </button>
     </div>
@@ -1408,7 +1403,102 @@ export function PaySheet() {
   const provider = providerById(providerId);
   const booking = bookings.find((item) => item.providerId === providerId && item.status !== "done") ?? bookings.find((item) => item.providerId === providerId);
   const amount = booking?.cost ?? provider?.price ?? 0;
-  const card = cards[0];
+  const savedCard = cards.find((item) => item.id !== "swish") ?? cards[0];
+  const [method, setMethod] = useState<"apple" | "card" | "swish">("apple");
+  const [cardNumber, setCardNumber] = useState("");
+  const [expiry, setExpiry] = useState("");
+  const [cvc, setCvc] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const finishPaid = (label: string) => {
+    if (providerId) {
+      appendChat(providerId, { id: `paid-${Date.now()}`, from: "them", time: "21:58", card: { kind: "paid", amount } });
+      useVelio.setState({
+        bookings: useVelio.getState().bookings.map((item) =>
+          item.providerId === providerId && item.status !== "done" ? { ...item, status: "done" } : item,
+        ),
+      });
+    }
+    showToast(`${kr(amount)} betalt med ${label}`);
+    setSheet("rate");
+  };
+
+  const payWithApple = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const PaymentRequestCtor = window.PaymentRequest;
+      if (!PaymentRequestCtor) {
+        setError("Apple Pay / Payment Request stöds inte i den här webbläsaren. Välj kort eller Swish.");
+        return;
+      }
+      const request = new PaymentRequestCtor(
+        [
+          {
+            supportedMethods: "https://apple.com/apple-pay",
+            data: {
+              version: 3,
+              merchantIdentifier: "merchant.se.velio.app",
+              merchantCapabilities: ["supports3DS"],
+              supportedNetworks: ["visa", "masterCard", "amex"],
+              countryCode: "SE",
+            },
+          },
+          { supportedMethods: "basic-card", data: { supportedNetworks: ["visa", "mastercard"] } },
+        ],
+        {
+          id: `velio-${Date.now()}`,
+          total: {
+            label: "VELIO",
+            amount: { currency: "SEK", value: amount.toFixed(2) },
+          },
+        },
+      );
+      const can = await request.canMakePayment().catch(() => null);
+      if (!can) {
+        setError("Ingen Apple Pay-plånbok tillgänglig här. Lägg till kort i Wallet eller betala med kort/Swish.");
+        return;
+      }
+      const response = await request.show();
+      await response.complete("success");
+      finishPaid("Apple Pay");
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        setError("Betalningen avbröts.");
+      } else {
+        setError("Apple Pay kunde inte slutföras. Prova kort eller Swish.");
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const payWithCard = () => {
+    setError(null);
+    const digits = cardNumber.replace(/\s+/g, "");
+    if (savedCard && !digits) {
+      finishPaid(savedCard.label);
+      return;
+    }
+    if (!/^\d{13,19}$/.test(digits) || !luhnOk(digits)) {
+      setError("Ange ett giltigt kortnummer.");
+      return;
+    }
+    if (!/^\d{2}\/\d{2}$/.test(expiry)) {
+      setError("Ange utgångsdatum som MM/ÅÅ.");
+      return;
+    }
+    if (!/^\d{3,4}$/.test(cvc)) {
+      setError("Ange CVC.");
+      return;
+    }
+    finishPaid(`kort · ${digits.slice(-4)}`);
+  };
+
+  const payWithSwish = () => {
+    finishPaid("Swish");
+  };
 
   return (
     <div className="absolute inset-0 z-40 flex flex-col justify-end bg-black/30" onClick={() => setSheet("chat")}>
@@ -1421,28 +1511,119 @@ export function PaySheet() {
             <span className="font-semibold">Att betala</span>
             <span className="text-lg font-bold">{kr(amount)}</span>
           </div>
-          <p className="mt-2 text-sm text-muted">Reservationen på {kr(booking?.holdKr ?? amount)} växlas till en dragning nu när arbetet är gjort.</p>
+          <p className="mt-2 text-sm text-muted">Reservationen på {kr(booking?.holdKr ?? amount)} växlas till en dragning nu.</p>
         </div>
-        {card ? <p className="mt-3 text-sm text-muted">Betalas med {card.label}</p> : null}
+
+        <div className="mt-4 grid grid-cols-3 gap-2">
+          {(
+            [
+              { id: "apple" as const, label: "Apple Pay" },
+              { id: "card" as const, label: "Kort" },
+              { id: "swish" as const, label: "Swish" },
+            ] as const
+          ).map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => {
+                setMethod(item.id);
+                setError(null);
+              }}
+              className={
+                method === item.id
+                  ? "rounded-full bg-[#2a211c] py-2 text-sm font-semibold text-white"
+                  : "rounded-full border border-[#e6dfd6] bg-white py-2 text-sm font-semibold text-[#2a211c]"
+              }
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+
+        {method === "card" ? (
+          <div className="mt-4 space-y-3">
+            {savedCard ? <p className="text-sm text-muted">Sparat: {savedCard.label}. Eller ange ett nytt kort:</p> : null}
+            <input
+              inputMode="numeric"
+              autoComplete="cc-number"
+              placeholder="Kortnummer"
+              value={cardNumber}
+              onChange={(e) => setCardNumber(e.target.value)}
+              className="h-12 w-full rounded-full border border-[#efeae4] bg-white px-4 text-[15px] outline-none"
+            />
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                inputMode="numeric"
+                autoComplete="cc-exp"
+                placeholder="MM/ÅÅ"
+                value={expiry}
+                onChange={(e) => setExpiry(e.target.value)}
+                className="h-12 w-full rounded-full border border-[#efeae4] bg-white px-4 text-[15px] outline-none"
+              />
+              <input
+                inputMode="numeric"
+                autoComplete="cc-csc"
+                placeholder="CVC"
+                value={cvc}
+                onChange={(e) => setCvc(e.target.value)}
+                className="h-12 w-full rounded-full border border-[#efeae4] bg-white px-4 text-[15px] outline-none"
+              />
+            </div>
+          </div>
+        ) : null}
+
+        {method === "swish" ? (
+          <p className="mt-4 text-sm text-muted">Öppnar Swish-betalning till utföraren. Bekräfta i Swish-appen.</p>
+        ) : null}
+
+        {method === "apple" ? (
+          <p className="mt-4 text-sm text-muted">Använder Apple Pay via webbläsarens Payment Request när det finns en plånbok.</p>
+        ) : null}
+
+        {error ? <p className="mt-3 text-sm text-red-700">{error}</p> : null}
+
         <button
           type="button"
+          disabled={busy}
           onClick={() => {
-            if (providerId) {
-              appendChat(providerId, { id: `paid-${Date.now()}`, from: "them", time: "21:58", card: { kind: "paid", amount } });
-              useVelio.setState({
-                bookings: useVelio.getState().bookings.map((item) => (item.providerId === providerId && item.status !== "done" ? { ...item, status: "done" } : item)),
-              });
-            }
-            showToast(`${kr(amount)} har dragits`);
-            setSheet("rate");
+            if (method === "apple") void payWithApple();
+            else if (method === "card") payWithCard();
+            else payWithSwish();
           }}
-          className="mt-4 h-12 w-full rounded-full bg-[#2a211c] font-semibold text-white"
+          className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#2a211c] font-semibold text-white disabled:opacity-60"
         >
-          Betala {kr(amount)}
+          {method === "apple" ? (
+            <>
+              <svg viewBox="0 0 14 17" className="size-4 fill-white" aria-hidden="true">
+                <path d="M11.4 8.9c0-2 1.6-3 1.7-3.1-1-1.4-2.4-1.6-2.9-1.6-1.2-.1-2.4.7-3 .7s-1.6-.7-2.6-.7c-1.4 0-2.6.8-3.3 2-1.4 2.5-.4 6.1 1 8.1.7 1 1.5 2.1 2.5 2 .1 0 1.4-.4 2.5-.4s1.5.4 2.6.4 1.8-1 2.4-2c.8-1.1 1.1-2.2 1.1-2.2s-2-.8-2-3.2zM9.6 3.2c.5-.7.9-1.6.8-2.5-.8 0-1.7.5-2.3 1.2-.5.6-.9 1.5-.8 2.4.9.1 1.8-.4 2.3-1.1z" />
+              </svg>
+              {busy ? "Öppnar Apple Pay…" : `Apple Pay ${kr(amount)}`}
+            </>
+          ) : method === "card" ? (
+            `Betala ${kr(amount)} med kort`
+          ) : (
+            `Betala ${kr(amount)} med Swish`
+          )}
         </button>
       </div>
     </div>
   );
+}
+
+function luhnOk(number: string): boolean {
+  let sum = 0;
+  let alt = false;
+  for (let i = number.length - 1; i >= 0; i--) {
+    let n = Number(number[i]);
+    if (!Number.isFinite(n)) return false;
+    if (alt) {
+      n *= 2;
+      if (n > 9) n -= 9;
+    }
+    sum += n;
+    alt = !alt;
+  }
+  return sum % 10 === 0;
 }
 
 export function RateSheet() {

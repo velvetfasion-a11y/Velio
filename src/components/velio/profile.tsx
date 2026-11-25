@@ -130,6 +130,10 @@ export function ProfileScreens() {
       <div className="px-5 pt-4">
         <ScreenHeader title="Betalningsmetoder" onBack={() => go("profile")} />
         <div className="mb-4 space-y-2">
+          <div className="rounded-2xl border border-line p-4">
+            <div className="font-semibold">Apple Pay</div>
+            <div className="text-sm text-muted">Används vid betalning när Wallet finns i webbläsaren</div>
+          </div>
           {cards.map((card) => (
             <div key={card.id} className="rounded-2xl border border-line p-4">
               <div className="font-semibold">{card.label}</div>
@@ -137,7 +141,7 @@ export function ProfileScreens() {
             </div>
           ))}
         </div>
-        <Field label="Kortets fyra sista" inputMode="numeric" maxLength={4} value={last4} onChange={(event) => setLast4(event.target.value)} />
+        <Field label="Kortnummer (sista fyra räcker)" inputMode="numeric" maxLength={19} value={last4} onChange={(event) => setLast4(event.target.value.replace(/\D/g, "").slice(-4))} />
         <Field label="Utgång MM/ÅÅ" placeholder="12/28" value={exp} onChange={(event) => setExp(event.target.value)} />
         <Btn
           onClick={() => {

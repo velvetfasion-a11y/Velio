@@ -3,11 +3,22 @@ import { ArrowLeft } from "lucide-react";
 import { useVelio } from "@/lib/velio/store";
 import {
   fetchAuthCapabilities,
+  fetchMe,
+  loginWithCursor,
   startEmailOtp,
   startSmsOtp,
   verifyEmailOtp,
   verifySmsOtp,
 } from "@/lib/velio/auth-api";
+import {
+  isStaticHost,
+  localGoogleSignIn,
+  localMePayload,
+  localStartEmailOtp,
+  localStartSmsOtp,
+  localVerifyEmailOtp,
+  localVerifySmsOtp,
+} from "@/lib/velio/local-auth";
 
 type Step = "methods" | "email" | "email-code" | "phone" | "phone-code";
 
@@ -22,13 +33,18 @@ export function LoginScreen() {
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [challengeId, setChallengeId] = useState("");
-  const [sampleCode, setSampleCode] = useState<string | null>(null);
+  const [localInboxCode, setLocalInboxCode] = useState<string | null>(null);
   const [hint, setHint] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
-  const [googleReady, setGoogleReady] = useState(true);
+  const [caps, setCaps] = useState({ google: false, email: false, sms: false });
+  const staticHost = typeof window !== "undefined" && isStaticHost();
 
   useEffect(() => {
-    void fetchAuthCapabilities().then((caps) => setGoogleReady(caps.google));
+    if (staticHost) {
+      setCaps({ google: true, email: true, sms: true });
+      return;
+    }
+    void fetchAuthCapabilities().then((next) => setCaps(next));
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const err = params.get("authError");
@@ -39,12 +55,12 @@ export function LoginScreen() {
         window.history.replaceState({}, "", next);
       }
     }
-  }, []);
+  }, [staticHost]);
 
   const back = () => {
     setLocalError(null);
     setHint(null);
-    setSampleCode(null);
+    setLocalInboxCode(null);
     setCode("");
     if (step === "email-code") setStep("email");
     else if (step === "phone-code") setStep("phone");
@@ -52,27 +68,34 @@ export function LoginScreen() {
   };
 
   const onGoogle = async () => {
-    if (googleReady) {
-      window.location.href = "/api/auth/google/start";
+    if (staticHost) {
+      setStep("email");
+      setHint("Ange din Gmail-adress och bekräfta med lokal kod (GitHub Pages-läge).");
       return;
     }
+    if (!caps.google) {
+      setLocalError("Google-inloggning kräver GOOGLE_CLIENT_ID och GOOGLE_CLIENT_SECRET.");
+      return;
+    }
+    window.location.href = `${process.env.NEXT_PUBLIC_BASE_PATH || ""}/api/auth/google/start`;
+  };
+
+  const onCursor = async () => {
     if (busy) return;
     setBusy(true);
     setLocalError(null);
     try {
-      const response = await fetch("/api/auth/google/sample", {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email: "demo.google@velio.local", name: "Google Demo" }),
-      });
-      if (!response.ok) throw new Error("Sample Google-inloggning misslyckades");
-      const me = await fetch("/api/me", { credentials: "same-origin", cache: "no-store" }).then((r) => r.json());
-      if (!me.authenticated) throw new Error("Kunde inte skapa session");
+      if (staticHost) {
+        const account = localGoogleSignIn("cursor.user@velio.local", name.trim() || "Cursor-användare");
+        const verified = { ...account, idVerified: true, idMethod: "cursor", emailVerified: true };
+        applyMe(localMePayload(verified));
+        return;
+      }
+      const me = await loginWithCursor();
+      if (!me.authenticated) throw new Error("Cursor-inloggning misslyckades");
       applyMe(me);
-      setHint("Google OAuth-secrets saknas — inloggad med sample-konto. Lägg till secrets för riktig Google.");
     } catch (error) {
-      setLocalError(error instanceof Error ? error.message : "Google misslyckades");
+      setLocalError(error instanceof Error ? error.message : "Cursor-inloggning misslyckades");
     } finally {
       setBusy(false);
     }
@@ -84,9 +107,18 @@ export function LoginScreen() {
     setBusy(true);
     setLocalError(null);
     try {
+      if (staticHost) {
+        const result = await localStartEmailOtp(email.trim(), name.trim() || undefined);
+        setChallengeId(result.challengeId);
+        setLocalInboxCode(result.localInboxCode);
+        setHint(result.message);
+        setStep("email-code");
+        return;
+      }
+      if (!caps.email) throw new Error("E-postinloggning är inte konfigurerad ännu.");
       const result = await startEmailOtp(email.trim(), name.trim() || undefined);
       setChallengeId(result.challengeId);
-      setSampleCode(result.sampleCode ?? null);
+      setLocalInboxCode(null);
       setHint(result.message ?? "Kolla din inkorg.");
       setStep("email-code");
     } catch (error) {
@@ -103,6 +135,15 @@ export function LoginScreen() {
     setLocalError(null);
     setAuthError(null);
     try {
+      if (staticHost) {
+        const account = await localVerifyEmailOtp({
+          challengeId,
+          code: code.trim(),
+          name: name.trim() || undefined,
+        });
+        applyMe(localMePayload(account));
+        return;
+      }
       const me = await verifyEmailOtp({
         challengeId,
         code: code.trim(),
@@ -123,9 +164,18 @@ export function LoginScreen() {
     setBusy(true);
     setLocalError(null);
     try {
+      if (staticHost) {
+        const result = await localStartSmsOtp(phone.trim(), name.trim() || undefined);
+        setChallengeId(result.challengeId);
+        setLocalInboxCode(result.localInboxCode);
+        setHint(result.message);
+        setStep("phone-code");
+        return;
+      }
+      if (!caps.sms) throw new Error("SMS-inloggning är inte konfigurerad ännu.");
       const result = await startSmsOtp(phone.trim(), name.trim() || undefined);
       setChallengeId(result.challengeId);
-      setSampleCode(result.sampleCode ?? null);
+      setLocalInboxCode(null);
       setHint(result.message ?? "Kolla ditt SMS.");
       setStep("phone-code");
     } catch (error) {
@@ -142,6 +192,15 @@ export function LoginScreen() {
     setLocalError(null);
     setAuthError(null);
     try {
+      if (staticHost) {
+        const account = await localVerifySmsOtp({
+          challengeId,
+          code: code.trim(),
+          name: name.trim() || undefined,
+        });
+        applyMe(localMePayload(account));
+        return;
+      }
       const me = await verifySmsOtp({
         challengeId,
         code: code.trim(),
@@ -155,6 +214,14 @@ export function LoginScreen() {
       setBusy(false);
     }
   };
+
+  // Warm session after OAuth redirect
+  useEffect(() => {
+    if (staticHost) return;
+    void fetchMe().then((me) => {
+      if (me.authenticated) applyMe(me);
+    });
+  }, [applyMe, staticHost]);
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden bg-white">
@@ -175,16 +242,20 @@ export function LoginScreen() {
           <>
             <h1 className="mt-8 text-center font-serif text-[2.7rem] leading-none font-medium text-[#2a211c]">Logga in</h1>
             <p className="mx-auto mt-3 max-w-[17rem] text-center text-sm leading-snug text-[#6e6964]">
-              Google, e-post med kod eller mobil med SMS. Business kräver BankID eller pass.
+              Google, e-post med kod, mobil med SMS eller Cursor. Business kräver ID-verifiering.
             </p>
 
             <div className="mt-8 rounded-[1.7rem] border border-white/80 bg-white/45 p-3 shadow-[0_18px_50px_rgba(70,50,20,0.08)] backdrop-blur-xl">
               <div className="space-y-2.5">
-                <Method label="Fortsätt med Google" onClick={onGoogle} icon={<GoogleMark />} disabled={busy} />
+                <Method label="Fortsätt med Google" onClick={() => void onGoogle()} icon={<GoogleMark />} disabled={busy} />
                 <Method label="Fortsätt med e-post" onClick={() => setStep("email")} icon={<MailMark />} disabled={busy} />
                 <Method label="Fortsätt med mobilnummer" onClick={() => setStep("phone")} icon={<PhoneMark />} disabled={busy} />
+                <Method label="Fortsätt med Cursor" onClick={() => void onCursor()} icon={<CursorMark />} disabled={busy} />
               </div>
             </div>
+            {staticHost ? (
+              <p className="mt-4 text-center text-xs text-[#8a847e]">GitHub Pages-läge: koder sparas lokalt i din webbläsare.</p>
+            ) : null}
           </>
         ) : null}
 
@@ -209,9 +280,9 @@ export function LoginScreen() {
               )}
             </div>
             {hint ? <p className="mt-3 text-center text-sm text-[#6e6964]">{hint}</p> : null}
-            {sampleCode ? (
+            {localInboxCode ? (
               <p className="mt-2 rounded-xl bg-[#f6f1ea] px-3 py-2 text-center text-sm text-[#2a211c]">
-                Sample-kod (lokalt): <span className="font-semibold tracking-widest">{sampleCode}</span>
+                Lokal inkorg: <span className="font-semibold tracking-widest">{localInboxCode}</span>
               </p>
             ) : null}
             <button
@@ -244,9 +315,9 @@ export function LoginScreen() {
               )}
             </div>
             {hint ? <p className="mt-3 text-center text-sm text-[#6e6964]">{hint}</p> : null}
-            {sampleCode ? (
+            {localInboxCode ? (
               <p className="mt-2 rounded-xl bg-[#f6f1ea] px-3 py-2 text-center text-sm text-[#2a211c]">
-                Sample-kod (lokalt): <span className="font-semibold tracking-widest">{sampleCode}</span>
+                Lokal inkorg: <span className="font-semibold tracking-widest">{localInboxCode}</span>
               </p>
             ) : null}
             <button
@@ -344,6 +415,14 @@ function PhoneMark() {
     <svg viewBox="0 0 24 24" className="size-5" aria-hidden="true">
       <rect x="7" y="2.5" width="10" height="19" rx="2.5" fill="none" stroke="#2a211c" strokeWidth="1.6" />
       <circle cx="12" cy="18.2" r="0.8" fill="#2a211c" />
+    </svg>
+  );
+}
+
+function CursorMark() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-5" aria-hidden="true">
+      <path d="M5 4l14 8-6 2-2 6-6-16z" fill="none" stroke="#2a211c" strokeWidth="1.6" strokeLinejoin="round" />
     </svg>
   );
 }

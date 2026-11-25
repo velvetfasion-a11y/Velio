@@ -1,9 +1,14 @@
-import { accountPublic, getAccountBySession, markIdVerified, updateAccount } from "@/lib/velio/session";
+import { accountPublic, getAccountById, getAccountBySession, updateAccount } from "@/lib/velio/session";
+import { sql } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
 const noStore = { "cache-control": "private, no-store" };
 
+/**
+ * Accepts passport details for manual review. Does not auto-activate Business
+ * or set id_verified — that requires BankID RP or Cursor identity.
+ */
 export async function POST(request: Request) {
   const account = await getAccountBySession(request);
   if (!account) {
@@ -15,7 +20,6 @@ export async function POST(request: Request) {
     country?: string;
     fullName?: string;
     expiry?: string;
-    activateBusiness?: boolean;
   };
   try {
     body = (await request.json()) as typeof body;
@@ -44,30 +48,25 @@ export async function POST(request: Request) {
     return Response.json({ error: "expired_passport", message: "Passet har gått ut." }, { status: 400, headers: noStore });
   }
 
-  let updated = await markIdVerified(account.id, "passport", {
-    passportNumber,
-    passportCountry: country,
-  });
+  await sql(
+    `update accounts
+     set passport_number = $2, passport_country = $3, id_method = 'passport_pending', id_verified = false
+     where id = $1`,
+    [account.id, passportNumber, country],
+  );
 
   if (fullName && fullName !== account.name) {
-    updated = await updateAccount(account.id, {
-      name: fullName,
-      idVerified: true,
-      idMethod: "passport",
-      passportNumber,
-      passportCountry: country,
-    });
+    await updateAccount(account.id, { name: fullName });
   }
 
-  if (body.activateBusiness) {
-    updated = await updateAccount(account.id, {
-      accountMode: "business",
-      idVerified: true,
-      idMethod: "passport",
-      passportNumber,
-      passportCountry: country,
-    });
-  }
-
-  return Response.json({ account: accountPublic(updated), verified: true }, { headers: noStore });
+  const updated = (await getAccountById(account.id)) ?? account;
+  return Response.json(
+    {
+      account: accountPublic(updated),
+      verified: false,
+      pending: true,
+      message: "Passuppgifter mottagna och väntar på manuell granskning. Business aktiveras efter godkännande.",
+    },
+    { headers: noStore },
+  );
 }

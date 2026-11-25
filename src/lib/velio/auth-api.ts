@@ -62,8 +62,13 @@ async function json<T>(response: Response): Promise<T> {
   return (await response.json()) as T;
 }
 
+function apiPath(path: string): string {
+  const base = (process.env.NEXT_PUBLIC_BASE_PATH || "").replace(/\/$/, "");
+  return `${base}${path}`;
+}
+
 export async function fetchMe(): Promise<MeResponse> {
-  const response = await fetch("/api/me", { credentials: "same-origin", cache: "no-store" });
+  const response = await fetch(apiPath("/api/me"), { credentials: "same-origin", cache: "no-store" });
   if (!response.ok) return { authenticated: false };
   return json<MeResponse>(response);
 }
@@ -74,66 +79,45 @@ export async function fetchAuthCapabilities(): Promise<{
   sms: boolean;
   sampleFallback: boolean;
 }> {
-  const response = await fetch("/api/auth/capabilities", { credentials: "same-origin", cache: "no-store" });
-  if (!response.ok) return { google: false, email: false, sms: false, sampleFallback: true };
+  const response = await fetch(apiPath("/api/auth/capabilities"), { credentials: "same-origin", cache: "no-store" });
+  if (!response.ok) return { google: false, email: false, sms: false, sampleFallback: false };
   return json(response);
 }
 
-export async function listAccountsRemote(provider?: AuthProvider): Promise<AccountDto[]> {
-  const query = provider ? `?provider=${encodeURIComponent(provider)}` : "";
-  const response = await fetch(`/api/auth/accounts${query}`, {
+export async function listAccountsRemote(_provider?: AuthProvider): Promise<AccountDto[]> {
+  const response = await fetch(apiPath("/api/auth/accounts"), {
     credentials: "same-origin",
     cache: "no-store",
   });
   if (!response.ok) return [];
-  const data = await json<{ accounts: AccountDto[] }>(response);
-  return data.accounts ?? [];
+  const data = await json<{ accounts: AccountDto[]; account?: AccountDto }>(response);
+  return data.accounts ?? (data.account ? [data.account] : []);
 }
 
-export async function loginWithAccount(provider: AuthProvider, accountId: string): Promise<MeResponse> {
-  const response = await fetch("/api/auth/login", {
-    method: "POST",
-    credentials: "same-origin",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ provider, accountId }),
-  });
-  if (!response.ok) return { authenticated: false };
-  return fetchMe();
+export async function loginWithAccount(_provider: AuthProvider, _accountId: string): Promise<MeResponse> {
+  return { authenticated: false };
 }
 
-export async function createAccountRemote(input: {
+export async function createAccountRemote(_input: {
   provider: AuthProvider;
   name: string;
   email: string;
   phone: string;
   accountMode?: "customer" | "business";
 }): Promise<MeResponse> {
-  const response = await fetch("/api/auth/login", {
-    method: "POST",
-    credentials: "same-origin",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ ...input, create: true }),
-  });
-  if (!response.ok) return { authenticated: false };
-  return fetchMe();
+  return { authenticated: false };
 }
 
 export async function startEmailOtp(email: string, name?: string) {
-  const response = await fetch("/api/auth/email/start", {
+  const response = await fetch(apiPath("/api/auth/email/start"), {
     method: "POST",
     credentials: "same-origin",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ email, name }),
   });
-  const data = await json<{
-    challengeId?: string;
-    sample?: boolean;
-    sampleCode?: string;
-    message?: string;
-    error?: string;
-  }>(response);
+  const data = await json<{ challengeId?: string; message?: string; error?: string }>(response);
   if (!response.ok) throw new Error(data.message || data.error || "Kunde inte skicka e-postkod");
-  return data as { challengeId: string; sample?: boolean; sampleCode?: string; message?: string };
+  return data as { challengeId: string; message?: string };
 }
 
 export async function verifyEmailOtp(input: {
@@ -142,7 +126,7 @@ export async function verifyEmailOtp(input: {
   name?: string;
   phone?: string;
 }): Promise<MeResponse> {
-  const response = await fetch("/api/auth/email/verify", {
+  const response = await fetch(apiPath("/api/auth/email/verify"), {
     method: "POST",
     credentials: "same-origin",
     headers: { "content-type": "application/json" },
@@ -156,21 +140,27 @@ export async function verifyEmailOtp(input: {
 }
 
 export async function startSmsOtp(phone: string, name?: string) {
-  const response = await fetch("/api/auth/sms/start", {
+  const response = await fetch(apiPath("/api/auth/sms/start"), {
     method: "POST",
     credentials: "same-origin",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ phone, name }),
   });
-  const data = await json<{
-    challengeId?: string;
-    sample?: boolean;
-    sampleCode?: string;
-    message?: string;
-    error?: string;
-  }>(response);
+  const data = await json<{ challengeId?: string; message?: string; error?: string }>(response);
   if (!response.ok) throw new Error(data.message || data.error || "Kunde inte skicka SMS");
-  return data as { challengeId: string; sample?: boolean; sampleCode?: string; message?: string };
+  return data as { challengeId: string; message?: string };
+}
+
+export async function loginWithCursor(): Promise<MeResponse> {
+  const response = await fetch(apiPath("/api/auth/cursor"), {
+    method: "POST",
+    credentials: "same-origin",
+  });
+  if (!response.ok) {
+    const data = await json<{ message?: string }>(response);
+    throw new Error(data.message || "Cursor-inloggning misslyckades");
+  }
+  return fetchMe();
 }
 
 export async function verifySmsOtp(input: {
@@ -179,7 +169,7 @@ export async function verifySmsOtp(input: {
   name?: string;
   email?: string;
 }): Promise<MeResponse> {
-  const response = await fetch("/api/auth/sms/verify", {
+  const response = await fetch(apiPath("/api/auth/sms/verify"), {
     method: "POST",
     credentials: "same-origin",
     headers: { "content-type": "application/json" },
@@ -193,7 +183,7 @@ export async function verifySmsOtp(input: {
 }
 
 export async function startBankIdVerification(personalNumber?: string) {
-  const response = await fetch("/api/auth/id/bankid/start", {
+  const response = await fetch(apiPath("/api/auth/id/bankid/start"), {
     method: "POST",
     credentials: "same-origin",
     headers: { "content-type": "application/json" },
@@ -210,7 +200,7 @@ export async function startBankIdVerification(personalNumber?: string) {
 }
 
 export async function completeBankIdVerification(challengeId: string, activateBusiness = true) {
-  const response = await fetch("/api/auth/id/bankid/complete", {
+  const response = await fetch(apiPath("/api/auth/id/bankid/complete"), {
     method: "POST",
     credentials: "same-origin",
     headers: { "content-type": "application/json" },
@@ -226,20 +216,24 @@ export async function submitPassportVerification(input: {
   country: string;
   fullName: string;
   expiry: string;
-  activateBusiness?: boolean;
 }) {
-  const response = await fetch("/api/auth/id/passport", {
+  const response = await fetch(apiPath("/api/auth/id/passport"), {
     method: "POST",
     credentials: "same-origin",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(input),
   });
-  const data = await json<{ account?: AccountDto; message?: string; error?: string }>(response);
+  const data = await json<{
+    account?: AccountDto;
+    message?: string;
+    error?: string;
+    pending?: boolean;
+    verified?: boolean;
+  }>(response);
   if (!response.ok) throw new Error(data.message || data.error || "Passverifiering misslyckades");
-  return data.account!;
+  return data as { account: AccountDto; pending?: boolean; verified?: boolean; message?: string };
 }
 
-/** @deprecated Prefer loginWithAccount — kept for single-account shortcuts. */
 export async function loginWithProvider(provider: AuthProvider): Promise<MeResponse> {
   const accounts = await listAccountsRemote(provider);
   if (!accounts[0]) return { authenticated: false };
@@ -252,7 +246,7 @@ export async function updateProfileRemote(input: {
   phone?: string;
   accountMode?: "customer" | "business";
 }): Promise<AccountDto | null> {
-  const response = await fetch("/api/me", {
+  const response = await fetch(apiPath("/api/me"), {
     method: "PATCH",
     credentials: "same-origin",
     headers: { "content-type": "application/json" },
@@ -270,11 +264,11 @@ export async function updateProfileRemote(input: {
 }
 
 export async function logoutRemote(): Promise<void> {
-  await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
+  await fetch(apiPath("/api/auth/logout"), { method: "POST", credentials: "same-origin" });
 }
 
 export async function fetchJobs(): Promise<JobDto[]> {
-  const response = await fetch("/api/jobs", { credentials: "same-origin", cache: "no-store" });
+  const response = await fetch(apiPath("/api/jobs"), { credentials: "same-origin", cache: "no-store" });
   if (!response.ok) return [];
   const data = await json<{ jobs: JobDto[] }>(response);
   return data.jobs ?? [];
@@ -288,7 +282,7 @@ export async function createJobRemote(input: {
   rate: "hour" | "fixed";
   price: number;
 }): Promise<JobDto[]> {
-  const response = await fetch("/api/jobs", {
+  const response = await fetch(apiPath("/api/jobs"), {
     method: "POST",
     credentials: "same-origin",
     headers: { "content-type": "application/json" },
@@ -303,29 +297,25 @@ export async function openConversation(peer: {
   providerId?: string;
   accountId?: string;
 }): Promise<{ conversationId: string; threadKey: string; peer: { id: string; name: string; providerId: string | null } } | null> {
-  const response = await fetch("/api/conversations", {
+  const response = await fetch(apiPath("/api/conversations"), {
     method: "POST",
     credentials: "same-origin",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(peer),
   });
   if (!response.ok) return null;
-  return json<{
-    conversationId: string;
-    threadKey: string;
-    peer: { id: string; name: string; providerId: string | null };
-  }>(response);
+  return json(response);
 }
 
 export async function fetchConversations(): Promise<ConversationDto[]> {
-  const response = await fetch("/api/conversations", { credentials: "same-origin", cache: "no-store" });
+  const response = await fetch(apiPath("/api/conversations"), { credentials: "same-origin", cache: "no-store" });
   if (!response.ok) return [];
   const data = await json<{ conversations: ConversationDto[] }>(response);
   return data.conversations ?? [];
 }
 
 export async function fetchMessages(conversationId: string): Promise<ChatDto[]> {
-  const response = await fetch(`/api/conversations/${conversationId}/messages`, {
+  const response = await fetch(apiPath(`/api/conversations/${conversationId}/messages`), {
     credentials: "same-origin",
     cache: "no-store",
   });
@@ -340,7 +330,7 @@ export async function sendMessageRemote(
   card?: ChatCard,
 ): Promise<ChatDto | null> {
   const bodyText = card ? encodeCardMessage(card, text || "Bokningsförfrågan") : text;
-  const response = await fetch(`/api/conversations/${conversationId}/messages`, {
+  const response = await fetch(apiPath(`/api/conversations/${conversationId}/messages`), {
     method: "POST",
     credentials: "same-origin",
     headers: { "content-type": "application/json" },

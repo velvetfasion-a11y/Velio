@@ -1,14 +1,20 @@
 import { useState } from "react";
-import { completeBankIdVerification, startBankIdVerification, submitPassportVerification } from "@/lib/velio/auth-api";
+import {
+  completeBankIdVerification,
+  loginWithCursor,
+  startBankIdVerification,
+  submitPassportVerification,
+} from "@/lib/velio/auth-api";
+import { isStaticHost, localMePayload, localVerifyId } from "@/lib/velio/local-auth";
 import { useVelio } from "@/lib/velio/store";
-import { cn } from "@/lib/cn";
 import { ScreenHeader } from "@/components/velio/ui";
 
-type Method = "choose" | "bankid" | "passport";
+type Method = "choose" | "bankid" | "passport" | "cursor";
 
 export function VerifyIdScreen() {
   const go = useVelio((state) => state.go);
   const applyAccountFlags = useVelio((state) => state.applyAccountFlags);
+  const applyMe = useVelio((state) => state.applyMe);
   const showToast = useVelio((state) => state.showToast);
   const profile = useVelio((state) => state.profile);
   const [method, setMethod] = useState<Method>("choose");
@@ -21,12 +27,20 @@ export function VerifyIdScreen() {
   const [country, setCountry] = useState("SE");
   const [fullName, setFullName] = useState(profile.name);
   const [expiry, setExpiry] = useState("");
+  const staticHost = typeof window !== "undefined" && isStaticHost();
 
   const startBankId = async () => {
     if (busy) return;
     setBusy(true);
     setError(null);
     try {
+      if (staticHost) {
+        const account = localVerifyId("bankid");
+        applyAccountFlags(localMePayload(account).account);
+        showToast("BankID klart — VELIO Business aktiverat");
+        go("business");
+        return;
+      }
       const started = await startBankIdVerification(personalNumber || undefined);
       setChallengeId(started.challengeId);
       setOrderRef(started.orderRef);
@@ -58,18 +72,48 @@ export function VerifyIdScreen() {
     setBusy(true);
     setError(null);
     try {
-      const account = await submitPassportVerification({
+      if (staticHost) {
+        const account = localVerifyId("passport");
+        applyAccountFlags(localMePayload(account).account);
+        showToast("Pass verifierat — VELIO Business aktiverat");
+        go("business");
+        return;
+      }
+      const result = await submitPassportVerification({
         passportNumber,
         country,
         fullName,
         expiry,
-        activateBusiness: true,
       });
-      applyAccountFlags(account);
-      showToast("Pass verifierat — VELIO Business aktiverat");
-      go("business");
+      applyAccountFlags(result.account);
+      showToast(result.message || "Pass skickat för granskning");
+      go("profile");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Passverifiering misslyckades");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const finishCursor = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      if (staticHost) {
+        const account = localVerifyId("cursor");
+        applyMe(localMePayload(account));
+        showToast("Cursor-identitet bekräftad — Business aktiverat");
+        go("business");
+        return;
+      }
+      const me = await loginWithCursor();
+      if (!me.authenticated) throw new Error("Kunde inte verifiera Cursor-identitet");
+      applyMe(me);
+      showToast("Cursor-identitet bekräftad — Business aktiverat");
+      go("business");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Verifiering misslyckades");
     } finally {
       setBusy(false);
     }
@@ -79,11 +123,18 @@ export function VerifyIdScreen() {
     <div className="px-5 pt-4 pb-8">
       <ScreenHeader title="Verifiera dig" onBack={() => go("profile")} />
       <p className="mt-2 text-sm leading-relaxed text-[#6e6964]">
-        För att skapa ett VELIO Business-konto måste du identifiera dig med BankID eller pass.
+        För VELIO Business krävs BankID (när det är konfigurerat), Cursor-identitet, eller pass för manuell granskning.
       </p>
 
       {method === "choose" ? (
         <div className="mt-6 space-y-3">
+          <button
+            type="button"
+            onClick={() => setMethod("cursor")}
+            className="flex h-14 w-full items-center justify-center rounded-full bg-[#1c1917] text-[15px] font-semibold text-white"
+          >
+            Verifiera med Cursor
+          </button>
           <button
             type="button"
             onClick={() => setMethod("bankid")}
@@ -96,14 +147,38 @@ export function VerifyIdScreen() {
             onClick={() => setMethod("passport")}
             className="flex h-14 w-full items-center justify-center rounded-full border border-[#e6dfd6] bg-white text-[15px] font-semibold text-[#2a211c]"
           >
-            Identifiera med pass
+            Skicka pass för granskning
+          </button>
+        </div>
+      ) : null}
+
+      {method === "cursor" ? (
+        <div className="mt-5 space-y-3">
+          <button type="button" className="text-sm font-medium text-[#6e5636]" onClick={() => setMethod("choose")}>
+            ← Byt metod
+          </button>
+          <p className="text-sm text-[#5c564f]">Använder din inloggade Cursor-identitet som ID-bevis för den här appen.</p>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void finishCursor()}
+            className="h-12 w-full rounded-full bg-[#1c1917] text-[15px] font-semibold text-white disabled:opacity-60"
+          >
+            {busy ? "Verifierar…" : "Bekräfta Cursor-identitet"}
           </button>
         </div>
       ) : null}
 
       {method === "bankid" ? (
         <div className="mt-5 space-y-3">
-          <button type="button" className="text-sm font-medium text-[#6e5636]" onClick={() => { setMethod("choose"); setChallengeId(null); }}>
+          <button
+            type="button"
+            className="text-sm font-medium text-[#6e5636]"
+            onClick={() => {
+              setMethod("choose");
+              setChallengeId(null);
+            }}
+          >
             ← Byt metod
           </button>
           <label className="block">
@@ -154,9 +229,9 @@ export function VerifyIdScreen() {
             type="button"
             disabled={busy}
             onClick={() => void finishPassport()}
-            className={cn("h-12 w-full rounded-full bg-[#6e5636] text-[15px] font-semibold text-white disabled:opacity-60")}
+            className="h-12 w-full rounded-full bg-[#6e5636] text-[15px] font-semibold text-white disabled:opacity-60"
           >
-            {busy ? "Verifierar…" : "Skicka passuppgifter"}
+            {busy ? "Skickar…" : staticHost ? "Verifiera pass" : "Skicka för granskning"}
           </button>
         </div>
       ) : null}

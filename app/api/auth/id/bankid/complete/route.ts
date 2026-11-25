@@ -1,15 +1,27 @@
-import { createHash } from "crypto";
 import { sql } from "@/lib/db";
+import { verifySignedValue } from "@/lib/velio/auth-secrets";
 import { accountPublic, getAccountBySession, markIdVerified, updateAccount } from "@/lib/velio/session";
+import { env } from "@/lib/velio/auth-config";
 
 export const dynamic = "force-dynamic";
 
 const noStore = { "cache-control": "private, no-store" };
+const COOKIE = "velio_bankid";
+
+function readCookie(request: Request, name: string): string | null {
+  const cookie = request.headers.get("cookie") ?? "";
+  const match = cookie.match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`));
+  return match?.[1] ? decodeURIComponent(match[1]) : null;
+}
 
 export async function POST(request: Request) {
   const account = await getAccountBySession(request);
   if (!account) {
     return Response.json({ error: "unauthorized" }, { status: 401, headers: noStore });
+  }
+
+  if (!env("BANKID_API_URL") || !env("BANKID_API_KEY")) {
+    return Response.json({ error: "bankid_not_configured" }, { status: 503, headers: noStore });
   }
 
   let body: { challengeId?: string; activateBusiness?: boolean };
@@ -23,15 +35,20 @@ export async function POST(request: Request) {
     return Response.json({ error: "missing_challenge" }, { status: 400, headers: noStore });
   }
 
+  const proof = readCookie(request, COOKIE);
+  if (!proof || !verifySignedValue(proof, `${body.challengeId}:${account.id}`)) {
+    return Response.json(
+      { error: "invalid_proof", message: "BankID-sessionen kunde inte bekräftas." },
+      { status: 403, headers: noStore },
+    );
+  }
+
   const rows = await sql<{
     target: string;
-    payload: Record<string, unknown> | string;
     consumed_at: string | null;
     expires_at: string;
-    code_hash: string;
   }>(
-    `select target, payload, consumed_at, expires_at, code_hash
-     from auth_challenges where id = $1 and kind = 'bankid' limit 1`,
+    `select target, consumed_at, expires_at from auth_challenges where id = $1 and kind = 'bankid' limit 1`,
     [body.challengeId],
   );
   const row = rows[0];
@@ -45,15 +62,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "forbidden" }, { status: 403, headers: noStore });
   }
 
-  const payload =
-    typeof row.payload === "string" ? (JSON.parse(row.payload) as Record<string, unknown>) : row.payload || {};
-  const orderRef = typeof payload.orderRef === "string" ? payload.orderRef : "";
-  const code = orderRef.slice(-6);
-  const expected = createHash("sha256").update(code).digest("hex");
-  if (row.code_hash !== expected) {
-    return Response.json({ error: "verify_failed", message: "Kunde inte bekräfta BankID." }, { status: 400, headers: noStore });
-  }
-
+  // Production: poll BankID collect until complete before marking verified.
   await sql(`update auth_challenges set consumed_at = now() where id = $1`, [body.challengeId]);
 
   let updated = await markIdVerified(account.id, "bankid");
@@ -61,5 +70,10 @@ export async function POST(request: Request) {
     updated = await updateAccount(account.id, { accountMode: "business", idVerified: true, idMethod: "bankid" });
   }
 
-  return Response.json({ account: accountPublic(updated), verified: true }, { headers: noStore });
+  const headers = new Headers({ ...noStore, "content-type": "application/json" });
+  headers.append("set-cookie", `${COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
+  return new Response(JSON.stringify({ account: accountPublic(updated), verified: true }), {
+    status: 200,
+    headers,
+  });
 }

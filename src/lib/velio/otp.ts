@@ -79,10 +79,9 @@ export async function verifyChallenge(input: {
   return { ok: true, target: row.target, payload };
 }
 
-export async function sendEmailCode(to: string, code: string): Promise<{ delivered: boolean; sample?: boolean }> {
+export async function sendEmailCode(to: string, code: string): Promise<{ delivered: boolean }> {
   if (!emailConfigured()) {
-    console.info(`[velio-auth] sample email OTP to ${to}: ${code}`);
-    return { delivered: true, sample: true };
+    throw new Error("E-postleverans är inte konfigurerad.");
   }
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -105,10 +104,9 @@ export async function sendEmailCode(to: string, code: string): Promise<{ deliver
   return { delivered: true };
 }
 
-export async function sendSmsCode(to: string, code: string): Promise<{ delivered: boolean; sample?: boolean }> {
+export async function sendSmsCode(to: string, code: string): Promise<{ delivered: boolean }> {
   if (!smsConfigured()) {
-    console.info(`[velio-auth] sample SMS OTP to ${to}: ${code}`);
-    return { delivered: true, sample: true };
+    throw new Error("SMS-leverans är inte konfigurerad.");
   }
   const sid = env("TWILIO_ACCOUNT_SID");
   const token = env("TWILIO_AUTH_TOKEN");

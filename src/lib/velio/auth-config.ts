@@ -30,6 +30,6 @@ export function authCapabilities() {
     google: googleConfigured(),
     email: emailConfigured(),
     sms: smsConfigured(),
-    sampleFallback: true,
+    sampleFallback: false,
   };
 }

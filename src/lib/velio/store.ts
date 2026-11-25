@@ -555,6 +555,13 @@ export const useVelio = create<VelioState>()(
       },
       bootstrapAuth: async () => {
         try {
+          const { getLocalSessionAccount, isStaticHost, localMePayload } = await import("@/lib/velio/local-auth");
+          if (typeof window !== "undefined" && isStaticHost()) {
+            const local = getLocalSessionAccount();
+            if (local) get().applyMe(localMePayload(local));
+            set({ authReady: true, authError: null, loggedIn: Boolean(local) });
+            return;
+          }
           const me = await fetchMe();
           if (!me.authenticated) {
             set({
@@ -713,7 +720,10 @@ export const useVelio = create<VelioState>()(
         set({ screen: "profile", sheet: null });
       },
       logout: () => {
-        void logoutRemote();
+        void import("@/lib/velio/local-auth").then(({ clearLocalSession, isStaticHost }) => {
+          if (isStaticHost()) clearLocalSession();
+          else void logoutRemote();
+        });
         set({
           loggedIn: false,
           screen: "home",

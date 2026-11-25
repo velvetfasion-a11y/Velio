@@ -329,7 +329,7 @@ export async function updateAccount(
   const name = patch.name?.trim() || current.name;
   const email = patch.email?.trim().toLowerCase() || current.email;
   const phone = patch.phone?.trim() || current.phone;
-  let mode = patch.accountMode ?? current.accountMode;
+  const mode = patch.accountMode ?? current.accountMode;
   const providerId = patch.providerId === undefined ? current.providerId : patch.providerId;
   const emailVerified = patch.emailVerified ?? current.emailVerified;
   const phoneVerified = patch.phoneVerified ?? current.phoneVerified;

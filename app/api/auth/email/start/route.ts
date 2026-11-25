@@ -1,10 +1,22 @@
+import { emailConfigured } from "@/lib/velio/auth-config";
 import { createChallenge, normalizeEmail, sendEmailCode } from "@/lib/velio/otp";
+import { assertRateLimit, clientKey } from "@/lib/velio/rate-limit";
 
 export const dynamic = "force-dynamic";
 
 const noStore = { "cache-control": "private, no-store" };
 
 export async function POST(request: Request) {
+  if (!emailConfigured()) {
+    return Response.json(
+      {
+        error: "email_not_configured",
+        message: "E-postinloggning kräver RESEND_API_KEY och EMAIL_FROM.",
+      },
+      { status: 503, headers: noStore },
+    );
+  }
+
   let body: { email?: string; name?: string };
   try {
     body = (await request.json()) as typeof body;
@@ -17,22 +29,30 @@ export async function POST(request: Request) {
     return Response.json({ error: "invalid_email", message: "Ange en giltig e-postadress." }, { status: 400, headers: noStore });
   }
 
+  const limited = await assertRateLimit({
+    key: clientKey(request, `email:${email}`),
+    limit: 3,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (!limited.ok) {
+    return Response.json(
+      { error: "rate_limited", message: `För många försök. Vänta ${limited.retryAfterSec}s.` },
+      { status: 429, headers: noStore },
+    );
+  }
+
   try {
     const challenge = await createChallenge({
       kind: "email",
       target: email,
       payload: { name: body.name?.trim() || "" },
     });
-    const delivery = await sendEmailCode(email, challenge.code);
+    await sendEmailCode(email, challenge.code);
     return Response.json(
       {
         challengeId: challenge.id,
         expiresAt: challenge.expiresAt,
-        sample: Boolean(delivery.sample),
-        sampleCode: delivery.sample ? challenge.code : undefined,
-        message: delivery.sample
-          ? "E-postleverans är inte konfigurerad ännu — använd sample-koden som visas."
-          : "Vi har skickat en verifieringskod till din e-post.",
+        message: "Vi har skickat en verifieringskod till din e-post.",
       },
       { headers: noStore },
     );
