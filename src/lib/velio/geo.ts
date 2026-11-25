@@ -1,3 +1,109 @@
+export type AddressHit = {
+  id: string;
+  label: string;
+  detail: string;
+  lat?: number;
+  lng?: number;
+};
+
+const SWEDEN_BBOX = "10.5,55.2,24.2,69.1";
+
+type PhotonProps = {
+  osm_id?: number;
+  name?: string;
+  street?: string;
+  housenumber?: string;
+  postcode?: string;
+  city?: string;
+  locality?: string;
+  district?: string;
+  county?: string;
+  state?: string;
+  country?: string;
+  countrycode?: string;
+};
+
+function formatPhoton(props: PhotonProps): { label: string; detail: string } | null {
+  if (props.countrycode && props.countrycode !== "SE") return null;
+  const street = [props.street, props.housenumber].filter(Boolean).join(" ");
+  const municipality = props.city && !/län$/i.test(props.city) ? props.city : "";
+  const local = props.locality || props.district || "";
+  const place = municipality || local;
+  const line = street || props.name || place;
+  if (!line) return null;
+  const cityLine = [props.postcode, place].filter(Boolean).join(" ");
+  const label = street && cityLine && street !== place ? `${street}, ${cityLine}` : cityLine && line !== cityLine ? `${line}, ${cityLine}` : line;
+  const detail = [props.district, props.county || props.state, "Sverige"].filter((part, index, list) => part && list.indexOf(part) === index).join(" · ");
+  return { label, detail };
+}
+
+/** Address search for a static site: Photon, then Nominatim. Sweden only, no API key. */
+export async function searchAddresses(query: string, signal?: AbortSignal): Promise<AddressHit[]> {
+  const q = query.trim();
+  if (q.length < 2) return [];
+
+  try {
+    const url = new URL("https://photon.komoot.io/api/");
+    url.searchParams.set("q", q);
+    url.searchParams.set("limit", "6");
+    url.searchParams.set("bbox", SWEDEN_BBOX);
+    url.searchParams.set("lat", "59.33");
+    url.searchParams.set("lon", "18.07");
+    const response = await fetch(url.toString(), { signal });
+    if (response.ok) {
+      const data = (await response.json()) as {
+        features?: { geometry?: { coordinates?: number[] }; properties?: PhotonProps }[];
+      };
+      const hits = (data.features ?? [])
+        .map((feature) => {
+          const formatted = feature.properties ? formatPhoton(feature.properties) : null;
+          if (!formatted) return null;
+          const [lng, lat] = feature.geometry?.coordinates ?? [];
+          const id = String(feature.properties?.osm_id ?? formatted.label);
+          const hit: AddressHit = { id, ...formatted };
+          if (typeof lat === "number" && typeof lng === "number") {
+            hit.lat = lat;
+            hit.lng = lng;
+          }
+          return hit;
+        })
+        .filter((hit): hit is AddressHit => hit !== null);
+      const unique = hits.filter((hit, index) => hits.findIndex((other) => other.label === hit.label) === index);
+      if (unique.length) return unique.slice(0, 6);
+    }
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") throw error;
+  }
+
+  const url = new URL("https://nominatim.openstreetmap.org/search");
+  url.searchParams.set("q", q);
+  url.searchParams.set("countrycodes", "se");
+  url.searchParams.set("format", "jsonv2");
+  url.searchParams.set("addressdetails", "1");
+  url.searchParams.set("limit", "6");
+  const response = await fetch(url.toString(), {
+    signal,
+    headers: { Accept: "application/json" },
+  });
+  if (!response.ok) return [];
+  const rows = (await response.json()) as { place_id?: number; display_name?: string; lat?: string; lon?: string }[];
+  return rows
+    .map((row) => {
+      const parts = (row.display_name ?? "").split(",").map((part) => part.trim()).filter(Boolean);
+      if (!parts.length) return null;
+      const label = parts.slice(0, 3).join(", ");
+      const lat = Number(row.lat);
+      const lng = Number(row.lon);
+      const hit: AddressHit = { id: String(row.place_id ?? label), label, detail: "Sverige" };
+      if (Number.isFinite(lat) && Number.isFinite(lng)) {
+        hit.lat = lat;
+        hit.lng = lng;
+      }
+      return hit;
+    })
+    .filter((hit): hit is AddressHit => hit !== null);
+}
+
 export type UserLocation = {
   lat: number;
   lng: number;
@@ -61,17 +167,10 @@ export async function reverseGeocode(lat: number, lng: number): Promise<string> 
       display_name?: string;
     };
     const address = data.address ?? {};
-    const short =
-      address.suburb ||
-      address.neighbourhood ||
-      address.city_district ||
-      address.quarter ||
-      address.village ||
-      address.town ||
-      address.city ||
-      address.municipality ||
-      "";
-    if (short) return short;
+    const town = (address.town || address.municipality || address.city || "").replace(/ kommun$/i, "");
+    const local = address.quarter || address.suburb || address.village || address.hamlet || address.neighbourhood || "";
+    if (local && town && local !== town) return `${local}, ${town}`;
+    if (town) return town;
     return data.display_name?.split(",")[0]?.trim() || fallback;
   } catch {
     return fallback;

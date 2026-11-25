@@ -44,6 +44,14 @@ export type Provider = {
   qualifications?: string[];
   extras?: { name: string; price: number }[];
   areas?: string[];
+  /** Self-reported company details. Not a verification. */
+  companyName?: string;
+  orgNumber?: string;
+  fTax?: "yes" | "no" | "unsure";
+  /** Private people have no company block on the public profile. */
+  sellerKind?: "company" | "private";
+  /** Shown instead of a verified badge. Not an identity check. */
+  demo?: boolean;
 };
 
 /** Public “Om” text: the description the person wrote, without a leading account name. */
@@ -90,6 +98,16 @@ export const areaCoords: Record<string, { lat: number; lng: number }> = {
 export function coordsForArea(area: string | null | undefined) {
   if (!area) return areaCoords.Stockholm;
   return areaCoords[area] ?? areaCoords.Stockholm;
+}
+
+export function distanceKm(from: { lat: number; lng: number }, to: { lat: number; lng: number }) {
+  const rad = Math.PI / 180;
+  const dLat = (to.lat - from.lat) * rad;
+  const dLng = (to.lng - from.lng) * rad;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(from.lat * rad) * Math.cos(to.lat * rad) * Math.sin(dLng / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 

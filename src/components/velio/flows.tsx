@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Download, FileText, Star, Bell, ArrowLeft, Heart, BadgeCheck, Shield, Calendar, MessageCircle, Clock, ChevronDown, ChevronRight, MapPin, Camera, Wrench, Phone, Ellipsis, Plus, Navigation, ClipboardCheck, Car, Check, Coins, CreditCard, Mic, Send, Briefcase, Search, Pencil, Ban, ClipboardList, Headphones, X, type LucideIcon } from "lucide-react";
+import { FileText, Star, Bell, ArrowLeft, Heart, BadgeCheck, Shield, Calendar, MessageCircle, Clock, ChevronDown, ChevronRight, MapPin, Camera, Wrench, Phone, Ellipsis, Plus, Navigation, ClipboardCheck, Car, Check, Coins, CreditCard, Mic, Send, Briefcase, Search, Pencil, Ban, ClipboardList, Headphones, X, Lock, ShieldCheck, type LucideIcon } from "lucide-react";
 import { kr, providerById, providerDescription, providerTradeNames, ratingLabel, serviceById, sortLabels, whenOptions, type SortKey } from "@/lib/velio/data";
 import { ownBusiness, useVelio, bookingStatusLabel, type Booking, type ChatMsg } from "@/lib/velio/store";
 import { cn } from "@/lib/cn";
@@ -7,35 +7,12 @@ import { AppHeader, PlaceLink } from "@/components/velio/header";
 import { CityMap } from "@/components/velio/osm-map";
 import { Avatar, BottomSheet, Btn, FullScreen } from "@/components/velio/ui";
 import { asset } from "@/lib/velio/asset";
+import { openCallSheet } from "@/components/velio/call-host";
+import { openSupportSheet } from "@/components/velio/support-sheet";
+import { MissedCallCard } from "@/components/velio/call-screen";
+import { MISSED_CALL_TEXT } from "@/lib/calls/ice";
 
 const EMPTY_CHAT: ChatMsg[] = [];
-
-function receiptText(booking: Booking) {
-  const service = serviceById(booking.serviceId);
-  const provider = providerById(booking.providerId);
-  return [
-    "VELIO",
-    service?.name ?? "Tjänst",
-    provider?.name ?? "",
-    booking.whenLabel,
-    booking.location,
-    `Kostnad: ${kr(booking.cost)}`,
-    booking.tip != null ? `Dricks: ${kr(booking.tip)}` : "",
-    booking.rating != null ? `Betyg: ${ratingLabel(booking.rating)}` : "",
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
-
-function download(filename: string, body: string) {
-  const blob = new Blob([body], { type: "text/plain;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(url);
-}
 
 const serviceLine: Record<string, string> = {
   sak: "Säkerhet & bevakning",
@@ -83,44 +60,37 @@ export function ProviderSheet() {
   const tags = provider.tags ?? [];
 
   return (
-    <div className="sheet-in absolute inset-0 z-30 overflow-y-auto bg-cream">
-      <section className="relative overflow-hidden">
-        <img src={asset("/velio/hero-bookings.jpg")} alt="" className="absolute inset-0 h-full w-full scale-105 object-cover object-center blur-[2px]" />
-        <div className="absolute inset-0 bg-gradient-to-b from-ink/25 via-ink/10 to-cream" />
-        <div className="relative text-paper">
+    <div className="sheet-in absolute inset-0 z-30 flex flex-col bg-cream">
+      <div className="relative shrink-0">
+        {provider.photo ? (
+          <img src={provider.photo} alt="" className="h-56 w-full object-cover object-[center_20%]" />
+        ) : (
+          <div className="grid h-44 place-items-center bg-sand text-5xl font-semibold text-brown">{provider.initials}</div>
+        )}
+        <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-ink/60 to-transparent" />
+        <div className="absolute inset-x-0 top-0 text-paper">
           <AppHeader tone="glass" />
-          <div className="mt-1 flex items-center justify-between px-4 pb-2">
-            <span className="size-10" />
-            <div className="relative">
-              {provider.photo ? (
-                <img src={provider.photo} alt="" className="size-36 rounded-[1.6rem] border-4 border-paper object-cover shadow-lg" />
-              ) : (
-                <span className="grid size-36 place-items-center rounded-[1.6rem] border-4 border-paper bg-sand font-serif text-4xl shadow-lg">
-                  {provider.initials}
-                </span>
-              )}
-              <span className="absolute -right-1 -bottom-1 grid size-7 place-items-center rounded-full bg-gold text-paper">
-                <BadgeCheck className="size-5 fill-gold text-paper" />
-              </span>
-            </div>
-            <button
-              type="button"
-              aria-label={saved ? `Ta bort ${provider.name}` : `Spara ${provider.name}`}
-              onClick={() => provider && toggleFavorite(provider.id)}
-              className="grid size-10 place-items-center rounded-full border border-paper/50"
-            >
-              <Heart className={saved ? "size-5 fill-paper" : "size-5"} />
-            </button>
-          </div>
         </div>
-      </section>
+        <button
+          type="button"
+          aria-label={saved ? `Ta bort ${provider.name}` : `Spara ${provider.name}`}
+          onClick={() => toggleFavorite(provider.id)}
+          className="glass absolute right-4 bottom-4 grid size-11 place-items-center rounded-full text-ink"
+        >
+          <Heart className={saved ? "size-5 fill-brown text-brown" : "size-5"} />
+        </button>
+      </div>
 
-      <div className="px-5 pt-2 pb-10">
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 pt-4 pb-28">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="flex items-center gap-2 font-serif text-[2.4rem] leading-none font-medium">
+            <h2 className="ios-title flex items-center gap-2 text-[1.85rem]">
               {provider.name}
-              <BadgeCheck className="size-6 shrink-0 fill-gold text-paper" />
+              {provider.demo ? (
+                <span className="rounded-full bg-brown px-2 py-0.5 text-xs font-semibold tracking-wide text-paper">Demo</span>
+              ) : (
+                <BadgeCheck className="size-6 shrink-0 fill-gold text-paper" aria-label="Verifierad profil" />
+              )}
             </h2>
             {provider.title || provider.experience ? (
               <p className="mt-2 text-sm font-medium">
@@ -212,6 +182,26 @@ export function ProviderSheet() {
           </div>
         ) : null}
 
+        {provider.sellerKind === "private" ? (
+          <div className="mt-4 rounded-2xl border border-line bg-paper px-4 py-3 text-sm">
+            <p className="font-semibold">Privatperson</p>
+            <p className="mt-1 leading-relaxed text-muted">
+              Kunden kan behöva hantera skatt och RUT på ett annat sätt än mot ett företag. Texten är en platshållare, inte juridisk vägledning.
+            </p>
+          </div>
+        ) : provider.orgNumber || provider.companyName || provider.fTax ? (
+          <div className="mt-4 rounded-2xl border border-line bg-paper px-4 py-3 text-sm">
+            <p className="font-semibold">Företagsuppgifter</p>
+            <p className="mt-1 text-muted">Angivet av utföraren. VELIO har inte kontrollerat bolaget.</p>
+            {provider.companyName ? <p className="mt-2">{provider.companyName}</p> : null}
+            {provider.orgNumber ? <p>Org.nr {provider.orgNumber}</p> : null}
+            {provider.fTax ? (
+              <p>F-skatt: {provider.fTax === "yes" ? "Ja, enligt utföraren" : provider.fTax === "no" ? "Nej" : "Osäker"}</p>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+      <div className="absolute inset-x-0 bottom-0 z-10 border-t border-line bg-cream/90 px-4 py-3 backdrop-blur-xl">
         {mine ? (
           <button
             type="button"
@@ -220,21 +210,21 @@ export function ProviderSheet() {
               closeSheet();
               go("business");
             }}
-            className="mt-5 w-full rounded-full bg-bronze py-3.5 text-base font-semibold text-paper"
+            className="h-12 w-full rounded-full bg-brown text-base font-semibold text-paper"
           >
             Öppna min businessprofil
           </button>
         ) : (
-          <button type="button" onClick={() => setSheet("book")} className="mt-5 w-full rounded-full bg-bronze py-3.5 text-base font-semibold text-paper">
-            Boka nu →
-          </button>
+          <div className="flex gap-2">
+            <button type="button" onClick={openChat} className="flex h-12 flex-1 items-center justify-center gap-2 rounded-full border border-line bg-paper text-sm font-semibold">
+              <MessageCircle className="size-5" />
+              Meddelande
+            </button>
+            <button type="button" onClick={() => setSheet("book")} className="h-12 flex-[1.4] rounded-full bg-brown text-base font-semibold text-paper">
+              Boka
+            </button>
+          </div>
         )}
-        {!mine ? (
-        <button type="button" onClick={openChat} className="mt-3 flex w-full items-center justify-center gap-2 rounded-full border border-ink/15 py-3.5 text-base font-semibold">
-          <MessageCircle className="size-5" />
-          Skicka meddelande
-        </button>
-        ) : null}
       </div>
     </div>
   );
@@ -290,7 +280,7 @@ export function ChatSheet() {
   if (accountMode === "business") return <WorkerChat onClose={backToInbox} />;
   if (!provider && !peer) return null;
   if (!provider && peer) {
-    return <SyncedPeerChat peerName={peer.name} messages={messages} draft={draft} setDraft={setDraft} onSend={() => { if (!draft.trim()) return; sendChat(draft); setDraft(""); }} onClose={backToInbox} />;
+    return <SyncedPeerChat peerId={peer.id} peerName={peer.name} messages={messages} draft={draft} setDraft={setDraft} onSend={() => { if (!draft.trim()) return; sendChat(draft); setDraft(""); }} onClose={backToInbox} />;
   }
   if (!provider) return null;
   const status = presence(messages);
@@ -316,15 +306,15 @@ export function ChatSheet() {
   ];
 
   return (
-    <div className="absolute inset-0 z-30 flex flex-col bg-[#f7f3ee]">
-      <div className="px-4 pt-3">
+    <div className="absolute inset-0 z-30 flex flex-col bg-cream">
+      <div className="sticky top-0 z-10 bg-cream/90 px-4 pt-3 backdrop-blur-xl">
         <PlaceLink />
         <div className="mt-1 flex items-center">
           <button type="button" aria-label="Tillbaka" onClick={backToInbox} className="grid size-9 place-items-center">
             <ArrowLeft className="size-5" />
           </button>
           <button type="button" onClick={() => { closeSheet(); go("home"); }} className="flex-1 text-center font-serif text-[1.7rem] tracking-[0.28em]">VELIO</button>
-          <button type="button" aria-label="Ring" onClick={() => showToast(`Ringer ${provider.name.split(" ")[0]}…`)} className="grid size-9 place-items-center">
+          <button type="button" aria-label="Ring" onClick={() => openCallSheet({ peerId: provider.id, peerName: provider.name })} className="grid size-9 place-items-center">
             <Phone className="size-5" />
           </button>
           <button
@@ -344,42 +334,46 @@ export function ChatSheet() {
           </button>
         </div>
         <button type="button" onClick={() => setSheet("provider")} className="mt-1 flex w-full items-center gap-3 py-1 text-left">
-          <span className="grid size-12 shrink-0 place-items-center rounded-full bg-[#f3ece3] text-sm font-semibold">{provider.initials}</span>
+          {provider.photo ? (
+            <img src={provider.photo} alt="" className="size-12 shrink-0 rounded-full object-cover" />
+          ) : (
+            <span className="grid size-12 shrink-0 place-items-center rounded-full bg-sand text-sm font-semibold">{provider.initials}</span>
+          )}
           <span className="min-w-0 flex-1">
             <span className="flex items-center gap-1 text-lg font-semibold">
               {provider.name}
-              <BadgeCheck className="size-4 fill-[#c4a15a] text-[#f7f3ee]" />
+              <BadgeCheck className="size-4 fill-gold text-[#f7f3ee]" />
             </span>
-            <span className="flex items-center gap-1.5 text-sm text-[#5c564f]">
+            <span className="flex items-center gap-1.5 text-sm text-muted">
               {service?.name}
-              <span className="size-1.5 rounded-full bg-[#3d8f4a]" />
-              <span className={cancelled ? "text-[#5c564f]" : "text-[#3d8f4a]"}>{cancelled ? "Avbokad" : finished ? "Klar" : status.label}</span>
+              <span className="size-1.5 rounded-full bg-ok" />
+              <span className={cancelled ? "text-muted" : "text-ok"}>{cancelled ? "Avbokad" : finished ? "Klar" : status.label}</span>
             </span>
           </span>
           <ChevronRight className="size-4 text-muted" />
         </button>
-        <div className="mt-2 rounded-[1.2rem] border border-[#efeae4] bg-white/80 p-2.5">
+        <div className="mt-2 mb-2 rounded-[1.2rem] border border-line bg-paper p-2.5 shadow-soft">
           <div className="flex gap-3">
             <img src={service?.id === "stad" ? asset("/velio/tile-stad.jpg") : asset(`/velio/${service?.id ?? "stad"}.jpg`)} alt="" className="size-16 rounded-xl object-cover" />
             <div className="min-w-0 flex-1">
               <div className="flex items-start justify-between gap-2">
                 <p className="font-semibold">{jobTitle}</p>
-                <span className={cn("shrink-0 rounded-full px-2.5 py-1 text-xs", finished ? "bg-[#e7f3e4] text-[#2f7a3a]" : cancelled ? "bg-[#f3ece3] text-[#5c564f]" : "bg-[#f3e6d4] text-[#6e5636]")}>{finished ? "Klar" : cancelled ? "Avbokad" : "Pågående"}</span>
+                <span className={cn("shrink-0 rounded-full px-2.5 py-1 text-xs", finished ? "bg-ok/15 text-ok" : cancelled ? "bg-sand text-muted" : "bg-wheat text-brown")}>{finished ? "Klar" : cancelled ? "Avbokad" : "Pågående"}</span>
               </div>
-              <p className="mt-1 flex items-center gap-1 text-sm text-[#5c564f]"><Calendar className="size-3.5" /> {jobWhen}</p>
-              <p className="flex items-center gap-1 text-sm text-[#5c564f]"><MapPin className="size-3.5" /> {jobPlace}</p>
+              <p className="mt-1 flex items-center gap-1 text-sm text-muted"><Calendar className="size-3.5" /> {jobWhen}</p>
+              <p className="flex items-center gap-1 text-sm text-muted"><MapPin className="size-3.5" /> {jobPlace}</p>
             </div>
           </div>
           {finished || cancelled ? (
-            <button type="button" onClick={() => setHelp("rebook")} className="mt-2 flex w-full items-center justify-center gap-1 rounded-full bg-[#6e5636] py-2.5 text-sm font-semibold text-white">
+            <button type="button" onClick={() => setHelp("rebook")} className="mt-2 flex w-full items-center justify-center gap-1 rounded-full bg-brown py-2.5 text-sm font-semibold text-white">
               {cancelled ? "Boka om" : "Boka igen"}
             </button>
           ) : (
             <div className="mt-2 grid grid-cols-2 gap-2">
-              <button type="button" onClick={() => setHelp("menu")} className="flex items-center justify-center gap-1 rounded-full border border-[#efeae4] bg-[#f7f3ee] py-2.5 text-sm font-medium">
+              <button type="button" onClick={() => setHelp("menu")} className="flex items-center justify-center gap-1 rounded-full border border-line bg-cream py-2.5 text-sm font-medium">
                 <Calendar className="size-4" /> Avboka
               </button>
-              <button type="button" onClick={() => setHelp("change")} className="flex items-center justify-center gap-1 rounded-full border border-[#efeae4] bg-[#f7f3ee] py-2.5 text-sm font-medium">
+              <button type="button" onClick={() => setHelp("change")} className="flex items-center justify-center gap-1 rounded-full border border-line bg-cream py-2.5 text-sm font-medium">
                 <ClipboardList className="size-4" /> Ändra bokning
               </button>
             </div>
@@ -390,16 +384,18 @@ export function ChatSheet() {
         {messages.map((message) => (
           <div key={message.id} className="mb-3">
             {message.day ? <p className="mb-3 text-center text-xs text-muted">{message.day}</p> : null}
-            {message.card?.kind === "slot" ? (
+            {message.text === MISSED_CALL_TEXT ? (
+              <MissedCallCard time={message.time} />
+            ) : message.card?.kind === "slot" ? (
               <TimeConfirmedCard when={message.card.when} place={message.card.place} service={message.card.service} time={message.time ?? ""} />
             ) : message.card?.kind === "reschedule" ? (
-              <div className="rounded-[1.2rem] border border-[#efeae4] bg-white px-4 py-3">
+              <div className="rounded-[1.2rem] border border-line bg-white px-4 py-3">
                 <p className="font-semibold">Ny förfrågan skickad</p>
-                <p className="mt-1 text-sm text-[#5c564f]">{message.card.service} · {message.card.when}</p>
-                <p className="text-sm text-[#5c564f]">{message.card.place}</p>
+                <p className="mt-1 text-sm text-muted">{message.card.service} · {message.card.when}</p>
+                <p className="text-sm text-muted">{message.card.place}</p>
               </div>
             ) : message.card?.kind === "rebook" ? (
-              <div className="rounded-[1.25rem] border border-[#efeae4] bg-white px-4 py-4">
+              <div className="rounded-[1.25rem] border border-line bg-white px-4 py-4">
                 <h3 className="text-lg font-semibold">Förfrågan skickad</h3>
                 <div className="mt-2 space-y-1 text-[15px]">
                   <p><span className="font-semibold">Tjänst:</span> {message.card.service}</p>
@@ -408,10 +404,10 @@ export function ChatSheet() {
                   <p><span className="font-semibold">Plats:</span> {message.card.place}</p>
                   <p><span className="font-semibold">Pris:</span> {kr(message.card.price)}</p>
                 </div>
-                <p className="mt-3 text-sm text-[#5c564f]">{message.card.status === "accepted" ? "Godkänd" : message.card.status === "declined" ? "Nekad" : "Väntar på att arbetaren svarar"}</p>
+                <p className="mt-3 text-sm text-muted">{message.card.status === "accepted" ? "Godkänd" : message.card.status === "declined" ? "Nekad" : "Väntar på att arbetaren svarar"}</p>
               </div>
             ) : message.card?.kind === "cancelled" ? (
-              <div className="rounded-[1.25rem] border border-[#efeae4] bg-white px-4 py-4">
+              <div className="rounded-[1.25rem] border border-line bg-white px-4 py-4">
                 <h3 className="text-lg font-semibold">Jobbet avbokat</h3>
                 <p className="mt-2 text-[15px]">Reservera jobbet igen för att chatta med {provider.name}.</p>
               </div>
@@ -427,12 +423,12 @@ export function ChatSheet() {
                 }}
               />
             ) : message.card?.kind === "paid" ? (
-              <div className="rounded-[1.2rem] border border-[#efeae4] bg-white px-3 py-2.5">
+              <div className="rounded-[1.2rem] border border-line bg-white px-3 py-2.5">
                 <div className="flex items-center gap-2">
-                  <span className="grid size-8 place-items-center rounded-full bg-[#f6f1ea]"><CreditCard className="size-4" /></span>
+                  <span className="grid size-8 place-items-center rounded-full bg-sand"><CreditCard className="size-4" /></span>
                   <span>
                     <span className="block font-semibold">Betalning mottagen</span>
-                    <span className="block text-sm text-[#5c564f]">{message.card.amount.toLocaleString("sv-SE")} kr har betalats av kunden.</span>
+                    <span className="block text-sm text-muted">{message.card.amount.toLocaleString("sv-SE")} kr har betalats av kunden.</span>
                   </span>
                 </div>
               </div>
@@ -451,9 +447,14 @@ export function ChatSheet() {
               />
             ) : (
               <div className={message.from === "me" ? "flex justify-end" : "flex justify-start"}>
-                <div className={message.from === "me" ? "max-w-[78%] rounded-[1.25rem] bg-[#f3ece3] px-4 py-3 text-[15px] leading-snug" : "max-w-[85%] rounded-[1.25rem] border border-[#efeae4] bg-white px-4 py-3 text-[15px] leading-snug"}>
+                <div className={message.from === "me" ? "max-w-[78%] rounded-[1.25rem] rounded-br-md bg-brown px-4 py-3 text-[15px] leading-snug text-paper" : "max-w-[85%] rounded-[1.25rem] rounded-bl-md border border-line bg-paper px-4 py-3 text-[15px] leading-snug"}>
                   <p>{message.text}</p>
-                  {message.time ? <p className="mt-1 text-right text-xs text-muted">{message.time}</p> : null}
+                  <p className={message.from === "me" ? "mt-1 text-right text-[11px] text-paper/80" : "mt-1 text-right text-[11px] text-muted"}>
+                    {message.time ? message.time : ""}
+                    {message.from === "me"
+                      ? ` · ${messages.slice(messages.indexOf(message) + 1).some((later) => later.from === "them") ? "Läst" : "Skickat"}`
+                      : ""}
+                  </p>
                 </div>
               </div>
             )}
@@ -463,40 +464,46 @@ export function ChatSheet() {
       {cancelled ? (
         <p className="px-4 py-4 text-center text-[15px]">Reservera jobbet igen för att chatta med {provider.name}.</p>
       ) : (
+      <div className="border-t border-line bg-cream/95 px-3 pt-2 pb-3 backdrop-blur-xl">
+        <p className="mb-2 flex items-start gap-1.5 px-1 text-[11px] leading-snug text-muted">
+          <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-brown" aria-hidden="true" />
+          Håll kontakten i VELIO. Dela inte personnummer och betala inte utanför appen.
+        </p>
       <form
-        className="flex items-center gap-2 px-3 pt-2 pb-4"
+        className="flex items-center gap-2"
         onSubmit={(event) => {
           event.preventDefault();
           sendChat(draft);
           setDraft("");
         }}
       >
-        <button type="button" aria-label="Bifoga" onClick={() => showToast("Bifoga bild kommer snart")} className="grid size-11 shrink-0 place-items-center rounded-full border border-[#e6e1db] bg-white">
+        <button type="button" aria-label="Bifoga" onClick={() => showToast("Bifoga bild kommer snart")} className="grid size-11 shrink-0 place-items-center rounded-full border border-line bg-paper">
           <Plus className="size-5" />
         </button>
         <input
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           placeholder="Skriv ett meddelande..."
-          className="min-w-0 flex-1 rounded-full border border-[#e6e1db] bg-white px-4 py-3 text-base outline-none"
+          className="min-h-11 min-w-0 flex-1 rounded-full border border-line bg-paper px-4 py-3 text-base outline-none"
         />
-        <button type="submit" aria-label="Skicka" className="grid size-11 shrink-0 place-items-center rounded-full bg-[#9a7b45] text-white">
-          <ChevronRight className="size-5" />
+        <button type="submit" aria-label="Skicka" className="grid size-11 shrink-0 place-items-center rounded-full bg-brown text-white">
+          <Send className="size-5" />
         </button>
       </form>
+      </div>
       )}
       {help === "rebook" ? (
         <div className="absolute inset-0 z-20 flex flex-col justify-end bg-black/30" onClick={() => setHelp(null)}>
-          <div className="max-h-[88%] overflow-y-auto rounded-t-[1.7rem] bg-[#fffcfa] px-5 pt-2.5 pb-5" onClick={(event) => event.stopPropagation()}>
-            <div className="mx-auto mb-4 h-[3px] w-9 rounded-full bg-[#e3ddd6]" />
+          <div className="max-h-[88%] overflow-y-auto rounded-t-[1.7rem] bg-paper px-5 pt-2.5 pb-5" onClick={(event) => event.stopPropagation()}>
+            <div className="mx-auto mb-4 h-[3px] w-9 rounded-full bg-line" />
             <h2 className="font-serif text-[1.85rem] leading-none font-semibold tracking-tight">{service?.name ?? jobTitle}</h2>
-            <p className="mt-1.5 text-[15px] text-[#8a847e]">{provider.name} · {provider.area}</p>
-            <div className="mt-4 rounded-[1.15rem] bg-[#f3ece3] px-4 py-3.5">
+            <p className="mt-1.5 text-[15px] text-muted">{provider.name} · {provider.area}</p>
+            <div className="mt-4 rounded-[1.15rem] bg-sand px-4 py-3.5">
               <div className="flex items-center justify-between">
                 <span className="text-[15px] font-bold">Minimibelopp</span>
                 <span className="text-[17px] font-bold tracking-tight">{kr(provider.price)}</span>
               </div>
-              <p className="mt-2.5 text-[14.5px] leading-[1.45] text-[#6e6964]">
+              <p className="mt-2.5 text-[14.5px] leading-[1.45] text-muted">
                 Beloppet reserveras på ditt kort. Inget dras om arbetet inte utförs — pengarna släpps automatiskt tillbaka. Förfrågan skickas till {provider.name.split(" ")[0]}, och ni kan chatta vidare om {subject(provider.name)} accepterar uppdraget.
               </p>
             </div>
@@ -506,13 +513,13 @@ export function ChatSheet() {
                 id="rebook-when"
                 value={rebookWhen}
                 onChange={(event) => setRebookWhen(event.target.value as (typeof whenOptions)[number])}
-                className="w-full appearance-none rounded-[1.15rem] border border-[#e6e1db] bg-white px-4 py-3 pr-10 text-[15px] outline-none"
+                className="w-full appearance-none rounded-[1.15rem] border border-line bg-white px-4 py-3 pr-10 text-[15px] outline-none"
               >
                 {whenOptions.map((option) => (
                   <option key={option}>{option}</option>
                 ))}
               </select>
-              <ChevronDown className="pointer-events-none absolute top-1/2 right-4 size-4 -translate-y-1/2 text-[#8a847e]" />
+              <ChevronDown className="pointer-events-none absolute top-1/2 right-4 size-4 -translate-y-1/2 text-muted" />
             </div>
             <button
               type="button"
@@ -534,19 +541,19 @@ export function ChatSheet() {
                 setHelp(null);
                 showToast("Förfrågan skickad");
               }}
-              className="mt-3.5 h-12 w-full rounded-full bg-[#2a211c] text-[16px] font-semibold text-white"
+              className="mt-3.5 h-12 w-full rounded-full bg-brown text-[16px] font-semibold text-white"
             >
               Reservera
             </button>
-            <button type="button" onClick={() => setHelp(null)} className="mt-2.5 h-12 w-full rounded-full border border-[#e4dfd8] bg-white text-[16px] font-semibold">
+            <button type="button" onClick={() => setHelp(null)} className="mt-2.5 h-12 w-full rounded-full border border-line bg-white text-[16px] font-semibold">
               Avbryt
             </button>
           </div>
         </div>
       ) : help ? (
         <div className="absolute inset-0 z-20 flex flex-col justify-end bg-black/25" onClick={() => setHelp(null)}>
-          <div className="max-h-[85%] overflow-y-auto rounded-t-[1.6rem] bg-[#f7f3ee] px-4 pt-3 pb-6" onClick={(event) => event.stopPropagation()}>
-            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-[#e0d8cf]" />
+          <div className="max-h-[85%] overflow-y-auto rounded-t-[1.6rem] bg-cream px-4 pt-3 pb-6" onClick={(event) => event.stopPropagation()}>
+            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-line" />
             <div className="mb-3 flex items-center justify-between">
               <h3 className="font-serif text-[1.7rem] leading-none">
                 {help === "change" ? "Ändra bokning" : help === "problem" ? "Beskriv problemet" : help === "sure" ? "Är du säker?" : help === "detail" ? issue : "Avboka"}
@@ -556,7 +563,7 @@ export function ChatSheet() {
               </button>
             </div>
             {help === "menu" || help === "report" ? (
-              <div className="overflow-hidden rounded-[1.2rem] border border-[#efeae4] bg-white">
+              <div className="overflow-hidden rounded-[1.2rem] border border-line bg-white">
                 {issues.filter((item) => help === "menu" || item.id !== "cancel").map((item, index) => {
                   const Icon = item.icon;
                   return (
@@ -564,11 +571,16 @@ export function ChatSheet() {
                       key={item.id}
                       type="button"
                       onClick={() => {
+                        if (item.id === "support") {
+                          setHelp(null);
+                          openSupportSheet(item.label);
+                          return;
+                        }
                         setIssue(item.label);
                         setNote("");
                         setHelp("sure");
                       }}
-                      className={cn("flex w-full items-center gap-3 px-3 py-3 text-left", index > 0 && "border-t border-[#f0ebe6]")}
+                      className={cn("flex w-full items-center gap-3 px-3 py-3 text-left", index > 0 && "border-t border-line")}
                     >
                       <Icon className="size-5" strokeWidth={1.6} />
                       <span className="flex-1 text-[15px]">{item.label}</span>
@@ -580,9 +592,9 @@ export function ChatSheet() {
             ) : null}
             {help === "sure" ? (
               <div>
-                <p className="text-sm leading-snug text-[#5c564f]">Vill du avboka uppdraget på grund av: {issue}? Inget dras från kontot.</p>
+                <p className="text-sm leading-snug text-muted">Vill du avboka uppdraget på grund av: {issue}? Inget dras från kontot.</p>
                 <div className="mt-4 grid grid-cols-2 gap-2">
-                  <button type="button" onClick={() => { setNote(""); setHelp("problem"); }} className="rounded-full border border-[#e4dfd8] bg-white py-3 font-semibold">
+                  <button type="button" onClick={() => { setNote(""); setHelp("problem"); }} className="rounded-full border border-line bg-white py-3 font-semibold">
                     Nej
                   </button>
                   <button
@@ -595,7 +607,7 @@ export function ChatSheet() {
                       setNote("");
                       setHelp("problem");
                     }}
-                    className="rounded-full bg-[#2a211c] py-3 font-semibold text-white"
+                    className="rounded-full bg-brown py-3 font-semibold text-white"
                   >
                     Avboka
                   </button>
@@ -604,10 +616,10 @@ export function ChatSheet() {
             ) : null}
             {help === "problem" ? (
               <div>
-                <p className="text-sm text-[#5c564f]">Berätta kort vad som hänt, om du vill.</p>
-                <textarea value={note} onChange={(event) => setNote(event.target.value)} rows={3} placeholder="Beskriv problemet" className="mt-3 w-full rounded-2xl border border-[#efeae4] bg-white px-3 py-2 text-sm outline-none" />
+                <p className="text-sm text-muted">Berätta kort vad som hänt, om du vill.</p>
+                <textarea value={note} onChange={(event) => setNote(event.target.value)} rows={3} placeholder="Beskriv problemet" className="mt-3 w-full rounded-2xl border border-line bg-white px-3 py-2 text-sm outline-none" />
                 <div className="mt-3 grid grid-cols-2 gap-2">
-                  <button type="button" onClick={() => setHelp(null)} className="rounded-full border border-[#e4dfd8] bg-white py-3 font-semibold">
+                  <button type="button" onClick={() => setHelp(null)} className="rounded-full border border-line bg-white py-3 font-semibold">
                     Hoppa över
                   </button>
                   <button
@@ -618,7 +630,7 @@ export function ChatSheet() {
                       setNote("");
                       setHelp(null);
                     }}
-                    className="rounded-full bg-[#2a211c] py-3 font-semibold text-white"
+                    className="rounded-full bg-brown py-3 font-semibold text-white"
                   >
                     Skicka
                   </button>
@@ -627,16 +639,17 @@ export function ChatSheet() {
             ) : null}
             {help === "detail" && issue !== "Avboka uppdraget" ? (
               <div>
-                <p className="text-sm text-[#5c564f]">Berätta kort vad som hänt så att vi kan hjälpa dig.</p>
-                <textarea value={note} onChange={(event) => setNote(event.target.value)} rows={3} placeholder="Beskriv problemet" className="mt-3 w-full rounded-2xl border border-[#efeae4] bg-white px-3 py-2 text-sm outline-none" />
+                <p className="text-sm text-muted">Berätta kort vad som hänt så att vi kan hjälpa dig.</p>
+                <textarea value={note} onChange={(event) => setNote(event.target.value)} rows={3} placeholder="Beskriv problemet" className="mt-3 w-full rounded-2xl border border-line bg-white px-3 py-2 text-sm outline-none" />
                 <button
                   type="button"
                   onClick={() => {
                     appendChat(provider.id, { id: `report-${Date.now()}`, from: "me", text: note.trim() ? `${issue}: ${note.trim()}` : issue, time: "21:40" });
                     setHelp(null);
+                    openSupportSheet(issue);
                     showToast("Rapporten är skickad");
                   }}
-                  className="mt-3 w-full rounded-full bg-[#6e5636] py-3 font-semibold text-white"
+                  className="mt-3 w-full rounded-full bg-brown py-3 font-semibold text-white"
                 >
                   Skicka rapport
                 </button>
@@ -709,7 +722,7 @@ function ChangeWhen({
 
   return (
     <div>
-      {hint ? <p className="text-sm text-[#5c564f]">{hint}</p> : null}
+      {hint ? <p className="text-sm text-muted">{hint}</p> : null}
       <div className="mt-2 grid grid-cols-2 gap-2">
         <div>
           <p className="mb-1 text-xs font-semibold">{dateLabel}</p>
@@ -729,7 +742,7 @@ function ChangeWhen({
               const past = value < today;
               const active = date?.toDateString() === value.toDateString();
               return (
-                <button key={day} type="button" disabled={past} onClick={() => onDate(value)} className={cn("mx-auto grid size-5 place-items-center rounded-full", active && "bg-[#6e5636] text-white", past && "text-muted/40")}>
+                <button key={day} type="button" disabled={past} onClick={() => onDate(value)} className={cn("mx-auto grid size-5 place-items-center rounded-full", active && "bg-brown text-white", past && "text-muted/40")}>
                   {day}
                 </button>
               );
@@ -738,7 +751,7 @@ function ChangeWhen({
         </div>
         <div>
           <p className="text-xs font-semibold">Tid</p>
-          <div className="relative mt-1 h-28 overflow-hidden rounded-2xl bg-[#f6f1ea]">
+          <div className="relative mt-1 h-28 overflow-hidden rounded-2xl bg-sand">
             <div className="pointer-events-none absolute inset-x-1 top-1/2 z-0 h-8 -translate-y-1/2 rounded-xl bg-white" />
             <span className="pointer-events-none absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2 text-sm font-semibold">:</span>
             <div className="relative z-10 grid h-full grid-cols-2">
@@ -748,7 +761,7 @@ function ChangeWhen({
           </div>
         </div>
       </div>
-      <button type="button" onClick={onSend} className="mt-3 w-full rounded-full bg-[#6e5636] py-3 font-semibold text-white">
+      <button type="button" onClick={onSend} className="mt-3 w-full rounded-full bg-brown py-3 font-semibold text-white">
         {submitLabel}
       </button>
     </div>
@@ -800,6 +813,7 @@ function MiniWheel({ values, value, onChange }: { values: number[]; value: numbe
 }
 
 function SyncedPeerChat({
+  peerId,
   peerName,
   messages,
   draft,
@@ -807,6 +821,7 @@ function SyncedPeerChat({
   onSend,
   onClose,
 }: {
+  peerId: string;
   peerName: string;
   messages: ChatMsg[];
   draft: string;
@@ -829,24 +844,30 @@ function SyncedPeerChat({
     .toUpperCase();
 
   return (
-    <div className="absolute inset-0 z-30 flex flex-col bg-[#f7f3ee]">
+    <div className="absolute inset-0 z-30 flex flex-col bg-cream">
       <div className="flex items-center px-3 pt-3">
         <button type="button" aria-label="Tillbaka" onClick={onClose} className="grid size-9 place-items-center">
           <ArrowLeft className="size-5" />
         </button>
         <p className="flex-1 text-center font-serif text-[1.7rem] tracking-[0.28em]">VELIO</p>
-        <span className="size-9" />
+        <button type="button" aria-label="Ring" onClick={() => openCallSheet({ peerId, peerName })} className="grid size-9 place-items-center">
+          <Phone className="size-5" />
+        </button>
       </div>
       <div className="flex items-center gap-3 px-4 py-2">
-        <span className="grid size-12 shrink-0 place-items-center rounded-full bg-[#f3ece3] text-sm font-semibold">{initials}</span>
+        <span className="grid size-12 shrink-0 place-items-center rounded-full bg-sand text-sm font-semibold">{initials}</span>
         <div>
           <p className="text-lg font-semibold">{peerName}</p>
-          <p className="text-sm text-[#5c564f]">Synkad chatt</p>
+          <p className="text-sm text-muted">Synkad chatt</p>
         </div>
       </div>
       <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
         {messages.map((message) =>
-          message.card ? (
+          message.text === MISSED_CALL_TEXT ? (
+            <div key={message.id} className="mt-3">
+              <MissedCallCard time={message.time} />
+            </div>
+          ) : message.card ? (
             <div key={message.id} className="mt-3">
               <ChatCardView
                 message={message}
@@ -861,7 +882,7 @@ function SyncedPeerChat({
               <div
                 className={cn(
                   "max-w-[85%] rounded-[1.2rem] px-4 py-2.5 text-[15px]",
-                  message.from === "me" ? "rounded-br-md bg-[#6e5636] text-white" : "rounded-bl-md border border-[#efeae4] bg-white",
+                  message.from === "me" ? "rounded-br-md bg-brown text-white" : "rounded-bl-md border border-line bg-white",
                 )}
               >
                 <p>{message.text}</p>
@@ -882,9 +903,9 @@ function SyncedPeerChat({
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           placeholder="Skriv ett meddelande..."
-          className="min-w-0 flex-1 rounded-full border border-[#e6e1db] bg-white px-4 py-3 text-base outline-none"
+          className="min-w-0 flex-1 rounded-full border border-line bg-white px-4 py-3 text-base outline-none"
         />
-        <button type="submit" aria-label="Skicka" className="grid size-11 shrink-0 place-items-center rounded-full bg-[#6e5636] text-white">
+        <button type="submit" aria-label="Skicka" className="grid size-11 shrink-0 place-items-center rounded-full bg-brown text-white">
           <Send className="size-5" />
         </button>
       </form>
@@ -946,13 +967,13 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
   }, [lastId, messages.length, panel]);
 
   return (
-    <div className="absolute inset-0 z-30 flex flex-col bg-[#f7f3ee]">
+    <div className="absolute inset-0 z-30 flex flex-col bg-cream">
       <div className="flex items-center px-3 pt-3">
         <button type="button" aria-label="Tillbaka" onClick={onClose} className="grid size-9 place-items-center">
           <ArrowLeft className="size-5" />
         </button>
         <p className="flex-1 text-center font-serif text-[1.7rem] tracking-[0.28em]">VELIO</p>
-        <button type="button" aria-label="Ring" onClick={() => showToast("Ringer kunden…")} className="grid size-9 place-items-center">
+        <button type="button" aria-label="Ring" onClick={() => threadKey && openCallSheet({ peerId: threadKey, peerName: customerName })} className="grid size-9 place-items-center">
           <Phone className="size-5" />
         </button>
         <button type="button" aria-label="Mer" onClick={() => showToast("Fler val kommer")} className="grid size-9 place-items-center">
@@ -960,15 +981,15 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
         </button>
       </div>
       <div className="flex items-center gap-3 px-4 py-2">
-        <span className="relative grid size-12 shrink-0 place-items-center rounded-full bg-[#f3ece3] text-sm font-semibold">
+        <span className="relative grid size-12 shrink-0 place-items-center rounded-full bg-sand text-sm font-semibold">
           {initials}
-          <span className="absolute right-0.5 bottom-0.5 size-2.5 rounded-full border-2 border-[#f7f3ee] bg-[#3d8f4a]" />
+          <span className="absolute right-0.5 bottom-0.5 size-2.5 rounded-full border-2 border-[#f7f3ee] bg-ok" />
         </span>
         <div>
           <p className="flex items-center gap-1 text-lg font-semibold">
-            {customerName} <BadgeCheck className="size-4 fill-[#c4a15a] text-[#f7f3ee]" />
+            {customerName} <BadgeCheck className="size-4 fill-gold text-[#f7f3ee]" />
           </p>
-          <p className="text-sm text-[#5c564f]">Kund</p>
+          <p className="text-sm text-muted">Kund</p>
         </div>
       </div>
       <div className="mx-4 mt-1 flex items-start">
@@ -978,11 +999,11 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
           return (
             <div key={stage.label} className="flex min-w-0 flex-1 flex-col items-center">
               <div className="flex w-full items-center">
-                <span className={index === 0 ? "h-px flex-1" : cn("h-px flex-1", on ? "bg-[#6e5636]" : "bg-[#e6dfd6]")} />
-                <span className={cn("grid size-8 shrink-0 place-items-center rounded-full border", on ? "border-[#6e5636] bg-[#6e5636] text-white" : "border-[#e6dfd6] bg-white text-[#5c564f]")}>
+                <span className={index === 0 ? "h-px flex-1" : cn("h-px flex-1", on ? "bg-brown" : "bg-line")} />
+                <span className={cn("grid size-8 shrink-0 place-items-center rounded-full border", on ? "border-brown bg-brown text-white" : "border-line bg-white text-muted")}>
                   <Icon className="size-3.5" />
                 </span>
-                <span className={index === stages.length - 1 ? "h-px flex-1" : cn("h-px flex-1", index < step ? "bg-[#6e5636]" : "bg-[#e6dfd6]")} />
+                <span className={index === stages.length - 1 ? "h-px flex-1" : cn("h-px flex-1", index < step ? "bg-brown" : "bg-line")} />
               </div>
               <p className="mt-1 text-center text-[10px] leading-tight">{stage.label}</p>
             </div>
@@ -991,18 +1012,18 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
       </div>
 
       <div ref={thread} className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-        <div className="rounded-[1.2rem] border border-[#efeae4] bg-white p-2.5">
+        <div className="rounded-[1.2rem] border border-line bg-white p-2.5">
           <div className="flex items-center gap-3">
           <img src={asset("/velio/tile-stad.jpg")} alt="" className="size-16 rounded-xl object-cover" />
           <div className="min-w-0 flex-1">
             <p className="font-semibold">Städning</p>
-            <p className="mt-0.5 flex items-center gap-1 text-sm text-[#5c564f]"><MapPin className="size-3.5" /> Södermalm</p>
-            <p className="flex items-center gap-1 text-sm text-[#5c564f]"><Calendar className="size-3.5" /> {when}</p>
+            <p className="mt-0.5 flex items-center gap-1 text-sm text-muted"><MapPin className="size-3.5" /> Södermalm</p>
+            <p className="flex items-center gap-1 text-sm text-muted"><Calendar className="size-3.5" /> {when}</p>
           </div>
-          <span className="rounded-full bg-[#f6f1ea] px-3 py-1.5 text-sm font-semibold">1 200 kr</span>
+          <span className="rounded-full bg-sand px-3 py-1.5 text-sm font-semibold">1 200 kr</span>
           </div>
           {cancelled ? (
-            <button type="button" onClick={() => showToast("Kunden kan boka om jobbet")} className="mt-2 flex w-full items-center justify-center gap-1 rounded-full bg-[#6e5636] py-2.5 text-sm font-semibold text-white">
+            <button type="button" onClick={() => showToast("Kunden kan boka om jobbet")} className="mt-2 flex w-full items-center justify-center gap-1 rounded-full bg-brown py-2.5 text-sm font-semibold text-white">
               Boka om
             </button>
           ) : null}
@@ -1010,7 +1031,9 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
 
         {messages.map((message) => (
           <div key={message.id} className="mt-3">
-            {message.card?.kind === "request" ? (
+            {message.text === MISSED_CALL_TEXT ? (
+              <MissedCallCard time={message.time} />
+            ) : message.card?.kind === "request" ? (
               <ChatCardView
                 message={message}
                 onDetails={() => showToast(message.card?.kind === "request" ? message.card.about || message.card.service : "Detaljer")}
@@ -1021,7 +1044,7 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
             ) : message.card?.kind === "slot" ? (
               <TimeConfirmedCard when={message.card.when} place={message.card.place} service={message.card.service} time={message.time ?? "14:05"} />
             ) : message.card?.kind === "rebook" ? (
-              <div className="rounded-[1.25rem] border border-[#efeae4] bg-white px-4 py-4">
+              <div className="rounded-[1.25rem] border border-line bg-white px-4 py-4">
                 <h3 className="text-lg font-semibold">Ny förfrågan</h3>
                 <div className="mt-2 space-y-1 text-[15px]">
                   <p><span className="font-semibold">Tjänst:</span> {message.card.service}</p>
@@ -1039,7 +1062,7 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
                         pushLocal({ id: `no-${Date.now()}`, from: "me", text: "Jag kan tyvärr inte ta jobbet.", time: "21:50" });
                         showToast("Förfrågan nekad");
                       }}
-                      className="rounded-full border border-[#e6dfd6] py-2.5 text-sm font-semibold"
+                      className="rounded-full border border-line py-2.5 text-sm font-semibold"
                     >
                       Neka
                     </button>
@@ -1051,17 +1074,17 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
                         pushLocal({ id: `yes-${Date.now()}`, from: "me", text: `Jag tar uppdraget: ${job?.service ?? ""} ${job?.when ?? ""}.`, time: "21:50" });
                         showToast("Förfrågan godkänd");
                       }}
-                      className="rounded-full bg-[#6e5636] py-2.5 text-sm font-semibold text-white"
+                      className="rounded-full bg-brown py-2.5 text-sm font-semibold text-white"
                     >
                       Godkänn
                     </button>
                   </div>
                 ) : (
-                  <p className="mt-3 text-sm text-[#5c564f]">{message.card.status === "accepted" ? "Godkänd" : "Nekad"}</p>
+                  <p className="mt-3 text-sm text-muted">{message.card.status === "accepted" ? "Godkänd" : "Nekad"}</p>
                 )}
               </div>
             ) : message.card?.kind === "cancelled" ? (
-              <div className="rounded-[1.25rem] border border-[#efeae4] bg-white px-4 py-4">
+              <div className="rounded-[1.25rem] border border-line bg-white px-4 py-4">
                 <h3 className="text-lg font-semibold">Jobbet avbokat</h3>
                 <p className="mt-2 text-[15px]">Reservera jobbet igen för att chatta med {customerName}.</p>
               </div>
@@ -1079,36 +1102,36 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
                     onEdit={() => showToast("Priset är redan skickat")}
                     onSend={() => showToast("Priset är redan skickat")}
                   />
-                  <p className="mt-1 text-right text-xs text-[#5c564f]">{message.time} ✓✓</p>
+                  <p className="mt-1 text-right text-xs text-muted">{message.time} ✓✓</p>
                 </div>
               </div>
             ) : message.card?.kind === "paid" ? (
               <div className="flex justify-start">
-                <div className="max-w-[88%] rounded-[1.2rem] border border-[#efeae4] bg-white px-3 py-2.5">
+                <div className="max-w-[88%] rounded-[1.2rem] border border-line bg-white px-3 py-2.5">
                   <div className="flex items-center gap-2">
-                    <span className="grid size-8 place-items-center rounded-full bg-[#f6f1ea]"><CreditCard className="size-4" /></span>
+                    <span className="grid size-8 place-items-center rounded-full bg-sand"><CreditCard className="size-4" /></span>
                     <span>
                       <span className="block font-semibold">Betalning mottagen</span>
-                      <span className="block text-sm text-[#5c564f]">{message.card.amount.toLocaleString("sv-SE")} kr har betalats av kunden.</span>
+                      <span className="block text-sm text-muted">{message.card.amount.toLocaleString("sv-SE")} kr har betalats av kunden.</span>
                     </span>
                   </div>
-                  <p className="mt-1 text-right text-xs text-[#5c564f]">{message.time}</p>
+                  <p className="mt-1 text-right text-xs text-muted">{message.time}</p>
                 </div>
               </div>
             ) : message.card?.kind === "reschedule" ? (
-              <div className="rounded-[1.2rem] border border-[#efeae4] bg-white px-3 py-3">
+              <div className="rounded-[1.2rem] border border-line bg-white px-3 py-3">
                 <p className="font-semibold">Ny förfrågan</p>
                 <p className="mt-1 text-sm">{message.card.service}</p>
-                <p className="text-sm text-[#5c564f]">{message.card.when}</p>
-                <p className="text-sm text-[#5c564f]">{message.card.place}</p>
+                <p className="text-sm text-muted">{message.card.when}</p>
+                <p className="text-sm text-muted">{message.card.place}</p>
                 <div className="mt-3 grid grid-cols-2 gap-2">
-                  <button type="button" onClick={() => { pushLocal({ id: `no-${Date.now()}`, from: "me", text: "Jag kan tyvärr inte den tiden.", time: "21:50" }); showToast("Förfrågan avböjd"); }} className="rounded-full border border-[#e6dfd6] py-2 text-sm font-semibold">Avböj</button>
-                  <button type="button" onClick={() => { pushLocal({ id: `yes-${Date.now()}`, from: "me", text: `Jag tar den nya tiden: ${message.card && message.card.kind === "reschedule" ? message.card.when : ""}.`, time: "21:50" }); showToast("Ny tid accepterad"); }} className="rounded-full bg-[#6e5636] py-2 text-sm font-semibold text-white">Acceptera</button>
+                  <button type="button" onClick={() => { pushLocal({ id: `no-${Date.now()}`, from: "me", text: "Jag kan tyvärr inte den tiden.", time: "21:50" }); showToast("Förfrågan avböjd"); }} className="rounded-full border border-line py-2 text-sm font-semibold">Avböj</button>
+                  <button type="button" onClick={() => { pushLocal({ id: `yes-${Date.now()}`, from: "me", text: `Jag tar den nya tiden: ${message.card && message.card.kind === "reschedule" ? message.card.when : ""}.`, time: "21:50" }); showToast("Ny tid accepterad"); }} className="rounded-full bg-brown py-2 text-sm font-semibold text-white">Acceptera</button>
                 </div>
               </div>
             ) : (
               <div className={message.from === "me" ? "flex justify-end" : "flex justify-start"}>
-                <div className={message.from === "me" ? "max-w-[78%] rounded-[1.2rem] rounded-br-md bg-[#6e5636] px-4 py-2.5 text-[15px] text-white" : "max-w-[85%] rounded-[1.2rem] rounded-bl-md border border-[#efeae4] bg-white px-4 py-2.5 text-[15px]"}>
+                <div className={message.from === "me" ? "max-w-[78%] rounded-[1.2rem] rounded-br-md bg-brown px-4 py-2.5 text-[15px] text-white" : "max-w-[85%] rounded-[1.2rem] rounded-bl-md border border-line bg-white px-4 py-2.5 text-[15px]"}>
                   <p className="whitespace-pre-line">{message.text}</p>
                   <p className={message.from === "me" ? "mt-1 text-right text-xs text-white/80" : "mt-1 text-right text-xs text-muted"}>
                     {message.time} {message.from === "me" ? "✓✓" : ""}
@@ -1122,18 +1145,18 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
 
       {cancelled ? null : (
       <>
-      <div className="mx-3 grid grid-cols-2 gap-2 rounded-[1.2rem] border border-[#efeae4] bg-white p-2">
+      <div className="mx-3 grid grid-cols-2 gap-2 rounded-[1.2rem] border border-line bg-white p-2">
         <WorkerAction icon={Calendar} label="Bekräfta tid" active={panel === "time"} onClick={() => setPanel(panel === "time" ? null : "time")} />
         <WorkerAction icon={Coins} label="Skicka slutpris" active={panel === "price"} onClick={() => setPanel(panel === "price" ? null : "price")} />
       </div>
 
       {panel === "time" ? (
-        <div className="mx-3 mt-2 rounded-[1.2rem] border border-[#efeae4] bg-white p-3">
+        <div className="mx-3 mt-2 rounded-[1.2rem] border border-line bg-white p-3">
           <div className="mb-2 flex items-start gap-2">
-            <span className="grid size-9 place-items-center rounded-full border border-[#efeae4]"><Calendar className="size-4" /></span>
+            <span className="grid size-9 place-items-center rounded-full border border-line"><Calendar className="size-4" /></span>
             <span>
               <span className="block font-semibold">Bekräfta tid</span>
-              <span className="block text-sm text-[#5c564f]">Välj datum och starttid, och skicka till kunden.</span>
+              <span className="block text-sm text-muted">Välj datum och starttid, och skicka till kunden.</span>
             </span>
           </div>
           <ChangeWhen
@@ -1203,8 +1226,13 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
       {cancelled ? (
         <p className="px-4 py-4 text-center text-[15px]">Reservera jobbet igen för att chatta med {customerName}.</p>
       ) : (
+      <div className="border-t border-line px-3 pt-2 pb-3">
+        <p className="mb-2 flex items-start gap-1.5 px-1 text-[11px] leading-snug text-muted">
+          <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-brown" aria-hidden="true" />
+          Håll kontakten i VELIO. Dela inte personnummer och betala inte utanför appen.
+        </p>
       <form
-        className="flex items-center gap-2 px-3 pt-2 pb-4"
+        className="flex items-center gap-2"
         onSubmit={(event) => {
           event.preventDefault();
           if (!draft.trim()) return;
@@ -1212,10 +1240,10 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
           setDraft("");
         }}
       >
-        <button type="button" aria-label="Bifoga" onClick={() => showToast("Bifoga bild kommer snart")} className="grid size-11 shrink-0 place-items-center rounded-full border border-[#e6e1db] bg-white">
+        <button type="button" aria-label="Bifoga" onClick={() => showToast("Bifoga bild kommer snart")} className="grid size-11 shrink-0 place-items-center rounded-full border border-line bg-white">
           <Plus className="size-5" />
         </button>
-        <input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Skriv ett meddelande..." className="min-w-0 flex-1 rounded-full border border-[#e6e1db] bg-white px-4 py-3 text-base outline-none" />
+        <input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Skriv ett meddelande..." className="min-w-0 flex-1 rounded-full border border-line bg-white px-4 py-3 text-base outline-none" />
         <button
           type="button"
           aria-label="Röst"
@@ -1224,11 +1252,12 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
             say(draft.trim());
             setDraft("");
           }}
-          className="grid size-11 shrink-0 place-items-center rounded-full bg-[#6e5636] text-white"
+          className="grid size-11 shrink-0 place-items-center rounded-full bg-brown text-white"
         >
           <Mic className="size-5" />
         </button>
       </form>
+      </div>
       )}
     </div>
   );
@@ -1236,16 +1265,16 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
 
 function CustomerPayCard({ amount, onPay }: { amount: number; onPay: () => void }) {
   return (
-    <div className="rounded-[1.25rem] border border-[#efeae4] bg-white px-4 py-4">
+    <div className="rounded-[1.25rem] border border-line bg-white px-4 py-4">
       <div className="mb-3 flex items-center gap-2">
         <CreditCard className="size-5" />
         <span>
           <span className="block text-lg font-semibold leading-tight">Betalning</span>
-          <span className="text-sm text-[#5c564f]">Slutpris för uppdraget</span>
+          <span className="text-sm text-muted">Slutpris för uppdraget</span>
         </span>
       </div>
       <p className="mt-3 font-serif text-[2.6rem] leading-none">{amount.toLocaleString("sv-SE")} kr</p>
-      <button type="button" onClick={onPay} className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-[#6e5636] py-3.5 text-base font-semibold text-white">
+      <button type="button" onClick={onPay} className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-brown py-3.5 text-base font-semibold text-white">
         Välj betalningssätt
         <ChevronRight className="size-4" />
       </button>
@@ -1288,31 +1317,31 @@ function FinalPriceCard({
   onSend?: () => void;
 }) {
   return (
-    <div className="rounded-[1.25rem] border border-[#efeae4] bg-white px-4 py-4">
+    <div className="rounded-[1.25rem] border border-line bg-white px-4 py-4">
       <div className="mb-3 flex items-start gap-2">
         <Coins className="mt-0.5 size-5" />
         <span className="min-w-0 flex-1">
           <span className="block text-lg font-semibold leading-tight">Slutpris</span>
-          <span className="block text-sm text-[#5c564f]">{service}</span>
+          <span className="block text-sm text-muted">{service}</span>
         </span>
         {quiet ? null : (
-          <button type="button" onClick={onEdit} className="flex items-center gap-1 rounded-full border border-[#e4dfd8] bg-white px-2.5 py-1 text-sm">
+          <button type="button" onClick={onEdit} className="flex items-center gap-1 rounded-full border border-line bg-white px-2.5 py-1 text-sm">
             <Pencil className="size-3.5" /> Ändra
           </button>
         )}
       </div>
       {editing ? (
-        <input value={price} inputMode="numeric" onChange={(event) => onPrice?.(event.target.value.replace(/[^\d]/g, ""))} className="mt-1 w-full rounded-2xl border border-[#e4dfd8] bg-white px-3 py-2 text-2xl font-semibold outline-none" />
+        <input value={price} inputMode="numeric" onChange={(event) => onPrice?.(event.target.value.replace(/[^\d]/g, ""))} className="mt-1 w-full rounded-2xl border border-line bg-white px-3 py-2 text-2xl font-semibold outline-none" />
       ) : (
         <p className="text-3xl font-semibold tracking-tight">{amount.toLocaleString("sv-SE")} kr</p>
       )}
-      <p className="text-sm text-[#5c564f]">Inkl. moms</p>
-      <div className="mt-3 space-y-1 border-t border-[#efeae4] pt-3 text-[15px]">
+      <p className="text-sm text-muted">Inkl. moms</p>
+      <div className="mt-3 space-y-1 border-t border-line pt-3 text-[15px]">
         <p><span className="font-semibold">Tid:</span> {when.replace(/\s*[–-]\s*\d{1,2}:\d{2}\s*$/, "")}</p>
         <p><span className="font-semibold">Plats:</span> {place}</p>
       </div>
       {quiet ? null : (
-        <button type="button" onClick={onSend} className="mt-4 flex w-full items-center justify-center gap-2 rounded-full border border-[#e4dfd8] bg-white py-3 font-semibold">
+        <button type="button" onClick={onSend} className="mt-4 flex w-full items-center justify-center gap-2 rounded-full border border-line bg-white py-3 font-semibold">
           <Send className="size-4" /> Skicka pris till kund
         </button>
       )}
@@ -1322,7 +1351,7 @@ function FinalPriceCard({
 
 function StatusChip({ icon: Icon, label, onClick }: { icon: LucideIcon; label: string; onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} className="flex shrink-0 items-center gap-1.5 rounded-full border border-[#efeae4] bg-white px-3 py-2 text-sm">
+    <button type="button" onClick={onClick} className="flex shrink-0 items-center gap-1.5 rounded-full border border-line bg-white px-3 py-2 text-sm">
       <Icon className="size-4" /> {label}
     </button>
   );
@@ -1334,7 +1363,7 @@ function TimeConfirmedCard({ when, place, time }: { when: string; place: string;
   const date = clock ? when.replace(/,?\s*\d{1,2}:\d{2}\s*$/, "") : when;
   return (
     <div>
-      <div className="rounded-[1.25rem] border border-[#efeae4] bg-white px-4 py-4">
+      <div className="rounded-[1.25rem] border border-line bg-white px-4 py-4">
         <div className="mb-3 flex items-center gap-2">
           <Calendar className="size-5" />
           <h3 className="text-lg font-semibold">Tid bekräftad</h3>
@@ -1344,7 +1373,7 @@ function TimeConfirmedCard({ when, place, time }: { when: string; place: string;
           {clock ? <p><span className="font-semibold">Tid:</span> {clock}</p> : null}
           <p><span className="font-semibold">Plats:</span> {place}</p>
         </div>
-        <button type="button" onClick={() => showToast("Tid tillagd i kalendern")} className="mt-4 w-full rounded-full border border-[#e4dfd8] py-3 text-[15px] font-semibold">
+        <button type="button" onClick={() => showToast("Tid tillagd i kalendern")} className="mt-4 w-full rounded-full border border-line py-3 text-[15px] font-semibold">
           Lägg i kalender
         </button>
       </div>
@@ -1355,7 +1384,7 @@ function TimeConfirmedCard({ when, place, time }: { when: string; place: string;
 
 function WorkerAction({ icon: Icon, label, active, onClick }: { icon: LucideIcon; label: string; active?: boolean; onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} className={cn("flex flex-col items-center gap-1 rounded-2xl border px-1 py-2 text-center text-[11px] leading-tight", active ? "border-[#2a211c] bg-white font-semibold" : "border-[#efeae4] bg-white")}>
+    <button type="button" onClick={onClick} className={cn("flex flex-col items-center gap-1 rounded-2xl border px-1 py-2 text-center text-[11px] leading-tight", active ? "border-[#2a211c] bg-white font-semibold" : "border-line bg-white")}>
       <Icon className="size-5" />
       {label}
     </button>
@@ -1394,9 +1423,9 @@ function ChatCardView({
 
   return (
     <div>
-      <div className="rounded-[1.25rem] border border-[#efeae4] bg-white px-4 py-4">
+      <div className="rounded-[1.25rem] border border-line bg-white px-4 py-4">
         <div className="mb-3 flex items-center gap-2">
-          <Icon className={card.kind === "enroute" ? "size-5 fill-[#2a211c] text-[#2a211c]" : "size-5"} />
+          <Icon className={card.kind === "enroute" ? "size-5 fill-[#2a211c] text-ink" : "size-5"} />
           <h3 className="text-lg font-semibold">{title}</h3>
         </div>
         {card.kind === "request" ? (
@@ -1421,7 +1450,7 @@ function ChatCardView({
             <p className="text-[15px] font-medium">{card.eta}</p>
             <div className="relative mt-3 h-36 overflow-hidden rounded-2xl">
               <img src={asset("/velio/map-stockholm.jpg")} alt="" className="h-full w-full object-cover" />
-              <MapPin className="absolute top-1/2 left-1/2 size-8 -translate-x-1/2 -translate-y-full fill-[#2a211c] text-[#2a211c]" />
+              <MapPin className="absolute top-1/2 left-1/2 size-8 -translate-x-1/2 -translate-y-full fill-[#2a211c] text-ink" />
             </div>
           </div>
         ) : null}
@@ -1434,19 +1463,19 @@ function ChatCardView({
         ) : null}
         {takePending && message.from === "them" && onAnswerTake ? (
           <div className="mt-4 grid grid-cols-2 gap-2">
-            <button type="button" onClick={() => onAnswerTake("declined")} className="rounded-full border border-[#e4dfd8] py-3 text-[15px] font-semibold">
+            <button type="button" onClick={() => onAnswerTake("declined")} className="rounded-full border border-line py-3 text-[15px] font-semibold">
               Avböj
             </button>
-            <button type="button" onClick={() => onAnswerTake("accepted")} className="rounded-full bg-[#6e5636] py-3 text-[15px] font-semibold text-white">
+            <button type="button" onClick={() => onAnswerTake("accepted")} className="rounded-full bg-brown py-3 text-[15px] font-semibold text-white">
               Godkänn
             </button>
           </div>
         ) : takeDone ? (
-          <p className="mt-3 text-sm text-[#5c564f]">{card.status === "accepted" ? "Godkänd" : "Avböjd"}</p>
+          <p className="mt-3 text-sm text-muted">{card.status === "accepted" ? "Godkänd" : "Avböjd"}</p>
         ) : takePending && message.from === "me" ? (
-          <p className="mt-3 text-sm text-[#5c564f]">Väntar på att kunden svarar</p>
+          <p className="mt-3 text-sm text-muted">Väntar på att kunden svarar</p>
         ) : (
-          <button type="button" onClick={action.onClick} className="mt-4 w-full rounded-full border border-[#e4dfd8] py-3 text-[15px] font-semibold">
+          <button type="button" onClick={action.onClick} className="mt-4 w-full rounded-full border border-line py-3 text-[15px] font-semibold">
             {action.label}
           </button>
         )}
@@ -1569,16 +1598,27 @@ export function PaySheet() {
 
   return (
     <div className="absolute inset-0 z-40 flex flex-col justify-end bg-black/30" onClick={() => setSheet("chat")}>
-      <div role="dialog" aria-label="Betala" className="sheet-in rounded-t-[1.7rem] bg-[#fffcfa] px-5 pt-3 pb-6" onClick={(event) => event.stopPropagation()}>
-        <div className="mx-auto mb-4 h-[3px] w-9 rounded-full bg-[#e3ddd6]" />
+      <div role="dialog" aria-label="Betala" className="sheet-in rounded-t-[1.7rem] bg-paper px-5 pt-3 pb-8 shadow-soft" onClick={(event) => event.stopPropagation()}>
+        <div className="mx-auto mb-4 h-[3px] w-9 rounded-full bg-line" />
         <h2 className="font-serif text-[1.8rem] font-medium">Betala</h2>
         <p className="mt-1 text-sm text-muted">{provider?.name} · jobbet är slutfört</p>
-        <div className="mt-4 rounded-2xl bg-[#f3ece3] px-4 py-4">
-          <div className="flex items-center justify-between">
-            <span className="font-semibold">Att betala</span>
-            <span className="text-lg font-bold">{kr(amount)}</span>
+        <div className="mt-4 rounded-2xl border border-line bg-paper px-4 py-3 text-sm shadow-soft">
+          <div className="flex items-center justify-between py-1.5">
+            <span className="text-muted">Tjänst</span>
+            <span>{kr(booking?.cost ?? amount)}</span>
           </div>
-          <p className="mt-2 text-sm text-muted">Reservationen på {kr(booking?.holdKr ?? amount)} växlas till en dragning nu.</p>
+          <div className="flex items-center justify-between border-t border-line py-1.5">
+            <span className="text-muted">Reserverat tidigare</span>
+            <span>{kr(booking?.holdKr ?? amount)}</span>
+          </div>
+          <div className="flex items-center justify-between border-t border-line py-2">
+            <span className="font-semibold">Att betala nu</span>
+            <span className="text-lg font-semibold">{kr(amount)}</span>
+          </div>
+          <p className="flex items-start gap-2 border-t border-line pt-2 text-xs leading-snug text-muted">
+            <Lock className="mt-0.5 size-3.5 shrink-0 text-brown" aria-hidden="true" />
+            Säker betalning. Beloppet dras när jobbet är klart. Inget extra läggs på utöver raderna ovan.
+          </p>
         </div>
 
         <div className="mt-4 grid grid-cols-2 gap-2">
@@ -1599,8 +1639,8 @@ export function PaySheet() {
               }}
               className={
                 method === item.id
-                  ? "rounded-full bg-[#2a211c] py-2 text-sm font-semibold text-white"
-                  : "rounded-full border border-[#e6dfd6] bg-white py-2 text-sm font-semibold text-[#2a211c]"
+                  ? "rounded-full bg-brown py-2 text-sm font-semibold text-white"
+                  : "rounded-full border border-line bg-white py-2 text-sm font-semibold text-ink"
               }
             >
               {item.label}
@@ -1617,7 +1657,7 @@ export function PaySheet() {
               placeholder="Kortnummer"
               value={cardNumber}
               onChange={(e) => setCardNumber(e.target.value)}
-              className="h-12 w-full rounded-full border border-[#efeae4] bg-white px-4 text-[15px] outline-none"
+              className="h-12 w-full rounded-full border border-line bg-white px-4 text-[15px] outline-none"
             />
             <div className="grid grid-cols-2 gap-2">
               <input
@@ -1626,7 +1666,7 @@ export function PaySheet() {
                 placeholder="MM/ÅÅ"
                 value={expiry}
                 onChange={(e) => setExpiry(e.target.value)}
-                className="h-12 w-full rounded-full border border-[#efeae4] bg-white px-4 text-[15px] outline-none"
+                className="h-12 w-full rounded-full border border-line bg-white px-4 text-[15px] outline-none"
               />
               <input
                 inputMode="numeric"
@@ -1634,7 +1674,7 @@ export function PaySheet() {
                 placeholder="CVC"
                 value={cvc}
                 onChange={(e) => setCvc(e.target.value)}
-                className="h-12 w-full rounded-full border border-[#efeae4] bg-white px-4 text-[15px] outline-none"
+                className="h-12 w-full rounded-full border border-line bg-white px-4 text-[15px] outline-none"
               />
             </div>
           </div>
@@ -1663,7 +1703,7 @@ export function PaySheet() {
             else if (method === "swish") payWithSwish();
             else payWithCash();
           }}
-          className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#2a211c] font-semibold text-white disabled:opacity-60"
+          className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-brown font-semibold text-white disabled:opacity-60"
         >
           {method === "apple" ? (
             <>
@@ -1723,7 +1763,7 @@ export function RateSheet() {
   return (
     <div className="absolute inset-0 z-40 flex flex-col bg-black/20">
       <div className="h-16 shrink-0" />
-      <div role="dialog" aria-label="Betygsätt arbetet" className="sheet-in flex min-h-0 flex-1 flex-col rounded-t-[1.7rem] bg-[#f7f3ee]">
+      <div role="dialog" aria-label="Betygsätt arbetet" className="sheet-in flex min-h-0 flex-1 flex-col rounded-t-[1.7rem] bg-cream">
         <div className="flex items-center gap-3 px-4 py-4">
           <button type="button" aria-label="Stäng" onClick={() => setSheet("chat")} className="grid size-8 place-items-center">
             ×
@@ -1741,7 +1781,7 @@ export function RateSheet() {
             <div>
               <div className="flex items-center gap-1 text-lg font-semibold">
                 {provider?.name}
-                <BadgeCheck className="size-4 fill-[#c4a15a] text-[#f7f3ee]" />
+                <BadgeCheck className="size-4 fill-gold text-[#f7f3ee]" />
               </div>
               <p className="text-sm text-muted">{service?.name}</p>
             </div>
@@ -1749,7 +1789,7 @@ export function RateSheet() {
           <div className="mt-6 flex justify-center gap-2">
             {Array.from({ length: 5 }, (_, index) => (
               <button key={index} type="button" aria-label={`${index + 1} stjärnor`} onClick={() => setStars(index + 1)}>
-                <Star className={index < stars ? "size-9 fill-[#b08948] text-[#b08948]" : "size-9 text-[#b08948]"} />
+                <Star className={index < stars ? "size-9 fill-gold text-gold" : "size-9 text-gold"} />
               </button>
             ))}
           </div>
@@ -1760,7 +1800,7 @@ export function RateSheet() {
                 key={item.key}
                 type="button"
                 onClick={() => setTipKey(item.key)}
-                className={tipKey === item.key ? "rounded-2xl border-2 border-[#b08948] bg-[#f3ece3] py-2 text-center" : "rounded-2xl border border-[#e6e1db] bg-white py-2 text-center"}
+                className={tipKey === item.key ? "rounded-2xl border-2 border-gold bg-sand py-2 text-center" : "rounded-2xl border border-line bg-white py-2 text-center"}
               >
                 <span className="block text-sm font-semibold">{item.label}</span>
                 <span className="text-xs text-muted">{kr(item.amount)}</span>
@@ -1769,7 +1809,7 @@ export function RateSheet() {
             <button
               type="button"
               onClick={() => setTipKey("custom")}
-              className={tipKey === "custom" ? "rounded-2xl border-2 border-[#b08948] bg-[#f3ece3] py-2 text-center text-sm font-semibold" : "rounded-2xl border border-[#e6e1db] bg-white py-2 text-center text-sm font-semibold"}
+              className={tipKey === "custom" ? "rounded-2xl border-2 border-gold bg-sand py-2 text-center text-sm font-semibold" : "rounded-2xl border border-line bg-white py-2 text-center text-sm font-semibold"}
             >
               Eget
               <span className="block text-xs font-normal text-muted">belopp</span>
@@ -1781,12 +1821,12 @@ export function RateSheet() {
               value={custom}
               onChange={(event) => setCustom(event.target.value.replace(/[^\d]/g, ""))}
               placeholder="Belopp i kr"
-              className="mt-3 w-full rounded-2xl border border-[#e6e1db] bg-white px-4 py-3 outline-none"
+              className="mt-3 w-full rounded-2xl border border-line bg-white px-4 py-3 outline-none"
             />
           ) : null}
         </div>
         <div className="px-4 pb-5">
-          <button type="button" onClick={() => submitReview(stars, tip)} className="h-12 w-full rounded-full bg-[#9a7b45] font-semibold text-white">
+          <button type="button" onClick={() => submitReview(stars, tip)} className="h-12 w-full rounded-full bg-bronze font-semibold text-white">
             Skicka betyg & dricks
           </button>
         </div>
@@ -1817,24 +1857,24 @@ export function BookSheet() {
   const first = provider.name.split(" ")[0];
 
   return (
-    <div className="absolute inset-0 z-40 flex flex-col justify-end bg-black/30" onClick={closeSheet}>
+    <div className="absolute inset-0 z-40 flex flex-col justify-end bg-ink/45" onClick={closeSheet}>
       <div
         role="dialog"
         aria-label={service?.name ?? "Boka"}
-        className="sheet-in max-h-[88%] overflow-y-auto rounded-t-[1.7rem] bg-[#fffcfa] px-5 pt-2.5 pb-5"
+        className="sheet-in max-h-[88%] overflow-y-auto rounded-t-[1.7rem] bg-paper px-5 pt-2.5 pb-6 shadow-soft"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="mx-auto mb-4 h-[3px] w-9 rounded-full bg-[#e3ddd6]" />
+        <div className="mx-auto mb-4 h-[3px] w-9 rounded-full bg-line" />
         <h2 className="font-serif text-[1.85rem] leading-none font-semibold tracking-tight">{service?.name ?? "Boka"}</h2>
-        <p className="mt-1.5 text-[15px] text-[#8a847e]">
+        <p className="mt-1.5 text-[15px] text-muted">
           {provider.name} · {provider.area}
         </p>
-        <div className="mt-4 rounded-[1.15rem] bg-[#f3ece3] px-4 py-3.5">
+        <div className="mt-4 rounded-[1.15rem] bg-sand px-4 py-3.5">
           <div className="flex items-center justify-between">
             <span className="text-[15px] font-bold">Minimibelopp</span>
             <span className="text-[17px] font-bold tracking-tight">{kr(provider.price)}</span>
           </div>
-          <p className="mt-2.5 text-[14.5px] leading-[1.45] text-[#6e6964]">
+          <p className="mt-2.5 text-[14.5px] leading-[1.45] text-ink">
             Beloppet reserveras på ditt kort. Inget dras om arbetet inte utförs — pengarna släpps automatiskt tillbaka. Förfrågan skickas till {first}, och ni kan chatta vidare om {subject(provider.name)} accepterar uppdraget.
           </p>
         </div>
@@ -1846,13 +1886,13 @@ export function BookSheet() {
             id="when"
             value={when}
             onChange={(event) => setWhen(event.target.value as (typeof whenOptions)[number])}
-            className="w-full appearance-none rounded-[1.15rem] border border-[#e6e1db] bg-white px-4 py-3 pr-10 text-[15px] outline-none"
+            className="w-full appearance-none rounded-[1.15rem] border border-line bg-white px-4 py-3 pr-10 text-[15px] outline-none"
           >
             {whenOptions.map((option) => (
               <option key={option}>{option}</option>
             ))}
           </select>
-          <ChevronDown className="pointer-events-none absolute top-1/2 right-4 size-4 -translate-y-1/2 text-[#8a847e]" />
+          <ChevronDown className="pointer-events-none absolute top-1/2 right-4 size-4 -translate-y-1/2 text-muted" />
         </div>
         <p className="mt-4 mb-1.5 text-[15px] font-semibold">Adress</p>
         {addresses.length ? (
@@ -1865,30 +1905,30 @@ export function BookSheet() {
                   type="button"
                   aria-pressed={active}
                   onClick={() => setPlaceId(item.id)}
-                  className={cn("block w-full rounded-[1.15rem] border px-4 py-3 text-left text-sm", active ? "border-[#8a6a3d] bg-[#f6f1ea]" : "border-[#e6e1db] bg-white")}
+                  className={cn("block w-full rounded-[1.15rem] border px-4 py-3 text-left text-sm", active ? "border-bronze bg-sand" : "border-line bg-white")}
                 >
                   <span className="font-semibold">{item.label}</span>
-                  <span className="mt-0.5 block text-[#5c564f]">{item.line}</span>
+                  <span className="mt-0.5 block text-muted">{item.line}</span>
                 </button>
               );
             })}
           </div>
         ) : (
-          <button type="button" onClick={() => go("addresses")} className="h-11 w-full rounded-full border border-[#e6e1db] text-sm font-semibold">
+          <button type="button" onClick={() => go("addresses")} className="h-11 w-full rounded-full border border-line text-sm font-semibold">
             Lägg till en adress
           </button>
         )}
         <button
           type="button"
           onClick={() => confirmBook(when, addresses.find((item) => item.id === (placeId || primary?.id))?.line)}
-          className="mt-3.5 h-12 w-full rounded-full bg-[#2a211c] text-[16px] font-semibold text-white"
+          className="mt-3.5 h-12 w-full rounded-full bg-brown text-[16px] font-semibold text-white"
         >
           Reservera
         </button>
         <button
           type="button"
           onClick={closeSheet}
-          className="mt-2.5 h-12 w-full rounded-full border border-[#e4dfd8] bg-white text-[16px] font-semibold"
+          className="mt-2.5 h-12 w-full rounded-full border border-line bg-white text-[16px] font-semibold"
         >
           Avbryt
         </button>
@@ -1997,12 +2037,13 @@ export function ReceiptSheet() {
   const go = useVelio((state) => state.go);
   const rebook = useVelio((state) => state.rebook);
   const booking = bookings.find((item) => item.id === receiptId);
+  const showToast = useVelio((state) => state.showToast);
   if (!booking) return null;
   const service = serviceById(booking.serviceId);
   const provider = providerById(booking.providerId);
 
   return (
-    <FullScreen title="Bokningsdetaljer" onBack={closeSheet}>
+    <FullScreen title="Kvitto" onBack={closeSheet}>
       <div className="space-y-3 bg-soft px-5 py-5">
         <div className="flex items-center justify-between rounded-2xl bg-paper p-4">
           <div>
@@ -2030,20 +2071,9 @@ export function ReceiptSheet() {
             <Row label="Betyg" value="Inte satt" last />
           )}
         </div>
-        <div className="grid grid-cols-2 gap-2">
-          <Btn
-            variant="secondary"
-            onClick={() => download(`velio-kvitto-${booking.id.slice(0, 6)}.txt`, receiptText(booking))}
-          >
-            <Download className="size-4" /> Kvitto
-          </Btn>
-          <Btn
-            variant="secondary"
-            onClick={() => download(`velio-faktura-${booking.id.slice(0, 6)}.txt`, `FAKTURA\n${receiptText(booking)}`)}
-          >
-            <FileText className="size-4" /> Faktura
-          </Btn>
-        </div>
+        <Btn onClick={() => showToast("Fakturan skapas när betalningen är registrerad. Den ligger under Historik.")}>
+          <FileText className="size-4" /> Ladda ner faktura (PDF)
+        </Btn>
         <Btn onClick={() => rebook(booking.id)}>Boka om</Btn>
         <Btn
           variant="secondary"
@@ -2158,56 +2188,62 @@ export function TrackSheet() {
 }
 
 export function LocationSheet() {
-  const closeSheet = useVelio((state) => state.closeSheet);
+  const closeSheet = useVelio((state) => state.closeAddressSheet);
   const allowLocation = useVelio((state) => state.allowLocation);
-  const clearLocation = useVelio((state) => state.clearLocation);
-  const locationOn = useVelio((state) => state.locationOn);
   const locationBusy = useVelio((state) => state.locationBusy);
   const locationError = useVelio((state) => state.locationError);
-  const userLocation = useVelio((state) => state.userLocation);
-  const accountMode = useVelio((state) => state.accountMode);
-  const idVerified = useVelio((state) => state.idVerified);
+  const addresses = useVelio((state) => state.addresses);
+  const activeAddressId = useVelio((state) => state.activeAddressId);
+  const selectAddress = useVelio((state) => state.selectAddress);
   const go = useVelio((state) => state.go);
-  const openWorkInfo = () => {
-    if (accountMode === "business" && idVerified) {
-      useVelio.setState({ onboardFocus: "place", sheet: "onboard" });
-      return;
-    }
-    if (accountMode === "business") {
-      closeSheet();
-      go("verify-id");
-      return;
-    }
-    closeSheet();
-    go("profile");
-  };
   return (
-    <BottomSheet title="Dela plats" onClose={closeSheet}>
-      <p className="mb-4 text-sm leading-relaxed text-muted">
-        Dela din plats för att hitta jobb i ditt område. Eller lägg in önskad plats genom att uppdatera din arbetsinformation.
-      </p>
-      {locationBusy ? <p className="mb-3 text-sm font-medium">Hämtar din plats… Tillåt plats om telefonen frågar.</p> : null}
-      {locationError ? <p className="mb-3 text-sm leading-relaxed text-[#8a3d2a]">{locationError}</p> : null}
-      {locationOn && userLocation ? (
-        <div className="mb-4 rounded-2xl bg-soft px-4 py-3">
-          <div className="flex items-center gap-2 text-sm font-semibold text-[#2f7a3c]">
-            <span className="size-2 rounded-full bg-[#3d8f4a]" />
-            Din plats är på
-          </div>
-          <p className="mt-1 font-semibold">{userLocation.label}</p>
-        </div>
-      ) : null}
-      <Btn disabled={locationBusy} onClick={() => void allowLocation()}>
-        {locationBusy ? "Hämtar din plats…" : locationOn ? "Uppdatera min plats" : "Dela plats"}
+    <BottomSheet title="Adress" onClose={closeSheet}>
+      <p className="mb-3 text-sm leading-relaxed text-muted">Välj vart uppdraget ska utgå ifrån. Den aktiva adressen används för utförare nära dig.</p>
+      {locationError ? <p className="mb-3 text-sm leading-relaxed text-red-800">{locationError}</p> : null}
+      <div className="space-y-2">
+        {addresses.map((item) => {
+          const active = item.id === activeAddressId;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => selectAddress(item.id)}
+              className={cn("flex w-full items-start gap-3 rounded-2xl border px-3 py-3 text-left", active ? "border-brown bg-sand" : "border-line bg-paper")}
+            >
+              <MapPin className="mt-0.5 size-4 shrink-0 text-brown" />
+              <span className="min-w-0 flex-1">
+                <span className="block font-semibold">
+                  {item.label}
+                  {item.primary ? <span className="ml-2 text-xs font-medium text-muted">Standard</span> : null}
+                </span>
+                <span className="block text-sm text-muted">{item.line}</span>
+              </span>
+              {active ? <Check className="size-4 text-brown" /> : null}
+            </button>
+          );
+        })}
+      </div>
+      <Btn
+        className="mt-3"
+        disabled={locationBusy}
+        onClick={() => {
+          void allowLocation().then(() => {
+            if (useVelio.getState().locationOn) useVelio.setState({ activeAddressId: null });
+          });
+        }}
+      >
+        {locationBusy ? "Hämtar din plats…" : "Använd min plats"}
       </Btn>
-      <Btn variant="secondary" className="mt-2" onClick={openWorkInfo}>
-        Uppdatera arbetsinformation
+      <Btn
+        variant="secondary"
+        className="mt-2"
+        onClick={() => {
+          closeSheet();
+          go("addresses");
+        }}
+      >
+        Hantera adresser
       </Btn>
-      {locationOn ? (
-        <button type="button" onClick={clearLocation} className="mt-3 w-full py-2 text-sm font-semibold text-muted">
-          Sluta dela plats
-        </button>
-      ) : null}
     </BottomSheet>
   );
 }

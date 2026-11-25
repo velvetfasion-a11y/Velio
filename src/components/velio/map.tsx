@@ -103,7 +103,7 @@ export function CityMap({
             >
               <Popup>
                 <span className="font-semibold">Du är här</span>
-                <span className="mt-0.5 block text-xs text-[#5c564f]">{you.label}</span>
+                <span className="mt-0.5 block text-xs text-muted">{you.label}</span>
               </Popup>
             </CircleMarker>
           </>
@@ -125,7 +125,7 @@ export function CityMap({
               <Popup>
                 <button type="button" className="text-left text-sm font-semibold" onClick={() => onSelect?.(person.id)}>
                   {person.name}
-                  <span className="mt-0.5 block text-xs font-normal text-[#5c564f]">
+                  <span className="mt-0.5 block text-xs font-normal text-muted">
                     {person.area} · fr. {person.price} kr
                   </span>
                 </button>
@@ -135,8 +135,8 @@ export function CityMap({
         })}
       </MapContainer>
       {you ? (
-        <div className="pointer-events-none absolute top-3 left-3 rounded-full bg-paper/95 px-3 py-1.5 text-xs font-semibold text-[#2f7a3c] shadow">
-          <span className="mr-1.5 inline-block size-2 rounded-full bg-[#3d8f4a]" />
+        <div className="pointer-events-none absolute top-3 left-3 rounded-full bg-paper/95 px-3 py-1.5 text-xs font-semibold text-ok shadow">
+          <span className="mr-1.5 inline-block size-2 rounded-full bg-ok" />
           {you.label}
         </div>
       ) : null}

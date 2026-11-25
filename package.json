@@ -12,7 +12,12 @@
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.6.0",
+    "@stripe/connect-js": "^3.5.1",
+    "@stripe/react-connect-js": "^3.5.2",
+    "@stripe/react-stripe-js": "^7.1.0",
+    "@stripe/stripe-js": "^10.4.0",
     "clsx": "^2.1.1",
+    "firebase": "^11.10.0",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.510.0",
     "next": "^15.5.29",

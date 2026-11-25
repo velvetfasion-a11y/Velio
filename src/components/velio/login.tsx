@@ -1,410 +1,131 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { ArrowLeft } from "lucide-react";
+import { authErrorSv, sendReset, signInWithEmail, signInWithGoogle, signUpWithEmail } from "@/lib/firebase/auth";
 import { useVelio } from "@/lib/velio/store";
-import {
-  collectBankIdLogin,
-  fetchAuthCapabilities,
-  fetchMe,
-  startBankIdLogin,
-  startEmailOtp,
-  startSmsOtp,
-  verifyEmailOtp,
-  verifySmsOtp,
-} from "@/lib/velio/auth-api";
-import { isSignInEmail } from "@/lib/velio/data";
-import { isStaticHost, localGoogleSignIn, localMePayload, localSignInWithEmail } from "@/lib/velio/local-auth";
-import { googleGisAvailable, signInWithGoogleGis } from "@/lib/velio/google-gis";
 
-type Step = "methods" | "bankid-open" | "email" | "email-code" | "phone" | "phone-code";
+type Step = "methods" | "email" | "phone";
 
 export function LoginScreen() {
-  const applyMe = useVelio((state) => state.applyMe);
   const authError = useVelio((state) => state.authError);
   const setAuthError = useVelio((state) => state.setAuthError);
   const [busy, setBusy] = useState(false);
   const [step, setStep] = useState<Step>("methods");
   const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
+  const [password, setPassword] = useState("");
   const [name, setName] = useState("");
-  const [code, setCode] = useState("");
-  const [challengeId, setChallengeId] = useState("");
-  const [hint, setHint] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
-  const [caps, setCaps] = useState({ google: false, email: false, sms: false, bankid: false });
-  const [bankOrderRef, setBankOrderRef] = useState("");
-  const [bankLaunchUrl, setBankLaunchUrl] = useState("");
-  const [bankStatus, setBankStatus] = useState("Startar BankID…");
-  const pollRef = useRef<number | null>(null);
-  const staticHost = typeof window !== "undefined" && isStaticHost();
-
-  useEffect(() => {
-    if (staticHost) {
-      // Static hosts have no API routes — never fake email/SMS/BankID delivery.
-      setCaps({ google: googleGisAvailable(), email: false, sms: false, bankid: false });
-      return;
-    }
-    void fetchAuthCapabilities().then((next) =>
-      setCaps({
-        google: next.google,
-        email: next.email,
-        sms: next.sms,
-        bankid: Boolean(next.bankid),
-      }),
-    );
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      const err = params.get("authError");
-      if (err) {
-        setLocalError(err);
-        params.delete("authError");
-        const next = `${window.location.pathname}${params.toString() ? `?${params}` : ""}`;
-        window.history.replaceState({}, "", next);
-      }
-    }
-  }, [staticHost]);
-
-  useEffect(() => {
-    return () => {
-      if (pollRef.current) window.clearInterval(pollRef.current);
-    };
-  }, []);
-
-  const stopBankPoll = () => {
-    if (pollRef.current) {
-      window.clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
-  };
+  const [hint, setHint] = useState<string | null>(null);
 
   const back = () => {
-    stopBankPoll();
     setLocalError(null);
     setHint(null);
-    setCode("");
-    setBankLaunchUrl("");
-    setBankOrderRef("");
-    if (step === "email-code") setStep("email");
-    else if (step === "phone-code") setStep("phone");
-    else setStep("methods");
+    setStep("methods");
   };
 
-  const openBankIdApp = (url: string) => {
-    const opened = window.open(url, "_blank", "noopener,noreferrer");
-    if (!opened) {
-      window.location.href = url;
-    }
-  };
-
-  const startBankId = async () => {
+  const onGoogle = () => {
     if (busy) return;
     setLocalError(null);
-    if (staticHost || !caps.bankid) {
-      setLocalError("BankID är inte aktiverat ännu. Det krävs en BankID-koppling som öppnar BankID-appen.");
-      return;
-    }
+    setAuthError(null);
+    // Popup must start before any await. Safari otherwise sends the person
+    // through a full-page redirect and drops them back on this screen.
+    const pending = signInWithGoogle();
     setBusy(true);
-    setStep("bankid-open");
-    setBankStatus("Startar BankID…");
-    try {
-      // No name/phone/personnummer in the app — BankID provides identity after the user signs.
-      const started = await startBankIdLogin();
-      setChallengeId(started.challengeId);
-      setBankOrderRef(started.orderRef);
-      setBankLaunchUrl(started.launchUrl);
-      setBankStatus("Öppna BankID-appen och identifiera dig.");
-      openBankIdApp(started.launchUrl);
-
-      stopBankPoll();
-      pollRef.current = window.setInterval(() => {
-        void (async () => {
-          try {
-            const result = await collectBankIdLogin({
-              challengeId: started.challengeId,
-              orderRef: started.orderRef,
-            });
-            if (result.status === "pending") {
-              setBankStatus("Väntar på att du identifierar dig i BankID-appen…");
-              return;
-            }
-            stopBankPoll();
-            if (result.status === "failed") {
-              setLocalError(result.message || "BankID misslyckades");
-              setStep("methods");
-              return;
-            }
-            const me = await fetchMe();
-            if (!me.authenticated) throw new Error("BankID-inloggning misslyckades");
-            applyMe(me);
-          } catch (error) {
-            stopBankPoll();
-            setLocalError(error instanceof Error ? error.message : "BankID-inloggning misslyckades");
-          }
-        })();
-      }, 2000);
-    } catch (error) {
-      setStep("methods");
-      setLocalError(error instanceof Error ? error.message : "Kunde inte starta BankID");
-    } finally {
-      setBusy(false);
-    }
+    void pending
+      .catch((error: unknown) => setLocalError(authErrorSv(error)))
+      .finally(() => setBusy(false));
   };
 
-  const onGoogle = async () => {
+  const onEmail = async (mode: "in" | "up" | "reset") => {
     if (busy) return;
-    setBusy(true);
-    setLocalError(null);
-    try {
-      if (staticHost) {
-        if (!googleGisAvailable()) {
-          throw new Error("Google-inloggning är inte aktiverad ännu.");
-        }
-        const profile = await signInWithGoogleGis();
-        const account = localGoogleSignIn(profile.email, profile.name, profile.sub);
-        applyMe(localMePayload(account));
-        return;
-      }
-      if (!caps.google) {
-        throw new Error("Google-inloggning är inte aktiverad ännu.");
-      }
-      window.location.href = `${process.env.NEXT_PUBLIC_BASE_PATH || ""}/api/auth/google/start`;
-    } catch (error) {
-      setLocalError(error instanceof Error ? error.message : "Google-inloggning misslyckades");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const sendEmail = async () => {
-    if (busy) return;
-    const chosen = isSignInEmail(email);
-    if (!chosen) return setLocalError("Skriv en e-postadress, till exempel namn@.com");
-    setBusy(true);
-    setLocalError(null);
-    try {
-      if (staticHost) {
-        const account = localSignInWithEmail(chosen, name.trim() || undefined);
-        applyMe(localMePayload(account));
-        return;
-      }
-      if (!caps.email) {
-        throw new Error("E-postinloggning skickar koden till din mejlbox och är inte aktiverad ännu.");
-      }
-      const result = await startEmailOtp(chosen, name.trim() || undefined);
-      setChallengeId(result.challengeId);
-      setHint(result.message ?? "Vi har skickat en kod till din mejlbox. Kolla inkorgen (och skräppost).");
-      setStep("email-code");
-    } catch (error) {
-      setLocalError(error instanceof Error ? error.message : "Kunde inte skicka kod till mejlen");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const confirmEmail = async () => {
-    if (busy) return;
-    if (code.trim().length < 4) return setLocalError("Ange koden från din mejlbox");
+    const chosen = email.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(chosen)) return setLocalError("Skriv en giltig e-postadress");
+    if (mode !== "reset" && password.length < 6) return setLocalError("Lösenordet behöver minst 6 tecken");
     setBusy(true);
     setLocalError(null);
     setAuthError(null);
+    setHint(null);
     try {
-      if (staticHost) throw new Error("E-postinloggning är inte aktiverad på den här versionen.");
-      const me = await verifyEmailOtp({
-        challengeId,
-        code: code.trim(),
-        name: name.trim() || undefined,
-      });
-      if (!me.authenticated) throw new Error("Inloggningen misslyckades");
-      applyMe(me);
-    } catch (error) {
-      setLocalError(error instanceof Error ? error.message : "Fel kod");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const sendSms = async () => {
-    if (busy) return;
-    if (phone.trim().length < 6) return setLocalError("Ange ett giltigt mobilnummer");
-    setBusy(true);
-    setLocalError(null);
-    try {
-      if (staticHost || !caps.sms) {
-        throw new Error("SMS-inloggning skickar koden till din telefon och är inte aktiverad ännu.");
+      if (mode === "reset") {
+        await sendReset(chosen);
+        setHint("Om adressen finns hos oss skickar vi en länk för att välja ett nytt lösenord.");
+        return;
       }
-      const result = await startSmsOtp(phone.trim(), name.trim() || undefined);
-      setChallengeId(result.challengeId);
-      setHint(result.message ?? "Vi har skickat en kod via SMS.");
-      setStep("phone-code");
+      if (mode === "up") await signUpWithEmail(chosen, password, name);
+      else await signInWithEmail(chosen, password);
     } catch (error) {
-      setLocalError(error instanceof Error ? error.message : "Kunde inte skicka SMS");
+      setLocalError(authErrorSv(error));
     } finally {
       setBusy(false);
     }
   };
-
-  const confirmSms = async () => {
-    if (busy) return;
-    if (code.trim().length < 4) return setLocalError("Ange koden från SMS");
-    setBusy(true);
-    setLocalError(null);
-    setAuthError(null);
-    try {
-      if (staticHost) throw new Error("SMS-inloggning är inte aktiverad på den här versionen.");
-      const me = await verifySmsOtp({
-        challengeId,
-        code: code.trim(),
-        name: name.trim() || undefined,
-      });
-      if (!me.authenticated) throw new Error("Inloggningen misslyckades");
-      applyMe(me);
-    } catch (error) {
-      setLocalError(error instanceof Error ? error.message : "Fel kod");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  useEffect(() => {
-    if (staticHost) return;
-    void fetchMe().then((me) => {
-      if (me.authenticated) applyMe(me);
-    });
-  }, [applyMe, staticHost]);
 
   return (
     <div className="relative flex h-full flex-col overflow-hidden bg-white">
-      <div className="pointer-events-none absolute -top-20 -left-16 size-64 rounded-full bg-[#f4eadc] blur-3xl" />
-      <div className="pointer-events-none absolute top-1/3 -right-20 size-72 rounded-full bg-[#efe4d4] blur-3xl" />
-      <div className="pointer-events-none absolute bottom-0 left-8 size-48 rounded-full bg-[#f7f1e8] blur-3xl" />
+      <div className="pointer-events-none absolute -top-20 -left-16 size-64 rounded-full bg-wheat blur-3xl" />
+      <div className="pointer-events-none absolute top-1/3 -right-20 size-72 rounded-full bg-sand blur-3xl" />
+      <div className="pointer-events-none absolute bottom-0 left-8 size-48 rounded-full bg-cream blur-3xl" />
 
-      <div className="relative flex flex-1 flex-col justify-center px-6 pb-8">
+      <div className="relative flex flex-1 flex-col justify-center overflow-y-auto px-6 py-8">
         {step !== "methods" ? (
           <button type="button" aria-label="Tillbaka" onClick={back} className="mb-2 grid size-9 place-items-center self-start">
-            <ArrowLeft className="size-5 text-[#2a211c]" />
+            <ArrowLeft className="size-5 text-ink" />
           </button>
         ) : null}
 
-        <p className="text-center font-serif text-[1.55rem] tracking-[0.32em] text-[#2a211c]">VELIO</p>
+        <p className="text-center font-serif text-[1.55rem] tracking-[0.32em] text-ink">VELIO</p>
 
         {step === "methods" ? (
           <>
-            <h1 className="mt-8 text-center font-serif text-[2.7rem] leading-none font-medium text-[#2a211c]">Logga in</h1>
-            <p className="mx-auto mt-3 max-w-[17rem] text-center text-sm leading-snug text-[#6e6964]">
-              {staticHost
-                ? "E-post loggar in med adressen du skriver, även om den inte är en riktig inkorg."
-                : "BankID öppnar BankID-appen. E-post- och SMS-kod skickas till dig — aldrig i appen."}
+            <h1 className="mt-8 text-center font-serif text-[2.7rem] leading-none font-medium text-ink">Logga in</h1>
+            <p className="mx-auto mt-3 max-w-[18rem] text-center text-sm leading-snug text-muted">
+              E-post och Google är riktiga konton. BankID och mobilnummer är inte aktiverade ännu.
             </p>
-
-            <div className="mt-8 rounded-[1.7rem] border border-white/80 bg-white/45 p-3 shadow-[0_18px_50px_rgba(70,50,20,0.08)] backdrop-blur-xl">
+            <div className="mt-8 rounded-[1.7rem] border border-white/80 bg-paper/60 p-3 shadow-[0_18px_50px_rgba(70,50,20,0.08)] backdrop-blur-xl">
               <div className="space-y-2.5">
-                <Method label="Fortsätt med BankID" onClick={() => void startBankId()} icon={<BankIdMark />} disabled={busy} />
+                <Method label="Fortsätt med BankID" onClick={() => setLocalError("BankID är inte kopplat. Det är en platshållare tills BankID-avtalet finns.")} icon={<BankIdMark />} disabled={busy} />
                 <Method label="Fortsätt med Google" onClick={() => void onGoogle()} icon={<GoogleMark />} disabled={busy} />
-                <Method label="Fortsätt med e-post" onClick={() => setStep("email")} icon={<MailMark />} disabled={busy} />
-                <Method label="Fortsätt med mobilnummer" onClick={() => setStep("phone")} icon={<PhoneMark />} disabled={busy} />
+                <Method label="Fortsätt med e-post" onClick={() => { setLocalError(null); setStep("email"); }} icon={<MailMark />} disabled={busy} />
+                <Method label="Fortsätt med mobilnummer" onClick={() => { setLocalError(null); setStep("phone"); }} icon={<PhoneMark />} disabled={busy} />
               </div>
             </div>
           </>
         ) : null}
 
-        {step === "bankid-open" ? (
+        {step === "email" ? (
           <>
-            <h1 className="mt-4 text-center font-serif text-[2.2rem] leading-none font-medium text-[#2a211c]">BankID</h1>
-            <p className="mx-auto mt-3 max-w-[18rem] text-center text-sm leading-snug text-[#6e6964]">{bankStatus}</p>
-            <div className="mt-5 space-y-3">
-              <button
-                type="button"
-                disabled={!bankLaunchUrl || busy}
-                onClick={() => bankLaunchUrl && openBankIdApp(bankLaunchUrl)}
-                className="h-12 w-full rounded-full bg-[#F7C948] text-[15px] font-semibold text-[#1a1a1a] disabled:opacity-60"
-              >
-                Öppna BankID
-              </button>
-              <p className="text-center text-xs text-[#8a847e]">
-                Identifiera dig i BankID-appen. VELIO hämtar ditt namn därifrån — inget fylls i här.
-              </p>
-              {bankOrderRef ? <p className="text-center text-[10px] text-[#c4bbb2]">Order {bankOrderRef.slice(0, 12)}…</p> : null}
-            </div>
-          </>
-        ) : null}
-
-        {step === "email" || step === "email-code" ? (
-          <>
-            <h1 className="mt-4 text-center font-serif text-[2.2rem] leading-none font-medium text-[#2a211c]">
-              {step === "email" ? "E-post" : "Bekräfta e-post"}
-            </h1>
-            <p className="mx-auto mt-3 max-w-[18rem] text-center text-sm leading-snug text-[#6e6964]">
-              {step === "email"
-                ? staticHost
-                  ? "Skriv adressen du vill logga in med, till exempel namn@.com. Ingen kod skickas."
-                  : "Vi skickar en engångskod till din mejlbox. Koden visas aldrig i appen."
-                : `Ange koden som skickades till ${email}.`}
+            <h1 className="mt-4 text-center font-serif text-[2.2rem] leading-none font-medium text-ink">E-post</h1>
+            <p className="mx-auto mt-3 max-w-[18rem] text-center text-sm leading-snug text-muted">
+              Skapa ett konto eller logga in med lösenord. Glömt lösenord skickar en återställningslänk.
             </p>
             <div className="mt-5 space-y-3">
-              {step === "email" ? (
-                <>
-                  <Field label="Namn (valfritt)" value={name} onChange={setName} placeholder="För- och efternamn" />
-                  <Field
-                    label="E-post"
-                    value={email}
-                    onChange={(value) => {
-                      setEmail(value);
-                      setLocalError(null);
-                    }}
-                    placeholder="namn@.com"
-                    type="text"
-                  />
-                </>
-              ) : (
-                <Field label="Verifieringskod från mejlen" value={code} onChange={setCode} placeholder="6 siffror" />
-              )}
+              <Field label="Namn" value={name} onChange={setName} placeholder="För- och efternamn" autoComplete="name" />
+              <Field label="E-post" value={email} onChange={setEmail} placeholder="namn@example.com" type="email" autoComplete="email" />
+              <Field label="Lösenord" value={password} onChange={setPassword} placeholder="Minst 6 tecken" type="password" autoComplete="current-password" />
             </div>
-            {hint ? <p className="mt-3 text-center text-sm text-[#6e6964]">{hint}</p> : null}
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void (step === "email" ? sendEmail() : confirmEmail())}
-              className="mt-5 h-12 w-full rounded-full bg-[#6e5636] text-[15px] font-semibold text-white disabled:opacity-60"
-            >
-              {busy ? "Vänta…" : step === "email" ? (staticHost ? "Logga in" : "Skicka kod till mejlen") : "Bekräfta och logga in"}
+            {hint ? <p className="mt-3 text-center text-sm text-muted">{hint}</p> : null}
+            <button type="button" disabled={busy} onClick={() => void onEmail("in")} className="mt-5 h-12 w-full rounded-full bg-brown text-[15px] font-semibold text-white disabled:opacity-60">
+              {busy ? "Vänta…" : "Logga in"}
+            </button>
+            <button type="button" disabled={busy} onClick={() => void onEmail("up")} className="mt-2 h-12 w-full rounded-full border border-line text-[15px] font-semibold text-ink disabled:opacity-60">
+              Skapa konto
+            </button>
+            <button type="button" disabled={busy} onClick={() => void onEmail("reset")} className="mt-3 w-full text-center text-sm font-semibold text-brown">
+              Glömt lösenord
             </button>
           </>
         ) : null}
 
-        {step === "phone" || step === "phone-code" ? (
+        {step === "phone" ? (
           <>
-            <h1 className="mt-4 text-center font-serif text-[2.2rem] leading-none font-medium text-[#2a211c]">
-              {step === "phone" ? "Mobilnummer" : "SMS-kod"}
-            </h1>
-            <p className="mx-auto mt-3 max-w-[18rem] text-center text-sm leading-snug text-[#6e6964]">
-              {step === "phone"
-                ? "Vi skickar en SMS-kod till din telefon. Koden visas aldrig i appen."
-                : `Ange koden som skickades till ${phone}.`}
+            <h1 className="mt-4 text-center font-serif text-[2.2rem] leading-none font-medium text-ink">Mobilnummer</h1>
+            <p className="mx-auto mt-3 max-w-[18rem] text-center text-sm leading-snug text-muted">
+              SMS-inloggning kommer snart. Telefonautentisering är inte aktiverad på kontot ännu.
             </p>
-            <div className="mt-5 space-y-3">
-              {step === "phone" ? (
-                <>
-                  <Field label="Namn (valfritt)" value={name} onChange={setName} placeholder="För- och efternamn" />
-                  <Field label="Mobilnummer" value={phone} onChange={setPhone} placeholder="+46 70 …" />
-                </>
-              ) : (
-                <Field label="SMS-kod från telefonen" value={code} onChange={setCode} placeholder="6 siffror" />
-              )}
-            </div>
-            {hint ? <p className="mt-3 text-center text-sm text-[#6e6964]">{hint}</p> : null}
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void (step === "phone" ? sendSms() : confirmSms())}
-              className="mt-5 h-12 w-full rounded-full bg-[#6e5636] text-[15px] font-semibold text-white disabled:opacity-60"
-            >
-              {busy ? "Vänta…" : step === "phone" ? "Skicka SMS" : "Bekräfta och logga in"}
-            </button>
+            <p className="mt-6 rounded-2xl bg-sand px-4 py-3 text-center text-sm font-semibold">Kommer snart</p>
           </>
         ) : null}
 
-        {localError || authError ? (
-          <p className="mt-4 text-center text-sm text-red-700">{localError || authError}</p>
-        ) : null}
+        {localError || authError ? <p className="mt-4 text-center text-sm text-red-700">{localError || authError}</p> : null}
       </div>
     </div>
   );
@@ -416,26 +137,28 @@ function Field({
   onChange,
   placeholder,
   type = "text",
+  autoComplete,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
   type?: string;
+  autoComplete?: string;
 }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-sm font-medium text-[#5c564f]">{label}</span>
+      <span className="mb-1 block text-sm font-medium text-muted">{label}</span>
       <input
         type={type}
         value={value}
         placeholder={placeholder}
+        autoComplete={autoComplete}
+        autoCapitalize={type === "email" ? "off" : undefined}
+        autoCorrect={type === "email" ? "off" : undefined}
+        inputMode={type === "email" ? "email" : type === "password" ? "text" : undefined}
         onChange={(event) => onChange(event.target.value)}
-        className="h-12 w-full rounded-full border border-[#efeae4] bg-white/80 px-4 text-[15px] outline-none"
-        autoComplete={type === "email" || placeholder?.includes("@") ? "email" : "one-time-code"}
-        autoCapitalize={placeholder?.includes("@") ? "off" : undefined}
-        autoCorrect={placeholder?.includes("@") ? "off" : undefined}
-        inputMode={type === "email" || placeholder?.includes("@") ? "email" : "numeric"}
+        className="h-12 w-full rounded-full border border-line bg-paper/80 px-4 text-[15px] outline-none backdrop-blur-xl"
       />
     </label>
   );
@@ -457,7 +180,7 @@ function Method({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className="flex h-12 w-full items-center rounded-full border border-white/90 bg-white/75 px-4 text-[15px] font-medium text-[#2a211c] disabled:opacity-60"
+      className="flex h-12 w-full items-center rounded-full border border-white/90 bg-paper/80 px-4 text-[15px] font-medium text-ink backdrop-blur-xl disabled:opacity-60"
     >
       <span className="grid size-6 shrink-0 place-items-center">{icon}</span>
       <span className="-ml-6 flex-1 text-center">{label}</span>
@@ -469,13 +192,7 @@ function BankIdMark() {
   return (
     <svg viewBox="0 0 24 24" className="size-6" aria-hidden="true">
       <rect x="2" y="2" width="20" height="20" rx="6" fill="#F7C948" />
-      <path
-        d="M8 12.2c1.2-2.4 2.2-3.6 4-3.6 1.6 0 2.4 1 2.4 2.3 0 2.6-6.2 1.2-6.2 4.2 0 1 .8 1.7 2 1.7 1.5 0 2.6-1 3.6-2.6"
-        fill="none"
-        stroke="#1a1a1a"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-      />
+      <path d="M8 12.2c1.2-2.4 2.2-3.6 4-3.6 1.6 0 2.4 1 2.4 2.3 0 2.6-6.2 1.2-6.2 4.2 0 1 .8 1.7 2 1.7 1.5 0 2.6-1 3.6-2.6" fill="none" stroke="#1a1a1a" strokeWidth="1.7" strokeLinecap="round" />
     </svg>
   );
 }

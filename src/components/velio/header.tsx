@@ -3,19 +3,28 @@ import { cn } from "@/lib/cn";
 import { useVelio } from "@/lib/velio/store";
 
 export function PlaceLink({ tone = "cream" }: { tone?: "cream" | "glass" }) {
-  const setSheet = useVelio((state) => state.setSheet);
   const locationOn = useVelio((state) => state.locationOn);
   const locationBusy = useVelio((state) => state.locationBusy);
   const userLocation = useVelio((state) => state.userLocation);
+  const addresses = useVelio((state) => state.addresses);
+  const activeAddressId = useVelio((state) => state.activeAddressId);
   const glass = tone === "glass";
+  const active = addresses.find((item) => item.id === activeAddressId);
+  const street = active?.line.split(",")[0]?.trim();
   const placeLabel = locationBusy
     ? "Hämtar…"
-    : locationOn
-      ? userLocation?.label || "Plats delad"
-      : "Dela plats";
+    : active
+      ? `${active.label} · ${street || active.line}`
+      : locationOn
+        ? userLocation?.label || "Plats delad"
+        : "Välj adress";
+
+  const sheet = useVelio((state) => state.sheet);
+  const openAddressSheet = useVelio((state) => state.openAddressSheet);
+  if (sheet === "onboard" || sheet === "job") return null;
 
   const onPlaceClick = () => {
-    setSheet("location");
+    openAddressSheet();
   };
 
   return (
@@ -24,9 +33,9 @@ export function PlaceLink({ tone = "cream" }: { tone?: "cream" | "glass" }) {
       aria-label={placeLabel}
       onClick={onPlaceClick}
       className={cn(
-        "block max-w-[12rem] truncate text-left text-[10px] leading-none font-medium tracking-wide",
-        glass ? "text-paper/80" : "text-muted",
-        locationOn && (glass ? "text-[#b7e6c2]" : "text-[#2f7a3c]"),
+        "inline-flex max-w-[16rem] truncate rounded-full px-2.5 py-1 text-left text-[11px] leading-none font-medium tracking-wide",
+        glass ? "glass-dark text-paper" : "text-muted",
+        locationOn && (glass ? "text-[#d7f5df]" : "text-ok"),
       )}
     >
       {placeLabel}
@@ -63,8 +72,8 @@ export function AppHeader({ tone = "cream", onBack }: { tone?: "cream" | "glass"
           aria-label="Tillbaka"
           onClick={back}
           className={cn(
-            "grid size-9 place-items-center justify-self-start",
-            glass ? "text-paper" : "text-ink",
+            "grid size-10 place-items-center justify-self-start rounded-full",
+            glass ? "glass-dark text-paper" : "text-ink",
           )}
         >
           <ArrowLeft className="size-5" strokeWidth={1.8} />
@@ -72,7 +81,10 @@ export function AppHeader({ tone = "cream", onBack }: { tone?: "cream" | "glass"
 
         <button
           type="button"
-          onClick={() => go("home")}
+          onClick={() => {
+            if (sheet === "onboard" || sheet === "job") return;
+            go("home");
+          }}
           className={cn(
             "justify-self-center text-center font-serif text-[1.7rem] leading-none font-medium tracking-[0.28em]",
             glass && "text-paper",
@@ -86,8 +98,8 @@ export function AppHeader({ tone = "cream", onBack }: { tone?: "cream" | "glass"
           aria-label="Notiser"
           onClick={() => go("notifications")}
           className={cn(
-            "relative grid size-9 place-items-center justify-self-end",
-            glass ? "text-paper" : "text-ink",
+            "relative grid size-10 place-items-center justify-self-end rounded-full",
+            glass ? "glass-dark text-paper" : "text-ink",
           )}
         >
           <Bell className="size-[1.15rem]" strokeWidth={1.8} />

@@ -134,15 +134,19 @@ export function ServiceScreen() {
     <div className={cn("bg-cream", mapMode && "flex h-full min-h-0 flex-col")}>
       <section className="relative overflow-hidden text-paper">
         <img src={hero} alt="" className="absolute inset-0 h-full w-full object-cover object-[72%_center]" />
-        <div className="absolute inset-0 bg-gradient-to-b from-ink/25 via-ink/20 to-cream" />
+        <div className="absolute inset-0 bg-gradient-to-b from-ink/60 via-ink/35 to-ink/65" />
         <div className="relative">
           <AppHeader tone="glass" />
-          <div className="px-4">
-          <h1 className="mt-1 font-serif text-[2.7rem] leading-none font-medium">{service.name}</h1>
-          <p className="mt-2 max-w-[16rem] text-sm leading-snug text-paper/95">{intros[service.id]}</p>
+          <div className="px-5 pt-1 pb-6">
+          <h1 className="ios-title scrim-text text-[2.35rem] text-paper">{service.name}</h1>
+          <p className="scrim-text mt-2 max-w-[18rem] text-sm leading-snug text-paper">{intros[service.id]}</p>
+          </div>
+        </div>
+      </section>
 
-          <div className="mt-3 flex items-center gap-3 pb-3">
-            <div className="flex rounded-full bg-ink/30 p-1 backdrop-blur-sm">
+      <div className="relative px-4 pt-3">
+        <div className="flex items-center gap-3">
+            <div className="flex rounded-full bg-sand p-1">
               <button
                 type="button"
                 onClick={() => setMapMode(false)}
@@ -168,18 +172,13 @@ export function ServiceScreen() {
               </button>
             </div>
             {!mapMode ? (
-              <button type="button" onClick={() => setSheet("sort")} className="ml-auto flex items-center gap-1 text-sm font-medium">
+              <button type="button" onClick={() => setSheet("sort")} className="ml-auto flex items-center gap-1 text-sm font-medium text-ink">
                 {sortLabels[sort]}
                 <ChevronDown className="size-4" />
               </button>
             ) : null}
-          </div>
-          </div>
         </div>
-      </section>
-
-      <div className="relative px-4 pt-3">
-        <div className="flex items-center gap-2">
+        <div className="mt-3 flex items-center gap-2">
           <Chip icon={Calendar} label="Datum & tid" open={menu === "time"} onClick={() => setMenu(menu === "time" ? null : "time")} />
           <Chip
             icon={MapPin}
@@ -279,12 +278,12 @@ export function ServiceScreen() {
 
       {acceptedBy && live ? (
         <button type="button" onClick={() => openThread(acceptedBy.id)} className="mx-4 mt-3 flex items-center gap-3 rounded-2xl bg-white px-3 py-2.5 text-left shadow-sm">
-          <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[#f3ece3] text-sm font-semibold">{acceptedBy.initials}</span>
+          <span className="grid size-10 shrink-0 place-items-center rounded-full bg-sand text-sm font-semibold">{acceptedBy.initials}</span>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-semibold">{acceptedBy.name} har accepterat</span>
             <span className="block truncate text-xs text-muted">{live.whenLabel}</span>
           </span>
-          <span className="flex shrink-0 items-center gap-1 rounded-full bg-[#6e5636] px-3 py-1.5 text-xs font-semibold text-white">
+          <span className="flex shrink-0 items-center gap-1 rounded-full bg-brown px-3 py-1.5 text-xs font-semibold text-white">
             <MessageCircle className="size-3.5" /> Chatt
           </span>
         </button>
@@ -385,20 +384,29 @@ export function ServiceScreen() {
             </div>
           ) : (
             ordered.map((person) => (
-              <article key={person.id} className="rounded-[1.35rem] bg-white p-3 shadow-sm">
+              <article key={person.id} className="rounded-[1.35rem] border border-line bg-paper p-3 shadow-soft">
                 <div className="flex gap-3">
                   <button type="button" onClick={() => openProvider(person.id)} className="shrink-0">
-                    <span className="grid size-[4.6rem] place-items-center rounded-2xl bg-[#f3ece3] font-serif text-2xl">
-                      {person.initials}
-                    </span>
+                    {person.photo ? (
+                      <img src={person.photo} alt="" className="size-[4.75rem] rounded-2xl object-cover" />
+                    ) : (
+                      <span className="grid size-[4.75rem] place-items-center rounded-2xl bg-sand text-xl font-semibold text-brown">
+                        {person.initials}
+                      </span>
+                    )}
                   </button>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-2">
-                      <button type="button" onClick={() => openProvider(person.id)} className="min-w-0 text-left font-semibold">
-                        <span className="flex items-center gap-1">
+                      <button type="button" onClick={() => openProvider(person.id)} className="min-w-0 text-left">
+                        <span className="flex items-center gap-1 font-semibold">
                           <span className="truncate">{person.name}</span>
-                          <BadgeCheck className="size-4 shrink-0 fill-[#c4a15a] text-white" />
+                          {person.demo ? (
+                            <span className="rounded-full bg-brown px-1.5 py-0.5 text-[10px] font-semibold text-paper">Demo</span>
+                          ) : (
+                            <BadgeCheck className="size-4 shrink-0 fill-gold text-paper" aria-label="Verifierad" />
+                          )}
                         </span>
+                        <span className="mt-0.5 block truncate text-xs text-muted">{service.name}</span>
                       </button>
                       <button
                         type="button"
@@ -411,7 +419,7 @@ export function ServiceScreen() {
                     <div className="mt-0.5 flex items-start justify-between gap-2">
                       <button type="button" onClick={() => openProvider(person.id)} className="min-w-0 text-left">
                         <span className="flex items-center gap-1 text-xs text-muted">
-                          <Star className="size-3.5 fill-[#c4a15a] text-[#c4a15a]" />
+                          <Star className="size-3.5 fill-gold text-gold" />
                           {ratingLabel(person.rating)} ({person.reviews}) · {person.etaMin} min
                         </span>
                         <span className="mt-0.5 flex items-center gap-1 text-xs text-muted">
@@ -432,7 +440,7 @@ export function ServiceScreen() {
                       <button
                         type="button"
                         onClick={() => (live?.providerId === person.id ? openThread(person.id) : book(person.id))}
-                        className="shrink-0 rounded-full bg-[#8d7044] px-3.5 py-1.5 text-sm font-semibold text-white"
+                        className="min-h-10 shrink-0 rounded-full bg-brown px-4 py-2 text-sm font-semibold text-white"
                       >
                         {live?.providerId === person.id ? "Chatt" : "Boka →"}
                       </button>
@@ -479,7 +487,7 @@ function DateTimeCard({
   const timeLabel = custom && hour ? hour : "Annan tid";
 
   return (
-    <div className="mt-3 rounded-[1.35rem] border border-[#efeae4] bg-white p-4 shadow-sm">
+    <div className="mt-3 rounded-[1.35rem] border border-line bg-white p-4 shadow-sm">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 font-semibold">
           <Calendar className="size-4" />
@@ -500,7 +508,7 @@ function DateTimeCard({
           }}
           className={cn(
             "flex items-center justify-center gap-1.5 rounded-2xl border px-2 py-2 text-sm font-semibold",
-            picked && !quick ? "border-[#8d7044] bg-[#8d7044] text-white" : "border-[#e6e1db] bg-white",
+            picked && !quick ? "border-bronze bg-bronze text-white" : "border-line bg-white",
           )}
         >
           <Calendar className="size-4" />
@@ -530,7 +538,7 @@ function DateTimeCard({
             onClick={() => onHour(item)}
             className={cn(
               "rounded-2xl border py-2.5 text-sm font-medium",
-              !custom && hour === item ? "border-[#8d7044] bg-[#8d7044] text-white" : "border-[#e6e1db] bg-white",
+              !custom && hour === item ? "border-bronze bg-bronze text-white" : "border-line bg-white",
             )}
           >
             {item}
@@ -551,7 +559,7 @@ function DateTimeCard({
         }}
         className={cn(
           "mt-3 flex w-full items-center justify-between rounded-full border px-4 py-3 text-sm font-medium",
-          custom ? "border-[#8d7044] bg-[#8d7044] text-white" : "border-[#e6e1db]",
+          custom ? "border-bronze bg-bronze text-white" : "border-line",
         )}
       >
         {timeLabel}
@@ -567,7 +575,7 @@ function DateTimeCard({
                 onCustom(`${String(draftHour).padStart(2, "0")}:${String(draftMinute).padStart(2, "0")}`);
                 setClock(false);
               }}
-              className="px-2 text-sm font-semibold text-[#8d7044]"
+              className="px-2 text-sm font-semibold text-bronze"
             >
               Klar
             </button>
@@ -599,7 +607,7 @@ function MonthCalendar({
   const today = shiftDate(0);
 
   return (
-    <div className="mt-3 rounded-2xl bg-[#f6f1ea] p-3">
+    <div className="mt-3 rounded-2xl bg-sand p-3">
       <div className="mb-2 flex items-center justify-between">
         <button type="button" aria-label="Föregående månad" onClick={() => onMonth(new Date(year, monthIndex - 1, 1))} className="px-2 text-lg">
           ‹
@@ -627,8 +635,8 @@ function MonthCalendar({
               onClick={() => onSelect(date)}
               className={cn(
                 "mx-auto my-0.5 grid size-8 place-items-center rounded-full",
-                active && "bg-[#8d7044] text-white",
-                !active && isToday && "ring-1 ring-[#8d7044]",
+                active && "bg-bronze text-white",
+                !active && isToday && "ring-1 ring-bronze",
               )}
             >
               {day}
@@ -654,15 +662,15 @@ function TimeWheel({
   const hours = Array.from({ length: 17 }, (_, index) => index + 6);
   const minutes = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
   return (
-    <div className="relative h-44 overflow-hidden rounded-2xl bg-[#f6f1ea]">
+    <div className="relative h-44 overflow-hidden rounded-2xl bg-sand">
       <div className="pointer-events-none absolute inset-x-2 top-1/2 z-0 h-9 -translate-y-1/2 rounded-xl bg-white" />
       <span className="pointer-events-none absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2 text-base font-semibold">:</span>
       <div className="relative z-10 grid h-full grid-cols-2">
         <Wheel values={hours} value={hour} onChange={onHour} />
         <Wheel values={minutes} value={minute} onChange={onMinute} />
       </div>
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 h-12 bg-gradient-to-b from-[#f6f1ea]" />
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-12 bg-gradient-to-t from-[#f6f1ea]" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 h-12 bg-gradient-to-b from-sand" />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-12 bg-gradient-to-t from-sand" />
     </div>
   );
 }
@@ -719,7 +727,7 @@ function DateChoice({ label, sub, active, onClick }: { label: string; sub: strin
       onClick={onClick}
       className={cn(
         "rounded-2xl border px-2 py-2 text-center",
-        active ? "border-[#8d7044] bg-[#8d7044] text-white" : "border-[#e6e1db] bg-[#fbf8f4]",
+        active ? "border-bronze bg-bronze text-white" : "border-line bg-soft",
       )}
     >
       <span className="block text-sm font-semibold">{label}</span>

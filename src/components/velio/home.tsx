@@ -2,10 +2,8 @@ import { useEffect, useState } from "react";
 import {
   ArrowLeft,
   BadgeCheck,
-  Calendar,
   Calculator,
   Check,
-  ChevronDown,
   Clock,
   ClipboardList,
   Eye,
@@ -13,7 +11,6 @@ import {
   Hammer,
   Heart,
   KeyRound,
-  LayoutGrid,
   Leaf,
   Lightbulb,
   MapPin,
@@ -33,12 +30,14 @@ import {
   Zap,
   type LucideIcon,
 } from "lucide-react";
-import { greetingName, providerById, providerTradeNames, ratingLabel, serviceById, services, type ServiceIcon, type ServiceId } from "@/lib/velio/data";
+import { coordsForArea, distanceKm, greetingName, providerById, providerTradeNames, ratingLabel, serviceById, services, type ServiceIcon, type ServiceId } from "@/lib/velio/data";
 import { useVelio } from "@/lib/velio/store";
-import { AppHeader, PlaceLink } from "@/components/velio/header";
+import { AppHeader } from "@/components/velio/header";
 import { cn } from "@/lib/cn";
-import { BottomSheet, Btn } from "@/components/velio/ui";
+import { BottomSheet, Btn, StepProgress, TrustNote } from "@/components/velio/ui";
 import { asset } from "@/lib/velio/asset";
+import { resolveCurrentLocation, searchAddresses, type AddressHit } from "@/lib/velio/geo";
+import { AddressSearch } from "@/components/velio/address-search";
 
 const icons: Record<ServiceIcon, LucideIcon> = {
   zap: Zap,
@@ -108,6 +107,9 @@ export function Home() {
   const go = useVelio((state) => state.go);
   const profile = useVelio((state) => state.profile);
   const directory = useVelio((state) => state.directory);
+  const addresses = useVelio((state) => state.addresses);
+  const activeAddressId = useVelio((state) => state.activeAddressId);
+  const userLocation = useVelio((state) => state.userLocation);
   const favorites = useVelio((state) => state.favorites);
   const toggleFavorite = useVelio((state) => state.toggleFavorite);
   const firstName = greetingName(profile.name);
@@ -115,56 +117,80 @@ export function Home() {
   const query = search.trim().toLowerCase();
   const cards = popular.filter((item) => !query || item.label.toLowerCase().includes(query));
   const extra = services.filter((service) => !popular.some((item) => item.id === service.id));
-  const people = directory.filter(
-    (person) =>
-      !query ||
-      person.name.toLowerCase().includes(query) ||
-      person.area.toLowerCase().includes(query) ||
-      serviceById(person.serviceId)?.name.toLowerCase().includes(query) ||
-      person.serviceIds?.some((id) => serviceById(id)?.name.toLowerCase().includes(query)) ||
-      person.otherTrade?.toLowerCase().includes(query),
-  );
+  const activeAddress = addresses.find((item) => item.id === activeAddressId) ?? null;
+  const origin =
+    activeAddress?.lat != null && activeAddress.lng != null
+      ? { lat: activeAddress.lat, lng: activeAddress.lng }
+      : userLocation
+        ? { lat: userLocation.lat, lng: userLocation.lng }
+        : null;
+  const people = directory
+    .filter(
+      (person) =>
+        !query ||
+        person.name.toLowerCase().includes(query) ||
+        person.area.toLowerCase().includes(query) ||
+        serviceById(person.serviceId)?.name.toLowerCase().includes(query) ||
+        person.serviceIds?.some((id) => serviceById(id)?.name.toLowerCase().includes(query)) ||
+        person.otherTrade?.toLowerCase().includes(query),
+    )
+    .sort((a, b) => {
+      if (!origin) return 0;
+      const left = distanceKm(origin, coordsForArea(a.place || a.area));
+      const right = distanceKm(origin, coordsForArea(b.place || b.area));
+      return left - right;
+    });
 
   return (
     <div className="bg-cream">
-      <section className="relative overflow-hidden text-paper">
-        <img src={asset("/velio/hero.jpg")} alt="" className="absolute inset-0 h-full w-full object-cover object-[center_20%]" />
-        <div className="absolute inset-0 bg-gradient-to-b from-ink/35 via-ink/10 to-cream" />
-        <div className="relative pb-2">
-          <AppHeader tone="glass" />
-          <div className="px-4">
-          <h1 className="mt-2 font-serif text-[2.55rem] leading-none font-medium tracking-tight">
-            {firstName ? `Hej ${firstName}` : "Hej"}
-          </h1>
-          <p className="mt-2 max-w-[15.5rem] text-sm leading-snug text-paper/95">
-            Hitta rätt person för jobbet – snabbt, säkert och enkelt.
-          </p>
+      <section className="relative">
+        <div className="relative h-52 overflow-hidden text-paper">
+          <img src={asset("/velio/hero.jpg")} alt="" className="absolute inset-0 h-full w-full object-cover object-[center_20%]" />
+          <div className="absolute inset-0 bg-gradient-to-b from-ink/55 via-ink/25 to-ink/60" />
+          <div className="relative">
+            <AppHeader tone="glass" />
+            <div className="px-5 pt-2 pb-8">
+              <h1 className="ios-title scrim-text text-[2.15rem] text-paper">
+                {firstName ? `Hej ${firstName}` : "Hej"}
+              </h1>
+              <p className="scrim-text mt-2 max-w-[18rem] text-[15px] leading-snug text-paper">
+                Hitta rätt person för jobbet – snabbt, säkert och enkelt.
+              </p>
+            </div>
+          </div>
+        </div>
 
-          <label className="mt-4 flex items-center gap-2 rounded-full bg-paper px-4 py-3 text-ink shadow-lg">
-            <Search className="size-5 shrink-0 text-muted" />
+        <div className="relative z-10 -mt-6 px-4">
+          <label className="glass flex min-h-14 items-center gap-2 rounded-full px-4 text-ink">
+            <Search className="size-5 shrink-0 text-brown" />
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Sök tjänst, t.ex. städning, elektriker, renovering..."
-              className="w-full bg-transparent text-sm outline-none placeholder:text-muted"
+              placeholder="Sök tjänst, t.ex. städning, elektriker..."
+              className="w-full bg-transparent text-[15px] outline-none placeholder:text-muted"
             />
-            <button type="button" aria-label="Filter" onClick={() => setSheet("filters")} className="text-ink">
+            <button type="button" aria-label="Filter" onClick={() => setSheet("filters")} className="grid size-10 place-items-center rounded-full text-ink">
               <SlidersHorizontal className="size-5" />
             </button>
           </label>
-
-          <div className="mt-3 grid grid-cols-3 gap-1 pb-3 text-[11px] text-paper">
+          <button
+            type="button"
+            onClick={() => setSheet("job")}
+            className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-brown text-[15px] font-semibold text-paper shadow-soft"
+          >
+            Skapa uppdrag
+          </button>
+          <div className="mt-3 grid grid-cols-3 gap-2 pb-1 text-[11px] text-ink">
             <Trust icon={Zap} label="Snabbt & enkelt" />
-            <Trust icon={ShieldCheck} label="Trygga tjänsteutövare" split />
+            <Trust icon={ShieldCheck} label="Trygga tjänsteutövare" />
             <Trust icon={Star} label="Betyg & omdömen" />
-          </div>
           </div>
         </div>
       </section>
 
       <section className="px-4 pt-1">
         <div className="mb-3 flex items-end justify-between">
-          <h2 className="font-serif text-[1.55rem] leading-none font-medium">Populära tjänster</h2>
+          <h2 className="ios-section text-[1.35rem]">Populära tjänster</h2>
           <button type="button" onClick={() => setShowAll((value) => !value)} className="text-sm text-muted">
             {showAll ? "Visa färre" : "Visa alla →"}
           </button>
@@ -199,25 +225,24 @@ export function Home() {
         <button
           type="button"
           onClick={() => setSheet("job")}
-          className="relative block h-36 w-full overflow-hidden rounded-[1.4rem] bg-ink text-left text-paper"
+          className="flex w-full items-center gap-3 rounded-[1.4rem] border border-line bg-paper p-3 text-left shadow-soft"
         >
-          <img src={asset("/velio/notebook.jpg")} alt="" className="absolute top-0 right-0 h-full w-[62%] object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-r from-ink via-ink/88 to-ink/10" />
-          <div className="relative flex h-full max-w-[15rem] flex-col justify-center px-5">
-            <div className="font-serif text-[1.45rem] leading-none font-medium">Behöver du hjälp redan idag?</div>
-            <p className="mt-2 text-xs leading-snug text-paper/80">
+          <img src={asset("/velio/notebook.jpg")} alt="" className="size-16 shrink-0 rounded-2xl object-cover" />
+          <span className="min-w-0">
+            <span className="ios-section block text-[1.05rem]">Behöver du hjälp redan idag?</span>
+            <span className="mt-1 block text-[13px] leading-snug text-muted">
               Posta ditt uppdrag och få svar från tillgängliga proffs direkt.
-            </p>
-            <span className="mt-3 inline-flex w-fit items-center rounded-full bg-wheat px-3.5 py-2 text-xs font-semibold text-ink">
-              Skapa uppdrag →
             </span>
-          </div>
+          </span>
         </button>
       </section>
 
       <section className="px-4 pt-4 pb-2">
         <div className="mb-3 flex items-end justify-between">
-          <h2 className="min-w-0 font-serif text-[1.35rem] leading-tight font-medium">Tjänsteutövare nära dig</h2>
+          <div className="min-w-0">
+            <h2 className="ios-section text-[1.2rem]">Tjänsteutövare nära dig</h2>
+            {activeAddress ? <p className="text-xs text-muted">{activeAddress.label} · {activeAddress.line.split(",")[0]}</p> : null}
+          </div>
           <button type="button" onClick={() => go("profile")} className="shrink-0 text-sm text-muted">
             Bli utförare →
           </button>
@@ -226,7 +251,7 @@ export function Home() {
           <div className="rounded-[1.4rem] border border-dashed border-line bg-paper/60 px-4 py-5">
             <p className="font-semibold">Inga publicerade profiler ännu</p>
             <p className="mt-1 text-sm leading-relaxed text-muted">
-              VELIO visar bara riktiga personer. Skapa ett konto, verifiera dig och publicera din profil — eller posta ett uppdrag så att utförare kan hitta dig.
+              VELIO visar bara publicerade profiler. Det finns inga exempelkonton. Publicera din profil, eller posta ett uppdrag.
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <button type="button" onClick={() => go("profile")} className="rounded-full bg-ink px-4 py-2 text-sm font-semibold text-paper">
@@ -258,11 +283,11 @@ export function Home() {
   );
 }
 
-function Trust({ icon: Icon, label, split = false }: { icon: LucideIcon; label: string; split?: boolean }) {
+function Trust({ icon: Icon, label }: { icon: LucideIcon; label: string }) {
   return (
-    <div className={cn("flex items-center justify-center gap-1.5 px-1 text-center", split && "border-x border-paper/30")}>
-      <Icon className="size-3.5 shrink-0" />
-      <span className="leading-tight">{label}</span>
+    <div className="flex flex-col items-center justify-center gap-1 rounded-2xl bg-paper px-1.5 py-2 text-center shadow-soft">
+      <Icon className="size-3.5 shrink-0 text-brown" />
+      <span className="leading-tight font-medium">{label}</span>
     </div>
   );
 }
@@ -281,8 +306,8 @@ function PhotoTile({
   return (
     <button type="button" onClick={onClick} className="relative aspect-[4/5] overflow-hidden rounded-2xl text-left">
       <img src={image} alt="" className="absolute inset-0 h-full w-full object-cover" />
-      <div className="absolute inset-0 bg-gradient-to-t from-ink/70 via-ink/5 to-transparent" />
-      <span className="absolute right-1.5 bottom-2 left-1.5 flex flex-col items-start gap-1 text-[13px] leading-tight font-semibold text-paper">
+      <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-ink/80 via-ink/35 to-transparent" />
+      <span className="scrim-text absolute right-1.5 bottom-2 left-1.5 flex flex-col items-start gap-1 text-[13px] leading-tight font-semibold text-paper">
         <Icon className="size-5 shrink-0" />
         {label}
       </span>
@@ -308,14 +333,14 @@ function ProviderCard({
   onOpen: () => void;
 }) {
   return (
-    <div className="relative w-[7.15rem] shrink-0 overflow-hidden rounded-2xl bg-sand">
+    <div className="relative w-[10.5rem] shrink-0 overflow-hidden rounded-[1.25rem] border border-line bg-paper shadow-soft">
       <button type="button" onClick={onOpen} className="block w-full text-left">
         {photo ? (
-          <img src={photo} alt="" className="aspect-[4/5] w-full object-cover object-[center_18%]" />
+          <img src={photo} alt="" className="h-24 w-full object-cover object-[center_18%]" />
         ) : (
-          <div className="grid aspect-[4/5] w-full place-items-center bg-sand font-serif text-3xl">{name.slice(0, 1)}</div>
+          <div className="grid h-24 w-full place-items-center bg-sand text-2xl font-semibold text-brown">{name.slice(0, 1)}</div>
         )}
-        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-cream via-cream/95 to-transparent px-2.5 pt-8 pb-2.5">
+        <div className="px-2.5 py-2.5">
           <div className="truncate text-sm font-semibold text-ink">{name}</div>
           <div className="mt-0.5 flex items-center gap-1 text-xs text-muted">
             <Star className="size-3 fill-gold text-gold" />
@@ -345,7 +370,7 @@ export function SearchScreen() {
 
   return (
     <div className="bg-cream px-4 pt-4">
-      <h1 className="mb-3 font-serif text-4xl font-medium">Sök</h1>
+      <h1 className="ios-title mb-3 text-[2.15rem]">Sök</h1>
       <label className="mb-5 flex items-center gap-2 rounded-full border border-line bg-paper px-4 py-3">
         <Search className="size-5 text-muted" />
         <input
@@ -436,7 +461,8 @@ export function InboxScreen() {
     <div className="bg-cream">
       <AppHeader />
       <div className="px-4 pt-5 pb-8">
-        <h1 className="mb-5 font-serif text-[2.6rem] leading-none font-medium">Meddelanden</h1>
+        <h1 className="ios-title mb-2 text-[2.15rem]">Meddelanden</h1>
+        <p className="mb-4 text-sm text-muted">Håll kontakten i VELIO. Dela inte personnummer och betala inte utanför appen.</p>
         {threads.length === 0 ? (
           <div>
             <p className="text-sm text-muted">Inga meddelanden ännu.</p>
@@ -499,7 +525,11 @@ export function InboxScreen() {
                   <span className="flex items-center justify-between gap-2">
                     <span className="flex min-w-0 items-center gap-1 font-semibold">
                       <span className="truncate">{name}</span>
-                      {provider ? <BadgeCheck className="size-4 shrink-0 fill-gold text-paper" /> : null}
+                      {provider?.demo ? (
+                        <span className="rounded-full bg-brown px-1.5 py-0.5 text-[10px] font-semibold text-paper">Demo</span>
+                      ) : provider ? (
+                        <BadgeCheck className="size-4 shrink-0 fill-gold text-paper" />
+                      ) : null}
                     </span>
                     <span className={cn("flex shrink-0 items-center gap-1.5 text-sm font-medium", active ? "text-ok" : "text-muted")}>
                       <span className={cn("size-2 rounded-full", active ? "bg-ok" : "bg-muted")} />
@@ -532,7 +562,7 @@ function MenuSheet() {
   return (
     <BottomSheet title="Meny" onClose={closeSheet}>
       <div className="space-y-2">
-        <Btn variant="secondary" onClick={() => setSheet("location")}>Dela plats</Btn>
+        <Btn variant="secondary" onClick={() => useVelio.getState().openAddressSheet()}>Välj adress</Btn>
         <Btn variant="secondary" onClick={() => go("history")}>Bokningar</Btn>
         <Btn variant="secondary" onClick={() => go("profile")}>Profil</Btn>
         <Btn variant="secondary" onClick={() => go("help")}>Hjälp</Btn>
@@ -541,27 +571,108 @@ function MenuSheet() {
   );
 }
 
+type WhenMode = "day" | "range" | "deadline" | "flex";
+type TimeWindow = "" | "morning" | "afternoon" | "evening";
+
+const monthNames = ["januari", "februari", "mars", "april", "maj", "juni", "juli", "augusti", "september", "oktober", "november", "december"];
+const monthShort = ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "aug", "sep", "okt", "nov", "dec"];
+
+function startOfDay(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function sameDay(a: Date, b: Date) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
+function stamp(date: Date) {
+  return `${date.getDate()} ${monthShort[date.getMonth()]}`;
+}
+
+function timeSuffix(timeWindow: TimeWindow, clock: string) {
+  if (timeWindow === "morning") return "förmiddag";
+  if (timeWindow === "afternoon") return "eftermiddag";
+  if (timeWindow === "evening") return "kväll";
+  return clock;
+}
+
+function whenSummary(mode: WhenMode, start: Date | null, end: Date | null, timeWindow: TimeWindow, clock: string) {
+  const time = timeSuffix(timeWindow, clock);
+  const withTime = (base: string) => (time ? `${base}, ${time}` : base);
+  if (mode === "flex") return "Flexibel";
+  if (mode === "deadline" && start) return withTime(`Senast ${stamp(start)}`);
+  if (mode === "range" && start && end) return withTime(`${stamp(start)} – ${stamp(end)}`);
+  if ((mode === "day" || mode === "range") && start) return withTime(stamp(start));
+  return "";
+}
+
+function currentJobAddress(): AddressHit | null {
+  const state = useVelio.getState();
+  const active = state.addresses.find((item) => item.id === state.activeAddressId);
+  if (!active) return null;
+  return { id: active.id, label: active.line, detail: active.label, lat: active.lat, lng: active.lng };
+}
+
 function JobSheet() {
   const closeSheet = useVelio((state) => state.closeSheet);
   const showToast = useVelio((state) => state.showToast);
   const addPosted = useVelio((state) => state.addPosted);
+  const saveJobDraft = useVelio((state) => state.saveJobDraft);
+  const jobDraft = useVelio((state) => state.jobDraft);
   const [serviceId, setServiceId] = useState<ServiceId>("stad");
-  const [more, setMore] = useState(false);
   const [text, setText] = useState("");
-  const [dateLabel, setDateLabel] = useState("");
-  const [dateOpen, setDateOpen] = useState(false);
-  const [time, setTime] = useState("");
-  const [timeOpen, setTimeOpen] = useState(false);
-  const [address, setAddress] = useState("");
+  const [whenMode, setWhenMode] = useState<WhenMode>("day");
+  const [startDate, setStartDate] = useState<Date | null>(null);
+  const [endDate, setEndDate] = useState<Date | null>(null);
+  const [timeWindow, setTimeWindow] = useState<TimeWindow>("");
+  const [clock, setClock] = useState("");
+  const [addressQuery, setAddressQuery] = useState(() => currentJobAddress()?.label ?? "");
+  const [pickedAddress, setPickedAddress] = useState<AddressHit | null>(() => currentJobAddress());
+  const [addressHits, setAddressHits] = useState<AddressHit[]>([]);
+  const [addressBusy, setAddressBusy] = useState(false);
+  const [placeError, setPlaceError] = useState("");
+  const [locating, setLocating] = useState(false);
   const [files, setFiles] = useState<string[]>([]);
+  const [budget, setBudget] = useState("");
+  const [quotes, setQuotes] = useState(false);
+  const [step, setStep] = useState(0);
   const [done, setDone] = useState(false);
-  const featured: { id: ServiceId; name: string; image: string }[] = [
-    { id: "stad", name: "Städning", image: asset("/velio/tile-stad.jpg") },
-    { id: "ren", name: "Renovering", image: asset("/velio/tile-ren.jpg") },
-    { id: "el", name: "Elektriker", image: asset("/velio/tile-el.jpg") },
-    { id: "trad", name: "Trädgård", image: asset("/velio/tile-trad.jpg") },
-  ];
-  const extra = services.filter((service) => !featured.some((item) => item.id === service.id));
+  const [keyboard, setKeyboard] = useState(0);
+  const chosenWhen = whenSummary(whenMode, startDate, endDate, timeWindow, clock);
+  useEffect(() => {
+    if (step === 0 && text.trim().length < 3) return;
+    saveJobDraft({
+      step,
+      serviceId,
+      text,
+      whenMode,
+      start: startDate ? startDate.toISOString() : null,
+      end: endDate ? endDate.toISOString() : null,
+      timeWindow,
+      clock,
+      address: pickedAddress,
+      budget,
+      quotes,
+    });
+  }, [step, serviceId, text, whenMode, startDate, endDate, timeWindow, clock, pickedAddress, budget, quotes, saveJobDraft]);
+  const resumeJob = () => {
+    const draft = jobDraft;
+    if (!draft) return;
+    if (typeof draft.step === "number") setStep(draft.step);
+    if (typeof draft.serviceId === "string") setServiceId(draft.serviceId as ServiceId);
+    if (typeof draft.text === "string") setText(draft.text);
+    if (typeof draft.whenMode === "string") setWhenMode(draft.whenMode as WhenMode);
+    if (typeof draft.start === "string") setStartDate(new Date(draft.start));
+    if (typeof draft.end === "string") setEndDate(new Date(draft.end));
+    if (typeof draft.timeWindow === "string") setTimeWindow(draft.timeWindow as TimeWindow);
+    if (typeof draft.clock === "string") setClock(draft.clock);
+    if (draft.address && typeof draft.address === "object") setPickedAddress(draft.address as AddressHit);
+    if (typeof draft.budget === "string") setBudget(draft.budget);
+    if (typeof draft.quotes === "boolean") setQuotes(draft.quotes);
+  };
+  const catCols = services.length % 2 === 0 ? 2 : 3;
+  const catRows = Math.ceil(services.length / catCols);
+  const stepNames = ["Tjänst", "Beskrivning", "Tid", "Plats", "Budget", "Granska"];
   const hours = Array.from({ length: 14 }, (_, index) => `${String(index + 7).padStart(2, "0")}:00`);
 
   useEffect(() => {
@@ -570,139 +681,307 @@ function JobSheet() {
     return () => window.clearTimeout(timer);
   }, [done, closeSheet]);
 
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    const sync = () => {
+      const overlap = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
+      setKeyboard(overlap > 80 ? overlap : 0);
+    };
+    viewport.addEventListener("resize", sync);
+    viewport.addEventListener("scroll", sync);
+    sync();
+    return () => {
+      viewport.removeEventListener("resize", sync);
+      viewport.removeEventListener("scroll", sync);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (pickedAddress || addressQuery.trim().length < 2) {
+      setAddressHits([]);
+      setAddressBusy(false);
+      return;
+    }
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setAddressBusy(true);
+      void searchAddresses(addressQuery.trim(), controller.signal)
+        .then((hits) => {
+          if (!controller.signal.aborted) setAddressHits(hits);
+        })
+        .catch((error: unknown) => {
+          if (error instanceof DOMException && error.name === "AbortError") return;
+          if (!controller.signal.aborted) setAddressHits([]);
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setAddressBusy(false);
+        });
+    }, 320);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [addressQuery, pickedAddress]);
+
+  const pickDate = (date: Date) => {
+    const day = startOfDay(date);
+    if (whenMode === "range") {
+      if (!startDate || endDate) {
+        setStartDate(day);
+        setEndDate(null);
+        return;
+      }
+      if (day.getTime() < startDate.getTime()) {
+        setEndDate(startDate);
+        setStartDate(day);
+        return;
+      }
+      setEndDate(day);
+      return;
+    }
+    setStartDate(day);
+    setEndDate(null);
+  };
+
+  const useMyPlace = () => {
+    setLocating(true);
+    setPlaceError("");
+    void resolveCurrentLocation()
+      .then((place) => {
+        setPickedAddress({ id: "gps", label: place.label, detail: "Din plats just nu" });
+        setAddressQuery(place.label);
+        setAddressHits([]);
+      })
+      .catch(() => setPlaceError("Platsen gick inte att hämta. Skriv adressen och välj ett förslag."))
+      .finally(() => setLocating(false));
+  };
+
+  const advance = () => {
+    if (step === 1 && text.trim().length < 8) return showToast("Beskriv uppdraget lite till");
+    if (step === 2) {
+      if (whenMode === "range" && startDate && !endDate) return showToast("Välj även ett slutdatum");
+      if (!chosenWhen) return showToast("Välj datum, intervall, senast-datum eller flexibel");
+    }
+    if (step === 3 && !pickedAddress) return showToast("Välj en adress i listan, eller använd din plats");
+    if (step === 4 && budget && !/^\d+$/.test(budget)) return showToast("Skriv budget i hela kronor, eller hoppa över");
+    setStep((current) => Math.min(5, current + 1));
+  };
+
+  const publish = () => {
+    if (text.trim().length < 8) return showToast("Beskriv uppdraget lite till");
+    if (!chosenWhen) return showToast("Välj när uppdraget ska göras");
+    if (!pickedAddress) return showToast("Välj en adress");
+    const price = !quotes && budget ? Number(budget) : 0;
+    const attached = files.length ? `\n\nBifogat: ${files.join(", ")}` : "";
+    addPosted({
+      serviceId,
+      text: `${text.trim()}${attached}`,
+      when: chosenWhen,
+      address: pickedAddress.label,
+      rate: price > 0 ? "fixed" : "hour",
+      price,
+    });
+    setDone(true);
+    saveJobDraft(null);
+  };
+
+  const serviceName = services.find((item) => item.id === serviceId)?.name ?? "Tjänst";
+
   return (
-    <div className="absolute inset-0 z-40 overflow-y-auto bg-[#f7f2eb] pb-8">
-      <div className="relative px-4 pt-4">
-        <img src={asset("/velio/post-hero.jpg")} alt="" className="pointer-events-none absolute top-0 right-0 h-36 w-[58%] object-cover" />
-        <div className="pointer-events-none absolute top-0 right-0 h-36 w-[58%] bg-gradient-to-l from-transparent to-[#f7f2eb]" />
-        <div className="relative">
-          <PlaceLink />
-          <div className="mt-1 flex items-center">
-          <button type="button" aria-label="Tillbaka" onClick={closeSheet} className="grid size-9 place-items-center">
+    <div className="absolute inset-0 z-40 flex flex-col bg-cream">
+      <div className="px-4 pt-3">
+        <div className="mt-1 flex items-center">
+          <button
+            type="button"
+            aria-label="Tillbaka"
+            onClick={() => (step === 0 ? closeSheet() : setStep(step - 1))}
+            className="grid size-10 place-items-center rounded-full"
+          >
             <ArrowLeft className="size-5" />
           </button>
           <p className="flex-1 text-center font-serif text-[1.7rem] tracking-[0.28em]">VELIO</p>
-          <span className="size-9" />
-          </div>
+          <span className="size-10" />
         </div>
-        <h1 className="relative mt-4 max-w-[16rem] font-serif text-4xl leading-none">Lägg upp ett uppdrag</h1>
-        <p className="relative mt-2 max-w-[16rem] text-sm leading-snug">Beskriv vad du behöver hjälp med så matchar vi dig med tillgängliga tjänsteutövare.</p>
       </div>
-
-      <div className="relative mt-4 space-y-3 px-4">
-        <section className="rounded-[1.3rem] border border-[#efeae4] bg-white/80 p-3">
-          <div className="mb-3 flex items-start gap-2">
-            <LayoutGrid className="mt-0.5 size-5" />
-            <div>
-              <p className="font-semibold">Tjänst</p>
-              <p className="text-sm text-[#5c564f]">Välj vilken typ av hjälp du behöver.</p>
-            </div>
-          </div>
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {featured.map((item) => (
-              <button key={item.id} type="button" onClick={() => setServiceId(item.id)} className={cn("relative w-[4.6rem] shrink-0 overflow-hidden rounded-2xl text-white", serviceId === item.id ? "ring-2 ring-[#6e5636]" : "")}>
-                <img src={item.image} alt="" className="h-[5.4rem] w-full object-cover" />
-                <span className={cn("absolute inset-0", serviceId === item.id ? "bg-[#6e5636]/50" : "bg-gradient-to-t from-black/55 to-transparent")} />
-                {serviceId === item.id ? (
-                  <span className="absolute top-1.5 right-1.5 grid size-5 place-items-center rounded-full bg-white text-[#6e5636]">
-                    <Check className="size-3" />
+      <div className={cn("min-h-0 flex-1 px-4 pt-2", step === 0 ? "flex flex-col overflow-hidden pb-2" : "overflow-y-auto pb-4")}>
+        <div className={step === 0 ? "shrink-0" : undefined}>
+        <StepProgress step={step + 1} total={6} label={stepNames[step]} />
+        <h1 className={cn("ios-title", step === 0 ? "text-[1.35rem] leading-tight" : "text-[1.85rem]")}>
+          {step === 0 ? "Vad behöver du hjälp med?" : step === 1 ? "Beskriv uppdraget" : step === 2 ? "När ska det göras?" : step === 3 ? "Var ska det utföras?" : step === 4 ? "Ungefärlig budget" : "Granska och publicera"}
+        </h1>
+        {step === 0 && jobDraft ? (
+          <button type="button" onClick={resumeJob} className="mt-3 h-11 w-full rounded-full border border-line text-sm font-semibold">
+            Fortsätt där du slutade
+          </button>
+        ) : null}
+        <p className={cn("leading-snug text-muted", step === 0 ? "mt-1 text-xs" : "mt-2 text-sm")}>
+          {step === 4
+            ? "Budgeten är en riktlinje. Du betalar när jobbet är klart, och inget dras om arbetet inte utförs."
+            : step === 0
+              ? "Välj en tjänst."
+              : "Kort steg för steg. Du kan gå tillbaka och ändra innan du publicerar."}
+        </p>
+        </div>
+        <div className={cn(step === 0 ? "mt-2 min-h-0 flex-1" : "mt-4 space-y-3")}>
+        {step === 0 ? (
+          <div
+            className="grid h-full min-h-0 gap-1.5"
+            style={{
+              gridTemplateColumns: `repeat(${catCols}, minmax(0, 1fr))`,
+              gridTemplateRows: `repeat(${catRows}, minmax(0, 1fr))`,
+            }}
+          >
+            {services.map((service) => {
+              const photo = popular.find((item) => item.id === service.id);
+              const selected = serviceId === service.id;
+              return (
+                <button
+                  key={service.id}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => setServiceId(service.id)}
+                  className={cn(
+                    "relative h-full min-h-0 overflow-hidden rounded-2xl border-2 text-left text-paper",
+                    selected ? "border-brown" : "border-transparent",
+                  )}
+                >
+                  {photo ? (
+                    <img src={photo.image} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                  ) : (
+                    <span className="absolute inset-0 bg-sand" />
+                  )}
+                  <span className={cn("absolute inset-0", selected ? "bg-brown/40" : "bg-gradient-to-t from-ink/80 via-ink/15 to-transparent")} />
+                  {selected ? (
+                    <span className="absolute top-1 right-1 grid size-5 place-items-center rounded-full bg-paper text-brown">
+                      <Check className="size-3" />
+                    </span>
+                  ) : null}
+                  <span className="scrim-text absolute inset-x-1.5 bottom-1 text-[clamp(0.62rem,2.1dvh,0.95rem)] leading-tight font-semibold">
+                    {photo ? null : <ServiceIcon name={service.icon} className="mb-0.5 size-4" />}
+                    {service.name}
                   </span>
-                ) : null}
-                <span className="absolute inset-x-1 bottom-1.5 text-center text-[11px] font-semibold">{item.name}</span>
-              </button>
-            ))}
-            <button type="button" onClick={() => setMore(!more)} className="grid h-[5.4rem] w-[4.6rem] shrink-0 place-items-center rounded-2xl border border-[#efeae4] bg-[#f7f2eb] text-center text-[11px] leading-tight">
-              <LayoutGrid className="size-5" />
-              Fler
-              <br />
-              tjänster
-            </button>
-          </div>
-          {more ? (
-            <div className="mt-2 flex flex-wrap gap-2">
-              {extra.map((service) => (
-                <button key={service.id} type="button" onClick={() => setServiceId(service.id)} className={cn("rounded-full border px-3 py-1.5 text-sm", serviceId === service.id ? "border-[#6e5636] bg-[#6e5636] text-white" : "border-[#efeae4]")}>
-                  {service.name}
                 </button>
-              ))}
-            </div>
-          ) : null}
-        </section>
+              );
+            })}
+          </div>
+        ) : null}
 
-        <section className="rounded-[1.3rem] border border-[#efeae4] bg-white/80 p-3">
+        {step === 1 ? (
+        <section className="rounded-[1.3rem] border border-line bg-paper/80 backdrop-blur-xl p-3">
           <div className="mb-2 flex items-start gap-2">
             <ClipboardList className="mt-0.5 size-5" />
             <div>
               <p className="font-semibold">Beskriv uppdraget</p>
-              <p className="text-sm text-[#5c564f]">Berätta kort vad som ska göras.</p>
+              <p className="text-sm text-muted">Berätta kort vad som ska göras.</p>
             </div>
           </div>
-          <textarea value={text} onChange={(event) => setText(event.target.value)} rows={3} placeholder="T.ex. flyttstädning av 3 rum och kök." className="w-full rounded-2xl border border-[#efeae4] px-3 py-3 text-sm outline-none" />
+          <textarea value={text} onChange={(event) => setText(event.target.value)} rows={4} placeholder="T.ex. flyttstädning av 3 rum och kök." className="w-full rounded-2xl border border-line px-3 py-3 text-sm outline-none" />
         </section>
+        ) : null}
 
-        <section className="rounded-[1.3rem] border border-[#efeae4] bg-white/80 p-3">
-          <div className="mb-2 flex items-start gap-2">
-            <Calendar className="mt-0.5 size-5" />
-            <div>
-              <p className="font-semibold">Datum & tid</p>
-              <p className="text-sm text-[#5c564f]">När vill du att uppdraget utförs?</p>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <button type="button" onClick={() => { setDateOpen(!dateOpen); setTimeOpen(false); }} className="flex items-center gap-2 rounded-full border border-[#efeae4] px-3 py-2.5 text-sm">
-              <Calendar className="size-4" />
-              <span className="flex-1 truncate text-left">{dateLabel || "Välj datum"}</span>
-              <ChevronDown className="size-4 text-muted" />
-            </button>
-            <button type="button" onClick={() => { setTimeOpen(!timeOpen); setDateOpen(false); }} className="flex items-center gap-2 rounded-full border border-[#efeae4] px-3 py-2.5 text-sm">
-              <Clock className="size-4" />
-              <span className="flex-1 text-left">{time || "Välj tid"}</span>
-              <ChevronDown className="size-4 text-muted" />
-            </button>
-          </div>
-          {dateOpen ? (
-            <MiniDate
-              onPick={(label) => {
-                setDateLabel(label);
-                setDateOpen(false);
-              }}
-            />
-          ) : null}
-          {timeOpen ? (
-            <div className="mt-2 grid max-h-40 grid-cols-4 gap-1 overflow-y-auto">
-              {hours.map((hour) => (
-                <button key={hour} type="button" onClick={() => { setTime(hour); setTimeOpen(false); }} className={cn("rounded-full py-1.5 text-sm", time === hour ? "bg-[#6e5636] text-white" : "bg-[#f6f1ea]")}>
-                  {hour}
+        {step === 2 ? (
+          <section className="rounded-[1.3rem] border border-line bg-paper p-3 shadow-soft">
+            <div className="grid grid-cols-2 gap-1.5 rounded-2xl bg-sand p-1">
+              {(
+                [
+                  ["day", "Specifikt datum"],
+                  ["range", "Datumintervall"],
+                  ["deadline", "Senast"],
+                  ["flex", "Flexibel"],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  aria-pressed={whenMode === id}
+                  onClick={() => {
+                    setWhenMode(id);
+                    if (id !== "range") setEndDate(null);
+                    if (id === "flex") {
+                      setStartDate(null);
+                      setEndDate(null);
+                    }
+                  }}
+                  className={cn(
+                    "min-h-11 rounded-xl px-2 text-sm font-semibold",
+                    whenMode === id ? "bg-paper text-ink shadow-soft" : "text-muted",
+                  )}
+                >
+                  {label}
                 </button>
               ))}
             </div>
-          ) : null}
-        </section>
+            <p className="mt-3 rounded-2xl bg-sand px-3 py-2 text-sm font-medium">
+              {chosenWhen ? `Valt: ${chosenWhen}` : whenMode === "range" ? "Välj första och sista dagen." : "Välj ett datum, eller flexibel."}
+            </p>
+            {whenMode === "flex" ? null : (
+              <JobCalendar mode={whenMode} start={startDate} end={endDate} onPick={pickDate} />
+            )}
+            {whenMode === "flex" ? null : (
+              <div className="mt-3">
+                <p className="mb-2 flex items-center gap-2 text-sm font-semibold">
+                  <Clock className="size-4" /> Tid, valfritt
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  {(
+                    [
+                      ["morning", "Förmiddag"],
+                      ["afternoon", "Eftermiddag"],
+                      ["evening", "Kväll"],
+                    ] as const
+                  ).map(([id, label]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      aria-pressed={timeWindow === id}
+                      onClick={() => {
+                        setTimeWindow(timeWindow === id ? "" : id);
+                        setClock("");
+                      }}
+                      className={cn(
+                        "min-h-11 rounded-2xl border text-sm font-semibold",
+                        timeWindow === id ? "border-brown bg-brown text-paper" : "border-line bg-paper",
+                      )}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-2 grid grid-cols-4 gap-1.5">
+                  {hours.map((hour) => (
+                    <button
+                      key={hour}
+                      type="button"
+                      onClick={() => {
+                        setClock(clock === hour ? "" : hour);
+                        setTimeWindow("");
+                      }}
+                      className={cn("rounded-full py-2 text-sm", clock === hour ? "bg-brown text-paper" : "bg-sand")}
+                    >
+                      {hour}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </section>
+        ) : null}
 
-        <section className="rounded-[1.3rem] border border-[#efeae4] bg-white/80 p-3">
-          <div className="mb-2 flex items-start gap-2">
-            <MapPin className="mt-0.5 size-5" />
-            <div>
-              <p className="font-semibold">Plats</p>
-              <p className="text-sm text-[#5c564f]">Var ska uppdraget utföras?</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 rounded-full border border-[#efeae4] px-3">
-            <MapPin className="size-4 shrink-0 text-[#5c564f]" />
-            <input value={address} onChange={(event) => setAddress(event.target.value)} placeholder="Ange adress" className="min-w-0 flex-1 bg-transparent py-2.5 text-sm outline-none" />
-            <button type="button" aria-label="Använd plats" onClick={() => setAddress("Strandvägen 12, Stockholm")} className="text-[#5c564f]">
-              <Navigation className="size-4" />
-            </button>
-          </div>
-        </section>
+        {step === 3 ? (
+          <section className="relative z-10 rounded-[1.3rem] border border-line bg-paper p-3 shadow-soft">
+            <AddressSearch picked={pickedAddress} onPick={(hit) => { setPickedAddress(hit); setAddressQuery(hit.label); }} onClear={() => { setPickedAddress(null); setAddressQuery(""); }} />
+          </section>
+        ) : null}
 
-        <section className="flex items-center gap-2 rounded-[1.3rem] border border-[#efeae4] bg-white/80 p-3">
+        {step === 1 ? (
+        <section className="flex items-center gap-2 rounded-[1.3rem] border border-line bg-paper/80 backdrop-blur-xl p-3">
           <Paperclip className="size-5 shrink-0" />
           <span className="min-w-0 flex-1">
             <span className="block font-semibold">Bifoga (valfritt)</span>
-            <span className="block text-sm text-[#5c564f]">{files.length ? files.join(", ") : "Lägg till bilder eller filer som hjälper."}</span>
+            <span className="block text-sm text-muted">{files.length ? files.join(", ") : "Lägg till bilder eller filer som hjälper."}</span>
           </span>
-          <label className="grid size-9 shrink-0 cursor-pointer place-items-center rounded-xl border border-[#efeae4] text-lg">
+          <label className="grid size-9 shrink-0 cursor-pointer place-items-center rounded-xl border border-line text-lg">
             +
             <input
               type="file"
@@ -716,32 +995,80 @@ function JobSheet() {
             />
           </label>
         </section>
+        ) : null}
 
-        <button
-          type="button"
-          onClick={() => {
-            if (text.trim().length < 8) return showToast("Beskriv uppdraget lite till");
-            if (!dateLabel || !time) return showToast("Välj datum och tid");
-            if (address.trim().length < 3) return showToast("Ange en adress");
-            addPosted({
-              serviceId,
-              text: text.trim(),
-              when: `${dateLabel}, ${time}`,
-              address: address.trim(),
-              rate: "hour",
-              price: 0,
-            });
-            setDone(true);
-          }}
-          className="flex w-full items-center justify-center gap-2 rounded-full bg-[#6e5636] py-3.5 text-base font-semibold text-white"
-        >
-          Publicera uppdrag <span aria-hidden>→</span>
-        </button>
+        {step === 4 ? (
+          <section className="rounded-[1.3rem] border border-line bg-paper p-3 shadow-soft">
+            <button
+              type="button"
+              aria-pressed={quotes}
+              onClick={() => {
+                setQuotes(true);
+                setBudget("");
+              }}
+              className={cn(
+                "flex w-full items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left",
+                quotes ? "border-brown bg-brown text-paper" : "border-line bg-paper",
+              )}
+            >
+              <span>
+                <span className="block font-semibold">Hoppa över · jag vill få offerter</span>
+                <span className={cn("mt-0.5 block text-sm", quotes ? "text-paper/80" : "text-muted")}>
+                  Ingen summa behövs. Utförare svarar med pris.
+                </span>
+              </span>
+              {quotes ? <Check className="size-5 shrink-0" /> : null}
+            </button>
+            <label className={cn("mt-3 flex items-center gap-2 rounded-2xl border border-line px-4", quotes && "opacity-50")}>
+              <input
+                inputMode="numeric"
+                value={budget}
+                onChange={(event) => {
+                  setBudget(event.target.value.replace(/\D/g, "").slice(0, 6));
+                  setQuotes(false);
+                }}
+                onFocus={(event) => event.currentTarget.scrollIntoView({ block: "center" })}
+                placeholder="Eller skriv en budget"
+                aria-label="Budget i kronor"
+                className="h-12 min-w-0 flex-1 bg-transparent text-lg font-semibold outline-none"
+              />
+              <span className="text-sm font-semibold text-muted">kr</span>
+            </label>
+            <div className="mt-3">
+              <TrustNote>Betalningen hålls tills jobbet är klart. Kvitto sparas i appen.</TrustNote>
+            </div>
+          </section>
+        ) : null}
+        {step === 5 ? (
+          <section className="space-y-2 rounded-[1.3rem] border border-line bg-paper p-4 text-sm shadow-soft">
+            <ReviewRow label="Tjänst" value={serviceName} />
+            <ReviewRow label="Beskrivning" value={text.trim()} />
+            <ReviewRow label="När" value={chosenWhen || "—"} />
+            <ReviewRow label="Plats" value={pickedAddress?.label || "—"} />
+            <ReviewRow label="Budget" value={!quotes && budget ? `${budget} kr` : "Offerter, ingen budget"} />
+            <ReviewRow label="Bilder" value={files.length ? files.join(", ") : "Inga"} />
+          </section>
+        ) : null}
+        </div>
+      </div>
+      <div
+        className="flex gap-2 border-t border-line bg-cream/95 px-4 py-3 backdrop-blur-xl"
+        style={keyboard ? { transform: `translateY(-${keyboard}px)` } : undefined}
+      >
+        {step < 5 ? (
+          <button type="button" onClick={advance} className="h-12 flex-1 rounded-full bg-brown text-base font-semibold text-paper">
+            Nästa
+          </button>
+        ) : (
+          <button type="button" onClick={publish} className="h-12 flex-1 rounded-full bg-brown text-base font-semibold text-paper">
+            Publicera uppdrag
+          </button>
+        )}
       </div>
       {done ? (
-        <div className="absolute inset-0 z-10 grid place-items-center bg-[#f7f2eb]/80">
+        <div className="absolute inset-0 z-10 grid place-items-center bg-cream/80">
           <div className="velio-klart flex flex-col items-center gap-3">
-            <span className="grid size-24 place-items-center rounded-full bg-[#6e5636] text-white shadow-lg">
+            <span className="grid size-24 place-items-center rounded-full bg-brown text-white shadow-lg">
               <Check className="size-12" strokeWidth={2.4} />
             </span>
             <span className="font-serif text-3xl">Klart</span>
@@ -752,34 +1079,75 @@ function JobSheet() {
   );
 }
 
-function MiniDate({ onPick }: { onPick: (label: string) => void }) {
-  const now = new Date();
-  const [cursor, setCursor] = useState(new Date(now.getFullYear(), now.getMonth(), 1));
+function ReviewRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-start justify-between gap-3 border-b border-line py-2 last:border-b-0">
+      <span className="text-muted">{label}</span>
+      <span className="max-w-[14rem] text-right font-medium">{value}</span>
+    </div>
+  );
+}
+
+function JobCalendar({
+  mode,
+  start,
+  end,
+  onPick,
+}: {
+  mode: WhenMode;
+  start: Date | null;
+  end: Date | null;
+  onPick: (date: Date) => void;
+}) {
+  const today = startOfDay(new Date());
+  const [cursor, setCursor] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
   const year = cursor.getFullYear();
   const month = cursor.getMonth();
-  const start = (new Date(year, month, 1).getDay() + 6) % 7;
+  const lead = (new Date(year, month, 1).getDay() + 6) % 7;
   const count = new Date(year, month + 1, 0).getDate();
-  const cells = [...Array(start).fill(0), ...Array.from({ length: count }, (_, index) => index + 1)];
-  const names = ["januari", "februari", "mars", "april", "maj", "juni", "juli", "augusti", "september", "oktober", "november", "december"];
-  const short = ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "aug", "sep", "okt", "nov", "dec"];
+  const cells = [...Array(lead).fill(0), ...Array.from({ length: count }, (_, index) => index + 1)];
+  const rangeStart = start ? start.getTime() : 0;
+  const rangeEnd = end ? end.getTime() : 0;
+
   return (
-    <div className="mt-2 rounded-2xl bg-[#f6f1ea] p-3">
+    <div className="mt-3 rounded-2xl bg-sand p-3">
       <div className="mb-2 flex items-center justify-between text-sm font-semibold">
-        <button type="button" onClick={() => setCursor(new Date(year, month - 1, 1))} aria-label="Föregående månad">‹</button>
-        <span className="capitalize">{names[month]} {year}</span>
-        <button type="button" onClick={() => setCursor(new Date(year, month + 1, 1))} aria-label="Nästa månad">›</button>
+        <button type="button" onClick={() => setCursor(new Date(year, month - 1, 1))} aria-label="Föregående månad" className="grid size-9 place-items-center rounded-full">‹</button>
+        <span className="capitalize">{monthNames[month]} {year}</span>
+        <button type="button" onClick={() => setCursor(new Date(year, month + 1, 1))} aria-label="Nästa månad" className="grid size-9 place-items-center rounded-full">›</button>
       </div>
-      <div className="grid grid-cols-7 text-center text-[11px] text-[#5c564f]">
+      <div className="grid grid-cols-7 text-center text-[11px] text-muted">
         {["M", "T", "O", "T", "F", "L", "S"].map((day, index) => (
           <span key={`${day}-${index}`}>{day}</span>
         ))}
       </div>
       <div className="mt-1 grid grid-cols-7 text-center text-sm">
-        {cells.map((day, index) => (
-          <button key={index} type="button" disabled={!day} onClick={() => onPick(`${day} ${short[month]}`)} className="py-1.5 disabled:opacity-0">
-            {day || ""}
-          </button>
-        ))}
+        {cells.map((day, index) => {
+          if (!day) return <span key={`e-${index}`} />;
+          const date = startOfDay(new Date(year, month, day));
+          const past = date.getTime() < today.getTime();
+          const isToday = sameDay(date, today);
+          const selected = (start && sameDay(date, start)) || (end && sameDay(date, end));
+          const between = mode === "range" && rangeStart && rangeEnd && date.getTime() > Math.min(rangeStart, rangeEnd) && date.getTime() < Math.max(rangeStart, rangeEnd);
+          return (
+            <button
+              key={date.toISOString()}
+              type="button"
+              disabled={past}
+              onClick={() => onPick(date)}
+              className={cn(
+                "mx-auto flex h-11 w-full flex-col items-center justify-center rounded-xl",
+                past && "text-muted/35",
+                between && "bg-wheat text-ink",
+                selected && "bg-brown text-paper",
+                isToday && !selected && "ring-2 ring-brown",
+              )}
+            >
+              <span className="leading-none">{day}</span>
+              {isToday ? <span className={cn("text-[9px] leading-none font-semibold", selected ? "text-paper" : "text-brown")}>Idag</span> : null}
+            </button>
+          );
+        })}
       </div>
     </div>
   );

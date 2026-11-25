@@ -1,0 +1,10 @@
+{
+  "name": "velio-stripe-api",
+  "private": true,
+  "description": "VELIO payment API for Vercel. Test mode only. No hosted Checkout.",
+  "dependencies": {
+    "firebase-admin": "^13.6.0",
+    "pdfkit": "^0.15.2",
+    "stripe": "^17.7.0"
+  }
+}
