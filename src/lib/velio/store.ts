@@ -135,6 +135,16 @@ export type CartItem = { id: string; serviceId: ServiceId; providerId: string };
 
 export type PayCard = { id: string; label: string; detail: string };
 
+export type VelioInvoice = {
+  id: string;
+  number: string;
+  status: "draft" | "issued";
+  totalSek: number;
+  title: string;
+  buyerId: string;
+  workerId: string;
+};
+
 export type Booking = {
   id: string;
   serviceId: ServiceId;
@@ -435,6 +445,7 @@ type VelioState = {
   cart: CartItem[];
   chats: Record<string, ChatMsg[]>;
   bookings: Booking[];
+  invoices: VelioInvoice[];
   posted: PostedJob[];
   jobOffers: JobOffer[];
   acceptOffer: (id: string) => void;
@@ -676,6 +687,7 @@ export const useVelio = create<VelioState>()(
       cart: seedCart,
       chats: {},
       bookings: seedBookings,
+      invoices: [],
       posted: [],
       jobOffers: [],
       checkout: null,
@@ -1116,6 +1128,7 @@ export const useVelio = create<VelioState>()(
           peers: {},
           chats: {},
           bookings: [],
+          invoices: [],
           cart: [],
           posted: [],
           jobOffers: [],
@@ -1178,6 +1191,7 @@ export const useVelio = create<VelioState>()(
           peers: {},
           chats: {},
           bookings: [],
+          invoices: [],
           cart: [],
           posted: [],
           jobOffers: [],

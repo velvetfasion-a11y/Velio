@@ -31,7 +31,7 @@ import {
   type Provider,
   type ServiceId,
 } from "@/lib/velio/data";
-import { useVelio, type ChatMsg, type PostedJob, type SavedAddress } from "@/lib/velio/store";
+import { useVelio, type ChatMsg, type PostedJob, type SavedAddress, type VelioInvoice } from "@/lib/velio/store";
 
 export type CloudOffer = {
   id: string;
@@ -502,6 +502,37 @@ export function startCloudSession(uid: string) {
       }
     }),
   );
+
+  const invoiceBuckets = { buyer: new Map<string, VelioInvoice>(), worker: new Map<string, VelioInvoice>() };
+  const emitInvoices = () => {
+    const merged = new Map<string, VelioInvoice>([...invoiceBuckets.buyer, ...invoiceBuckets.worker]);
+    useVelio.setState({ invoices: [...merged.values()] });
+  };
+  const watchInvoices = (field: "buyerId" | "workerId") =>
+    onSnapshot(
+      query(collection(database, "invoices"), where(field, "==", uid)),
+      (snap) => {
+        const bucket = field === "buyerId" ? invoiceBuckets.buyer : invoiceBuckets.worker;
+        bucket.clear();
+        for (const item of snap.docs) {
+          const data = item.data();
+          const totalOre = typeof data.totalOre === "number" ? data.totalOre : 0;
+          bucket.set(item.id, {
+            id: item.id,
+            number: asString(data.number),
+            status: data.status === "issued" ? "issued" : "draft",
+            totalSek: Math.round(totalOre / 100),
+            title: asString((data.job as { title?: unknown } | undefined)?.title) || "Uppdrag",
+            buyerId: asString(data.buyerId),
+            workerId: asString(data.workerId),
+          });
+        }
+        emitInvoices();
+      },
+      () => undefined,
+    );
+  unsubs.push(watchInvoices("buyerId"));
+  unsubs.push(watchInvoices("workerId"));
 }
 
 export async function saveAccountProfile(input: { name: string; email: string; phone: string }) {

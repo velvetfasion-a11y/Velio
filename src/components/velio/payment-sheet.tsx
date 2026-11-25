@@ -5,6 +5,7 @@ import { Elements, ExpressCheckoutElement, PaymentElement, useElements, useStrip
 import { loadStripe, type Appearance } from "@stripe/stripe-js";
 import { Check, ChevronRight } from "lucide-react";
 import { createPaymentIntent } from "@/lib/stripe/api";
+import { downloadInvoicePdf, saveInvoiceBuyer } from "@/lib/invoices";
 import {
   paymentReturnUrl,
   paymentsMode,
@@ -63,8 +64,12 @@ export function PaymentSheet({
   const [method, setMethod] = useState<Method>("apple");
   const [picker, setPicker] = useState(false);
   const [error, setError] = useState("");
+  const [companyName, setCompanyName] = useState("");
+  const [orgNr, setOrgNr] = useState("");
+  const [pdfNote, setPdfNote] = useState("");
   const [drag, setDrag] = useState(0);
   const [clientSecret, setClientSecret] = useState("");
+  const [paymentIntentId, setPaymentIntentId] = useState("");
   const dragOrigin = useRef<number | null>(null);
   const mode = paymentsMode();
   const live = mode === "test" && order.offerId !== "demo";
@@ -82,7 +87,10 @@ export function PaymentSheet({
     let cancelled = false;
     void createPaymentIntent(order.offerId)
       .then((result) => {
-        if (!cancelled) setClientSecret(result.clientSecret);
+        if (!cancelled) {
+          setClientSecret(result.clientSecret);
+          setPaymentIntentId(result.paymentIntentId);
+        }
       })
       .catch((reason: unknown) => {
         if (!cancelled) setError(reason instanceof Error ? reason.message : "Betalningen kunde inte startas");
@@ -137,11 +145,7 @@ export function PaymentSheet({
   onCloseRef.current = onClose;
   useEffect(() => {
     if (phase !== "success") return;
-    const timer = window.setTimeout(() => {
-      onPaidRef.current?.();
-      onCloseRef.current();
-    }, 1500);
-    return () => window.clearTimeout(timer);
+    onPaidRef.current?.();
   }, [phase]);
 
   const succeed = () => {
@@ -200,7 +204,22 @@ export function PaymentSheet({
         </div>
 
         {phase === "success" ? (
-          <Success />
+          <Success
+            order={order}
+            companyName={companyName}
+            orgNr={orgNr}
+            note={pdfNote}
+            onPdf={() => {
+              if (!paymentIntentId) {
+                setPdfNote("PDF:en skapas när en betalning är registrerad.");
+                return;
+              }
+              void downloadInvoicePdf(paymentIntentId, "faktura.pdf").catch((reason: unknown) => {
+                setPdfNote(reason instanceof Error ? reason.message : "Fakturan kunde inte hämtas");
+              });
+            }}
+            onClose={onClose}
+          />
         ) : phase === "processing" ? (
           <p className="px-6 py-16 text-center text-[15px] text-[#6E6560]">Betalningen behandlas</p>
         ) : picker ? (
@@ -231,6 +250,24 @@ export function PaymentSheet({
             </div>
             <p className="mt-3 text-[15px] text-[#5C534C]">{detail}</p>
             <p className="mt-1 text-[12px] text-[#8A8178]">Inkl. moms och serviceavgift</p>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <input
+                value={companyName}
+                onChange={(event) => setCompanyName(event.target.value)}
+                onBlur={() => void saveInvoiceBuyer(order.offerId, { companyName, orgNr }).catch(() => undefined)}
+                placeholder="Företag, valfritt"
+                aria-label="Företagsnamn"
+                className="h-11 rounded-xl border border-[#E6E1DB] px-3 text-[14px] outline-none"
+              />
+              <input
+                value={orgNr}
+                onChange={(event) => setOrgNr(event.target.value)}
+                onBlur={() => void saveInvoiceBuyer(order.offerId, { companyName, orgNr }).catch(() => undefined)}
+                placeholder="Org.nr"
+                aria-label="Organisationsnummer"
+                className="h-11 rounded-xl border border-[#E6E1DB] px-3 text-[14px] outline-none"
+              />
+            </div>
 
             <div className="mt-6 grid grid-cols-2 gap-2.5">
               {live && clientSecret ? (
@@ -512,13 +549,54 @@ function GoogleMark() {
   );
 }
 
-function Success() {
+function Success({
+  order,
+  companyName,
+  orgNr,
+  note,
+  onPdf,
+  onClose,
+}: {
+  order: CheckoutOrder;
+  companyName: string;
+  orgNr: string;
+  note: string;
+  onPdf: () => void;
+  onClose: () => void;
+}) {
+  const fee = Math.round(order.priceSek * 0.1);
+  const work = order.priceSek - fee;
   return (
-    <div className="flex flex-col items-center px-6 py-14">
+    <div className="flex flex-col items-center px-6 pt-8 pb-6">
       <span className="velio-pop grid size-16 place-items-center rounded-full bg-[#1A1A1A] text-white">
         <Check className="size-8" strokeWidth={2.4} />
       </span>
       <p className="mt-5 text-[28px] font-semibold tracking-[-0.03em]">Betalt!</p>
+      <div className="mt-6 w-full rounded-2xl border border-[#EFEBE6] px-4 py-3">
+        <p className="text-[12px] text-[#8A8178]">Kvitto</p>
+        <p className="mt-1 text-[15px]">{order.jobTitle}</p>
+        <div className="mt-3 flex justify-between text-[14px]">
+          <span>{order.workerName}</span>
+          <span>{sek(work)}</span>
+        </div>
+        <div className="mt-1 flex justify-between text-[14px] text-[#5C534C]">
+          <span>VELIO serviceavgift</span>
+          <span>{sek(fee)}</span>
+        </div>
+        <div className="mt-3 flex justify-between border-t border-[#EFEBE6] pt-3 text-[16px] font-semibold">
+          <span>Totalt</span>
+          <span>{sek(order.priceSek)}</span>
+        </div>
+        {companyName || orgNr ? <p className="mt-2 text-[12px] text-[#8A8178]">{[companyName, orgNr].filter(Boolean).join(" · ")}</p> : null}
+        <p className="mt-2 text-[12px] text-[#8A8178]">Moms specificeras på fakturan. Saknas uppgifter är den ett utkast.</p>
+      </div>
+      <button type="button" onClick={onPdf} className="mt-4 h-[52px] w-full rounded-[14px] bg-[#1A1A1A] text-[16px] font-semibold text-white active:scale-[0.98]">
+        Ladda ner faktura (PDF)
+      </button>
+      {note ? <p className="mt-3 text-center text-[13px] text-[#6E6560]">{note}</p> : null}
+      <button type="button" onClick={onClose} className="mt-3 h-11 text-[15px] text-[#5C534C]">
+        Stäng
+      </button>
     </div>
   );
 }

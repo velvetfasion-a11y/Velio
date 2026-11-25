@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Download, FileText, Star, Bell, ArrowLeft, Heart, BadgeCheck, Shield, Calendar, MessageCircle, Clock, ChevronDown, ChevronRight, MapPin, Camera, Wrench, Phone, Ellipsis, Plus, Navigation, ClipboardCheck, Car, Check, Coins, CreditCard, Mic, Send, Briefcase, Search, Pencil, Ban, ClipboardList, Headphones, X, Lock, ShieldCheck, type LucideIcon } from "lucide-react";
+import { FileText, Star, Bell, ArrowLeft, Heart, BadgeCheck, Shield, Calendar, MessageCircle, Clock, ChevronDown, ChevronRight, MapPin, Camera, Wrench, Phone, Ellipsis, Plus, Navigation, ClipboardCheck, Car, Check, Coins, CreditCard, Mic, Send, Briefcase, Search, Pencil, Ban, ClipboardList, Headphones, X, Lock, ShieldCheck, type LucideIcon } from "lucide-react";
 import { kr, providerById, providerDescription, providerTradeNames, ratingLabel, serviceById, sortLabels, whenOptions, type SortKey } from "@/lib/velio/data";
 import { ownBusiness, useVelio, bookingStatusLabel, type Booking, type ChatMsg } from "@/lib/velio/store";
 import { cn } from "@/lib/cn";
@@ -12,33 +12,6 @@ import { MissedCallCard } from "@/components/velio/call-screen";
 import { MISSED_CALL_TEXT } from "@/lib/calls/ice";
 
 const EMPTY_CHAT: ChatMsg[] = [];
-
-function receiptText(booking: Booking) {
-  const service = serviceById(booking.serviceId);
-  const provider = providerById(booking.providerId);
-  return [
-    "VELIO",
-    service?.name ?? "Tjänst",
-    provider?.name ?? "",
-    booking.whenLabel,
-    booking.location,
-    `Kostnad: ${kr(booking.cost)}`,
-    booking.tip != null ? `Dricks: ${kr(booking.tip)}` : "",
-    booking.rating != null ? `Betyg: ${ratingLabel(booking.rating)}` : "",
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
-
-function download(filename: string, body: string) {
-  const blob = new Blob([body], { type: "text/plain;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(url);
-}
 
 const serviceLine: Record<string, string> = {
   sak: "Säkerhet & bevakning",
@@ -2057,12 +2030,13 @@ export function ReceiptSheet() {
   const go = useVelio((state) => state.go);
   const rebook = useVelio((state) => state.rebook);
   const booking = bookings.find((item) => item.id === receiptId);
+  const showToast = useVelio((state) => state.showToast);
   if (!booking) return null;
   const service = serviceById(booking.serviceId);
   const provider = providerById(booking.providerId);
 
   return (
-    <FullScreen title="Bokningsdetaljer" onBack={closeSheet}>
+    <FullScreen title="Kvitto" onBack={closeSheet}>
       <div className="space-y-3 bg-soft px-5 py-5">
         <div className="flex items-center justify-between rounded-2xl bg-paper p-4">
           <div>
@@ -2090,20 +2064,9 @@ export function ReceiptSheet() {
             <Row label="Betyg" value="Inte satt" last />
           )}
         </div>
-        <div className="grid grid-cols-2 gap-2">
-          <Btn
-            variant="secondary"
-            onClick={() => download(`velio-kvitto-${booking.id.slice(0, 6)}.txt`, receiptText(booking))}
-          >
-            <Download className="size-4" /> Kvitto
-          </Btn>
-          <Btn
-            variant="secondary"
-            onClick={() => download(`velio-faktura-${booking.id.slice(0, 6)}.txt`, `FAKTURA\n${receiptText(booking)}`)}
-          >
-            <FileText className="size-4" /> Faktura
-          </Btn>
-        </div>
+        <Btn onClick={() => showToast("Fakturan skapas när betalningen är registrerad. Den ligger under Historik.")}>
+          <FileText className="size-4" /> Ladda ner faktura (PDF)
+        </Btn>
         <Btn onClick={() => rebook(booking.id)}>Boka om</Btn>
         <Btn
           variant="secondary"

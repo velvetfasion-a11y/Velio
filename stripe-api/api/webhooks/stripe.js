@@ -56,6 +56,10 @@ export default async function handler(req, res) {
         await db.collection("jobs").doc(jobId).set(jobPatch, { merge: true });
       }
       if (offerId) await db.collection("offers").doc(offerId).set(patch, { merge: true });
+      if (status === "succeeded") {
+        const { createInvoiceForIntent } = await import("../../lib/invoice.js");
+        await createInvoiceForIntent(db, stripe, intent);
+      }
     }
     if (event.type === "account.updated") {
       const account = event.data.object;

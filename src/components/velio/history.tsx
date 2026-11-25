@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Leaf, Shield, Sparkles, Wrench, Zap, type LucideIcon } from "lucide-react";
 import { kr, serviceById, type ServiceId } from "@/lib/velio/data";
-import { useVelio, bookingStatusLabel, type Booking } from "@/lib/velio/store";
+import { useVelio, bookingStatusLabel, type Booking, type VelioInvoice } from "@/lib/velio/store";
+import { downloadInvoicePdf } from "@/lib/invoices";
 import { AppHeader } from "@/components/velio/header";
 import { cn } from "@/lib/cn";
 import { asset } from "@/lib/velio/asset";
@@ -27,6 +28,7 @@ const thumbs: Partial<Record<ServiceId, string>> = {
 
 export function HistoryScreen() {
   const bookings = useVelio((state) => state.bookings);
+  const invoices = useVelio((state) => state.invoices);
   const openReceipt = useVelio((state) => state.openReceipt);
   const rebook = useVelio((state) => state.rebook);
   const openService = useVelio((state) => state.openService);
@@ -51,6 +53,14 @@ export function HistoryScreen() {
       <AppHeader />
       <div className="px-4 pt-5">
         <h1 className="font-serif text-[2.6rem] leading-none font-medium">Historik</h1>
+        {invoices.length ? (
+          <div className="mt-4 space-y-3">
+            <h2 className="text-sm font-semibold text-muted">Kvitton</h2>
+            {invoices.map((invoice) => (
+              <InvoiceRow key={invoice.id} invoice={invoice} />
+            ))}
+          </div>
+        ) : null}
         <div className="mt-4 space-y-3">
           {bookings.length === 0 ? <p className="text-sm text-muted">Inga bokningar ännu.</p> : null}
           {bookings.map((booking) => (
@@ -81,6 +91,26 @@ export function HistoryScreen() {
   );
 }
 
+function InvoiceRow({ invoice }: { invoice: VelioInvoice }) {
+  const showToast = useVelio((state) => state.showToast);
+  return (
+    <article className="flex items-center gap-3 rounded-[1.25rem] border border-line bg-paper p-3">
+      <div className="min-w-0 flex-1">
+        <p className="font-semibold">{invoice.number || "Kvitto"}</p>
+        <p className="text-[13px] text-muted">{invoice.title}</p>
+        <p className="text-[13px] text-muted">{kr(invoice.totalSek)}{invoice.status === "draft" ? " · Utkast" : ""}</p>
+      </div>
+      <button
+        type="button"
+        onClick={() => void downloadInvoicePdf(invoice.id, `${invoice.number || "faktura"}.pdf`).catch((reason: unknown) => showToast(reason instanceof Error ? reason.message : "Fakturan kunde inte hämtas"))}
+        className="shrink-0 rounded-full bg-[#1A1A1A] px-3 py-2 text-[13px] font-semibold text-white"
+      >
+        Ladda ner faktura (PDF)
+      </button>
+    </article>
+  );
+}
+
 export function HistoryCard({ booking, onOpen, onRebook }: { booking: Booking; onOpen: () => void; onRebook: () => void }) {
   const service = serviceById(booking.serviceId);
   const status = bookingStatusLabel(booking.status);
@@ -100,6 +130,9 @@ export function HistoryCard({ booking, onOpen, onRebook }: { booking: Booking; o
         <span className="mt-0.5 block text-[13px] text-muted">{kr(booking.cost)}</span>
       </button>
       <span className={cn("text-sm font-medium", booking.status === "done" ? "text-ok" : "text-ink")}>{status}</span>
+      <button type="button" onClick={onOpen} className="shrink-0 text-sm font-semibold text-ink">
+        Kvitto
+      </button>
       <button type="button" onClick={onRebook} className="shrink-0 rounded-full bg-bronze px-3.5 py-2 text-sm font-semibold text-white">
         Boka om
       </button>

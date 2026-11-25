@@ -19,8 +19,12 @@ async function post<T>(path: string, body: Record<string, string>) {
   return data;
 }
 
-export function createPaymentIntent(offerId: string) {
-  return post<{ clientSecret: string; amount: number; currency: string }>("/api/create-payment-intent", { offerId });
+export function createPaymentIntent(offerId: string, buyer?: { companyName?: string; orgNr?: string }) {
+  return post<{ clientSecret: string; paymentIntentId: string; amount: number; currency: string }>("/api/create-payment-intent", {
+    offerId,
+    buyerCompanyName: buyer?.companyName || "",
+    buyerOrgNr: buyer?.orgNr || "",
+  });
 }
 
 export function createConnectAccount() {

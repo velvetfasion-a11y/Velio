@@ -129,6 +129,21 @@ service cloud.firestore {
     // Collection: maskedBridges
     // Written only by the payments API. Clients cannot read the real numbers.
     //
+    // Collection: invoices
+    // Document ID: Stripe PaymentIntent id
+    // Written only by the payments API. Buyer, worker, or an admin may read.
+    // Never contains a personnummer. status is draft or issued.
+    //
+    // Collection: invoiceDrafts
+    // Document ID: offer id. The buyer may store an optional company name and
+    // organisation number before paying. Personnummer is not a valid org nr.
+    //
+    // Collection: counters
+    // Server only. Holds the invoice sequence.
+    //
+    // Collection: admins
+    // Document ID: uid. Created in the console. Exists so that user can read invoices.
+    //
     // ===============================================================
     // Helper Functions
     // ===============================================================
@@ -624,6 +639,43 @@ service cloud.firestore {
         allow update: if false;
         allow delete: if canTouchCall();
       }
+    }
+
+    function isInvoiceReader() {
+      return isAuthenticated() && (
+        request.auth.uid == resource.data.buyerId ||
+        request.auth.uid == resource.data.workerId ||
+        request.auth.token.admin == true ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isSafeOrgNr(value) {
+      return value is string && value.matches('^[0-9]{2}[2-9][0-9]{3}-[0-9]{4}$');
+    }
+
+    match /invoices/{invoiceId} {
+      allow read: if isInvoiceReader();
+      allow create, update, delete: if false;
+    }
+
+    match /invoiceDrafts/{offerId} {
+      allow read: if isAuthenticated() && resource.data.buyerId == request.auth.uid;
+      allow create, update: if isAuthenticated() &&
+        request.resource.data.buyerId == request.auth.uid &&
+        request.resource.data.keys().hasOnly(['buyerId', 'companyName', 'orgNr', 'updatedAt']) &&
+        (!('companyName' in request.resource.data) || (request.resource.data.companyName is string && request.resource.data.companyName.size() <= 120)) &&
+        (!('orgNr' in request.resource.data) || request.resource.data.orgNr == '' || isSafeOrgNr(request.resource.data.orgNr)) &&
+        (!('updatedAt' in request.resource.data) || isValidTimestamp(request.resource.data.updatedAt));
+      allow delete: if isAuthenticated() && resource.data.buyerId == request.auth.uid;
+    }
+
+    match /counters/{counterId} {
+      allow read, write: if false;
+    }
+
+    match /admins/{adminId} {
+      allow read, write: if false;
     }
 
     match /maskedBridges/{bridgeId} {

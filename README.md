@@ -57,4 +57,26 @@ Maskerade telefonnummer är av tills Twilio är ifyllt. Då visas Ring via telef
 
 Peka numrets röst-webhook till den adressen. Inget Twilio-konto skapas härifrån.
 
+## Fakturor
+
+När en betalning lyckas skriver API:t en faktura i `invoices/{paymentIntentId}` med löpnummer `VELIO-ÅÅÅÅ-000123`. Saknas uppgifter är den ett utkast, inte en färdig faktura. Personnummer sparas inte på fakturan. RUT är av.
+
+PDF: `GET /api/invoices/{id}/pdf` med Firebase-token. Bara köparen, utföraren eller en admin (custom claim `admin` eller dokumentet `admins/{uid}`).
+
+E-post skickas bara om `RESEND_API_KEY` och `RESEND_FROM` finns. Annars hoppas den över.
+
+Miljövariabler på Vercel:
+
+- `VELIO_COMPANY_NAME`
+- `VELIO_ORG_NR`
+- `VELIO_VAT_NR`
+- `VELIO_ADDRESS`
+- `VELIO_EMAIL`
+- `VELIO_F_SKATT` — `true` eller `false`
+- `VELIO_VAT_REGISTERED` — `true` eller `false`. Saknas värdet blir fakturan ett utkast
+- `VELIO_VAT_RATE` — valfritt, standard 25 när VELIO är momsregistrerat
+- `RESEND_API_KEY` och `RESEND_FROM` — valfritt
+
+Deploya `firestore.rules` innan fakturorna ska gå att läsa i appen.
+
 Se även `stripe-api/.env.example`.
