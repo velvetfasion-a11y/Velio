@@ -31,6 +31,7 @@ import {
   type MeResponse,
 } from "@/lib/velio/auth-api";
 import { chatDtoToMsg, previewMessageText, resolveTakeRequestStatuses } from "@/lib/velio/chat-codec";
+import { isStaticHost } from "@/lib/velio/local-auth";
 
 function mapSyncedMessages(
   messages: { id: string; from: "me" | "them"; text: string; time?: string }[],
@@ -710,7 +711,7 @@ export const useVelio = create<VelioState>()(
           accountMode,
           idVerified: Boolean(me.account.idVerified) || Boolean(own) || get().idVerified,
           idMethod: me.account.idMethod ?? get().idMethod,
-          posted: jobsToPosted(me.jobs),
+          posted: isStaticHost() ? get().posted : jobsToPosted(me.jobs),
           conversationByProvider: {
             ...get().conversationByProvider,
             ...mapped.conversationByProvider,
@@ -833,7 +834,7 @@ export const useVelio = create<VelioState>()(
           nextChats[activeProvider] = mapSyncedMessages(messages);
         }
         set({
-          posted: jobsToPosted(me.jobs),
+          posted: isStaticHost() ? get().posted : jobsToPosted(me.jobs),
           conversationByProvider: mapped.conversationByProvider,
           chats: nextChats,
           peers: mapped.peers,
@@ -1399,9 +1400,16 @@ export const useVelio = create<VelioState>()(
         });
       },
       addPosted: (job) => {
+        const local: PostedJob = {
+          id: `job-${uid()}`,
+          ownerId: get().accountId ?? undefined,
+          ownerName: get().profile.name || undefined,
+          ...job,
+        };
         void (async () => {
           const jobs = await createJobRemote(job);
-          set({ posted: jobsToPosted(jobs) });
+          if (jobs.length) set({ posted: jobsToPosted(jobs) });
+          else set({ posted: [local, ...get().posted.filter((item) => item.id !== local.id)] });
           get().showToast("Uppdraget är publicerat");
         })();
       },
@@ -1420,6 +1428,7 @@ export const useVelio = create<VelioState>()(
         conversationByProvider: state.conversationByProvider,
         appNotifications: state.appNotifications,
         bookings: state.bookings,
+        posted: state.posted,
         directory: state.directory,
         listing: state.listing,
         profile: state.profile,
@@ -1449,6 +1458,7 @@ export const useVelio = create<VelioState>()(
           },
           appNotifications,
           bookings,
+          posted: saved.posted ?? [],
           directory,
           cart: [],
         };

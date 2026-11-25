@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { ArrowLeftRight, Briefcase, Calendar, Check, ChevronLeft, ChevronRight, Clock, Coffee, MapPin, MessageCircle, SlidersHorizontal } from "lucide-react";
-import { greetingName } from "@/lib/velio/data";
+import { greetingName, serviceById, type ServiceId } from "@/lib/velio/data";
 import { hoursOn, loadSchedule, sameLocalDay, saveSchedule, weekDates, withDateHours, type DayHours, type WorkSchedule } from "@/lib/velio/schedule";
-import { useVelio } from "@/lib/velio/store";
+import { ownBusiness, useVelio, type PostedJob } from "@/lib/velio/store";
 import { AppHeader } from "@/components/velio/header";
 import { ProfilePhoto } from "@/components/velio/ui";
 import { cn } from "@/lib/cn";
@@ -21,6 +21,14 @@ type Offer = {
 };
 
 const seedOffers: Offer[] = [];
+
+function jobImage(serviceId: string) {
+  if (serviceId === "el") return asset("/velio/tile-el.jpg");
+  if (serviceId === "trad") return asset("/velio/tile-trad.jpg");
+  if (serviceId === "ren") return asset("/velio/tile-ren.jpg");
+  if (serviceId === "stad") return asset("/velio/tile-stad.jpg");
+  return asset("/velio/hero.jpg");
+}
 
 const dayLabels = ["Mån", "Tis", "Ons", "Tor", "Fre", "Lör", "Sön"];
 const hourOptions = Array.from({ length: 16 }, (_, index) => `${String(index + 6).padStart(2, "0")}:00`);
@@ -59,6 +67,9 @@ export function BusinessHome() {
   const go = useVelio((state) => state.go);
   const takePostedJob = useVelio((state) => state.takePostedJob);
   const accountId = useVelio((state) => state.accountId);
+  const loggedIn = useVelio((state) => state.loggedIn);
+  const directory = useVelio((state) => state.directory);
+  const listing = useVelio((state) => state.listing);
   const posted = useVelio((state) => state.posted);
   const [open, setOpen] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -90,7 +101,20 @@ export function BusinessHome() {
     setSchedule(next);
     saveSchedule(next);
   };
-  const openJobs = posted.filter((job) => !skipped.includes(job.id) && job.ownerId !== accountId);
+  const own = ownBusiness({ accountId, directory, loggedIn });
+  const tradeIds: ServiceId[] = own?.serviceIds
+    ? own.serviceIds
+    : listing?.serviceIds
+      ? listing.serviceIds
+      : own?.serviceId
+        ? [own.serviceId]
+        : listing?.serviceId
+          ? [listing.serviceId]
+          : [];
+  const tradeNames: string[] = tradeIds.map((id) => serviceById(id)?.name ?? "").filter((name) => name.length > 0);
+  const otherTrade = own?.otherTrade || listing?.otherTrade;
+  if (otherTrade) tradeNames.push(otherTrade);
+  const openJobs = posted.filter((job) => !skipped.includes(job.id) && job.ownerId !== accountId && tradeIds.includes(job.serviceId));
   const first = greetingName(profile.name);
   const todayHours = now ? hoursOn(schedule, now) : null;
   const thisWeek = now ? weekDates(now, 0) : [];
@@ -108,7 +132,7 @@ export function BusinessHome() {
           when: job.when,
           tag: job.ownerName || "Kund",
           price: `${job.price.toLocaleString("sv-SE")} kr`,
-          image: job.serviceId === "ren" ? asset("/velio/tile-ren.jpg") : job.serviceId === "el" ? asset("/velio/tile-el.jpg") : job.serviceId === "trad" ? asset("/velio/tile-trad.jpg") : asset("/velio/tile-stad.jpg"),
+          image: jobImage(job.serviceId),
           status: "new" as const,
           ownerId: job.ownerId,
         }))}
@@ -279,8 +303,52 @@ export function BusinessHome() {
           })}
         </div>
       </section>
+
+      <section className="mt-4">
+        <div className="mb-3 flex items-end justify-between gap-3 px-1">
+          <h2 className="min-w-0 font-serif text-[1.35rem] leading-tight font-medium">
+            {tradeNames.length === 1 ? `Uppdrag inom ${tradeNames[0]}` : "Uppdrag i dina yrken"}
+          </h2>
+          {openJobs.length ? (
+            <button type="button" onClick={() => setOffersOpen(true)} className="shrink-0 text-sm text-[#5c564f]">
+              Visa alla →
+            </button>
+          ) : null}
+        </div>
+        {tradeNames.length > 1 ? <p className="mb-2 px-1 text-sm text-[#5c564f]">{tradeNames.join(" · ")}</p> : null}
+        {tradeNames.length === 0 ? (
+          <div className="rounded-[1.4rem] border border-dashed border-[#e6dfd6] bg-white/70 px-4 py-5">
+            <p className="font-semibold">Publicera ditt yrke</p>
+            <p className="mt-1 text-sm leading-relaxed text-[#5c564f]">Uppdrag inom el, städning och dina andra yrken visas här när profilen är publicerad.</p>
+          </div>
+        ) : openJobs.length === 0 ? (
+          <div className="rounded-[1.4rem] border border-dashed border-[#e6dfd6] bg-white/70 px-4 py-5">
+            <p className="font-semibold">Inga uppdrag inom {tradeNames.join(", ") || "ditt yrke"} just nu</p>
+            <p className="mt-1 text-sm leading-relaxed text-[#5c564f]">När en kund postar ett jobb i ditt yrke syns det här.</p>
+          </div>
+        ) : (
+          <div className="flex gap-3 overflow-x-auto pb-2">
+            {openJobs.map((job) => (
+              <JobMiniCard key={job.id} job={job} onOpen={() => setOffersOpen(true)} />
+            ))}
+          </div>
+        )}
+      </section>
       </div>
     </div>
+  );
+}
+
+function JobMiniCard({ job, onOpen }: { job: PostedJob; onOpen: () => void }) {
+  const trade = serviceById(job.serviceId)?.name ?? "Uppdrag";
+  return (
+    <button type="button" onClick={onOpen} className="relative w-[8.6rem] shrink-0 overflow-hidden rounded-2xl bg-[#efeae4] text-left">
+      <img src={jobImage(job.serviceId)} alt="" className="aspect-[4/5] w-full object-cover" />
+      <span className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#f6f1ea] via-[#f6f1ea]/95 to-transparent px-2.5 pt-8 pb-2.5">
+        <span className="line-clamp-2 block text-sm leading-tight font-semibold">{job.text}</span>
+        <span className="mt-0.5 block truncate text-[11px] text-[#5c564f]">{trade}</span>
+      </span>
+    </button>
   );
 }
 
