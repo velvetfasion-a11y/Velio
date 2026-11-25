@@ -125,6 +125,13 @@ export function publicDisplayName(name: string | null | undefined) {
   return trimmed;
 }
 
+/** Drop generated stand-in addresses. A real mailbox is kept. */
+export function contactEmail(email: string | null | undefined) {
+  const value = (email ?? "").trim();
+  if (!value || /@(?:bankid\.)?velio\.local$/i.test(value)) return "";
+  return value;
+}
+
 export function greetingName(name: string | null | undefined) {
   return publicDisplayName(name).split(" ")[0] ?? "";
 }

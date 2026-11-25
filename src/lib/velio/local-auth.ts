@@ -279,7 +279,7 @@ export function localBankIdSignIn(input?: { name?: string; personalNumber?: stri
       id: uid(),
       provider: "bankid",
       name,
-      email: `${uid()}@bankid.velio.local`,
+      email: "",
       phone: "",
       providerId,
       accountMode: "customer",

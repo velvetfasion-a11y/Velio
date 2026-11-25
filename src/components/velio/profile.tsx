@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ArrowLeftRight,
   Briefcase,
@@ -21,7 +21,7 @@ import {
   TrendingUp,
   User,
 } from "lucide-react";
-import { kr, publicDisplayName, serviceById } from "@/lib/velio/data";
+import { contactEmail, kr, publicDisplayName, serviceById } from "@/lib/velio/data";
 import { HistoryCard } from "@/components/velio/history";
 import { VerifyIdScreen } from "@/components/velio/verify-id";
 import { ownBusiness, useVelio, type Booking } from "@/lib/velio/store";
@@ -66,7 +66,6 @@ export function ProfileScreens() {
   const loggedIn = useVelio((state) => state.loggedIn);
   const logout = useVelio((state) => state.logout);
   const profile = useVelio((state) => state.profile);
-  const setProfile = useVelio((state) => state.setProfile);
   const saveProfile = useVelio((state) => state.saveProfile);
   const cards = useVelio((state) => state.cards);
   const addCard = useVelio((state) => state.addCard);
@@ -85,6 +84,7 @@ export function ProfileScreens() {
   const setNotifications = useVelio((state) => state.setNotifications);
   const locationOn = useVelio((state) => state.locationOn);
   const userLocation = useVelio((state) => state.userLocation);
+  const clearLocation = useVelio((state) => state.clearLocation);
   const showToast = useVelio((state) => state.showToast);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [issue, setIssue] = useState("");
@@ -275,71 +275,118 @@ export function ProfileScreens() {
   }
 
   if (screen === "settings") {
+    const own = ownBusiness({ accountId, directory, loggedIn });
+    const knownName =
+      publicDisplayName(profile.name) || publicDisplayName(own?.name) || publicDisplayName(listing?.title) || publicDisplayName(own?.title);
+    const knownEmail = contactEmail(profile.email);
+    const saveContact = async (patch: Partial<typeof profile>, toast: string) => {
+      const next = { ...profile, ...patch, name: publicDisplayName(patch.name ?? profile.name) || knownName };
+      const ok = await saveProfile(next);
+      if (!ok) return;
+      showToast(toast);
+    };
     return (
-      <div className="px-5 pt-4">
+      <div className="px-5 pt-2 pb-8">
         <ScreenHeader title="Inställningar" />
         {legal ? (
-          <div>
-            <button type="button" onClick={() => setLegal(null)} className="mb-3 text-sm font-semibold">
+          <div className="rounded-[1.4rem] border border-[#efeae4] bg-white px-4 py-4">
+            <button type="button" onClick={() => setLegal(null)} className="text-sm font-semibold text-[#5c564f]">
               Tillbaka
             </button>
-            <p className="text-sm leading-relaxed text-muted">
-            {legal === "privacy"
-              ? "VELIO lagrar namn, bokningar och chatt endast i den här webbläsaren under demon. Ingen riktig betalning eller identifiering sker. Rensa webbplatsdata om du vill ta bort det."
-              : "Tjänsten i den här vyn är en prototyp. Priser är exempel. Ett uppdrag blir bindande först när både du och utföraren bekräftat i den skarpa tjänsten."}
+            <h2 className="mt-3 font-serif text-[1.7rem] leading-none">{legal === "privacy" ? "Integritetspolicy" : "Användarvillkor"}</h2>
+            <p className="mt-3 text-sm leading-relaxed text-[#5c564f]">
+              {legal === "privacy"
+                ? "VELIO använder namn, telefon och e-post för att visa din profil och koppla dig till uppdrag. Plats används bara när du själv delar den, för att hitta jobb i ditt område."
+                : "Ett uppdrag gäller den tid och det pris som båda har bekräftat. Avbokning görs från uppdraget. Betalning sker med den metod som valts för jobbet."}
             </p>
           </div>
         ) : (
-          <div>
-            <Field label="Namn" value={profile.name} onChange={(event) => setProfile({ ...profile, name: event.target.value })} />
-            <Field label="Telefon" value={profile.phone} onChange={(event) => setProfile({ ...profile, phone: event.target.value })} />
-            <Field
-              label="E-post"
-              type="email"
-              value={profile.email}
-              onChange={(event) => setProfile({ ...profile, email: event.target.value })}
-            />
-            <Btn
-              onClick={() => {
-                void (async () => {
-                  const ok = await saveProfile(profile);
-                  if (!ok) return;
-                  showToast("Profil sparad");
-                })();
-              }}
-            >
-              Spara namn och kontakt
-            </Btn>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={notifications}
-              onClick={() => setNotifications(!notifications)}
-              className="flex w-full items-center justify-between border-b border-line py-4 text-left"
-            >
-              <span>Notifikationer</span>
-              <span className={notifications ? "rounded-full bg-ink px-3 py-1 text-sm text-paper" : "rounded-full bg-soft px-3 py-1 text-sm"}>
-                {notifications ? "På" : "Av"}
-              </span>
-            </button>
-            <button type="button" onClick={() => setSheet("location")} className="flex w-full items-center justify-between border-b border-line py-4 text-left">
-              <span>Plats</span>
-              <span className={cn("max-w-[55%] truncate text-sm", locationOn ? "font-medium text-[#2f7a3c]" : "text-muted")}>
-                {locationOn ? userLocation?.label || "GPS på" : "Av"}
-              </span>
-            </button>
-            <button type="button" onClick={() => setLegal("privacy")} className="flex w-full items-center justify-between border-b border-line py-4">
-              <span>Integritetspolicy</span>
-              <ChevronRight className="size-4 text-muted" />
-            </button>
-            <button type="button" onClick={() => setLegal("terms")} className="flex w-full items-center justify-between border-b border-line py-4">
-              <span>Användarvillkor</span>
-              <ChevronRight className="size-4 text-muted" />
-            </button>
-            <div className="flex items-center justify-between py-4">
-              <span>Version</span>
-              <span className="text-sm text-muted">1.0.0</span>
-            </div>
+          <div className="space-y-5">
+            <section>
+              <h2 className="mb-2 px-1 text-xs font-semibold tracking-wide text-[#8a8178]">KONTAKT</h2>
+              <div className="divide-y divide-[#f0ebe6] overflow-hidden rounded-[1.4rem] border border-[#efeae4] bg-white">
+                <ContactRow
+                  label="Namn"
+                  value={knownName}
+                  placeholder="För- och efternamn"
+                  onSave={(name) => {
+                    if (name.length < 2) {
+                      showToast("Skriv ditt namn");
+                      return;
+                    }
+                    return saveContact({ name }, "Namn sparat");
+                  }}
+                />
+                <ContactRow
+                  label="Telefon"
+                  value={profile.phone}
+                  type="tel"
+                  placeholder="07X XXX XX XX"
+                  onSave={(phone) => saveContact({ phone }, "Telefon sparad")}
+                />
+                <ContactRow
+                  label="E-post"
+                  value={knownEmail}
+                  type="email"
+                  placeholder="namn@mail.se"
+                  onSave={(email) => {
+                    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !contactEmail(email)) {
+                      showToast("Skriv din e-post");
+                      return;
+                    }
+                    return saveContact({ email }, "E-post sparad");
+                  }}
+                />
+              </div>
+            </section>
+
+            <section>
+              <h2 className="mb-2 px-1 text-xs font-semibold tracking-wide text-[#8a8178]">ENHETEN</h2>
+              <div className="divide-y divide-[#f0ebe6] overflow-hidden rounded-[1.4rem] border border-[#efeae4] bg-white">
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={notifications}
+                  onClick={() => setNotifications(!notifications)}
+                  className="flex w-full items-center gap-3 px-4 py-3.5 text-left"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[15px]">Notifikationer</span>
+                    <span className="mt-0.5 block text-xs text-[#8a8178]">{notifications ? "Aviseringar är på" : "Aviseringar är av"}</span>
+                  </span>
+                  <SettingSwitch on={notifications} />
+                </button>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={locationOn}
+                  onClick={() => (locationOn ? clearLocation() : setSheet("location"))}
+                  className="flex w-full items-center gap-3 px-4 py-3.5 text-left"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[15px]">Plats</span>
+                    <span className={cn("mt-0.5 block truncate text-xs", locationOn ? "text-[#2f7a3c]" : "text-[#8a8178]")}>
+                      {locationOn ? userLocation?.label || "Plats delad" : "Inte delad"}
+                    </span>
+                  </span>
+                  <SettingSwitch on={locationOn} />
+                </button>
+              </div>
+            </section>
+
+            <section>
+              <div className="overflow-hidden rounded-[1.4rem] border border-[#efeae4] bg-white">
+                <button type="button" onClick={() => setLegal("privacy")} className="flex w-full items-center gap-3 px-4 py-3.5 text-left">
+                  <span className="min-w-0 flex-1 text-[15px]">Integritetspolicy</span>
+                  <ChevronRight className="size-4 text-[#b7afa6]" />
+                </button>
+                <button type="button" onClick={() => setLegal("terms")} className="flex w-full items-center gap-3 border-t border-[#f0ebe6] px-4 py-3.5 text-left">
+                  <span className="min-w-0 flex-1 text-[15px]">Användarvillkor</span>
+                  <ChevronRight className="size-4 text-[#b7afa6]" />
+                </button>
+              </div>
+              <p className="mt-4 text-center text-xs text-[#a39c94]">VELIO 1.0.0</p>
+            </section>
           </div>
         )}
       </div>
@@ -622,6 +669,58 @@ function ModeCard({
       <span className="mt-2 block text-sm font-bold">{title}</span>
       <span className={cn("mt-1 block text-xs leading-snug", active ? "text-white/85" : "text-[#3c3834]")}>{text}</span>
     </button>
+  );
+}
+
+function ContactRow({
+  label,
+  value,
+  type = "text",
+  placeholder,
+  onSave,
+}: {
+  label: string;
+  value: string;
+  type?: string;
+  placeholder?: string;
+  onSave: (value: string) => Promise<void> | void;
+}) {
+  const [draft, setDraft] = useState(value);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => setDraft(value), [value]);
+  const dirty = draft.trim() !== value.trim();
+  return (
+    <div className="flex items-center gap-2 px-4 py-3">
+      <label className="min-w-0 flex-1">
+        <span className="block text-xs font-medium text-[#8a8178]">{label}</span>
+        <input
+          type={type}
+          value={draft}
+          placeholder={placeholder}
+          onChange={(event) => setDraft(event.target.value)}
+          className="mt-0.5 w-full bg-transparent text-[15px] text-[#2a211c] outline-none placeholder:text-[#c4bbb2]"
+        />
+      </label>
+      <button
+        type="button"
+        disabled={!dirty || busy}
+        onClick={() => {
+          setBusy(true);
+          void Promise.resolve(onSave(draft.trim())).finally(() => setBusy(false));
+        }}
+        className="shrink-0 rounded-full bg-[#2a211c] px-3 py-1.5 text-xs font-semibold text-white disabled:bg-[#f3eee8] disabled:text-[#b7afa6]"
+      >
+        Spara
+      </button>
+    </div>
+  );
+}
+
+function SettingSwitch({ on }: { on: boolean }) {
+  return (
+    <span className={cn("relative h-7 w-12 shrink-0 rounded-full transition", on ? "bg-[#2f7a3c]" : "bg-[#e7e0d8]")} aria-hidden>
+      <span className={cn("absolute top-0.5 size-6 rounded-full bg-white shadow-sm transition", on ? "left-5" : "left-0.5")} />
+    </span>
   );
 }
 

@@ -6,6 +6,7 @@ import {
   kr,
   providerById,
   providers,
+  contactEmail,
   publicDisplayName,
   serviceById,
   setProviders,
@@ -756,9 +757,14 @@ export const useVelio = create<VelioState>()(
           accountId: me.account.id,
           authProvider: me.account.provider,
           profile: {
-            name: publicDisplayName(me.account.name) || publicDisplayName(get().profile.name),
-            phone: me.account.phone,
-            email: me.account.email,
+            name:
+              publicDisplayName(me.account.name) ||
+              publicDisplayName(get().profile.name) ||
+              publicDisplayName(own?.name) ||
+              publicDisplayName(get().listing?.title) ||
+              publicDisplayName(own?.title),
+            phone: me.account.phone || get().profile.phone,
+            email: contactEmail(me.account.email) || contactEmail(get().profile.email),
             avatar: get().profile.avatar,
           },
           accountMode,
@@ -892,9 +898,9 @@ export const useVelio = create<VelioState>()(
           chats: nextChats,
           peers: mapped.peers,
           profile: {
-            name: publicDisplayName(me.account.name),
+            name: publicDisplayName(me.account.name) || publicDisplayName(get().profile.name),
             phone: me.account.phone || get().profile.phone,
-            email: me.account.email,
+            email: contactEmail(me.account.email) || contactEmail(get().profile.email),
             avatar: get().profile.avatar,
           },
           accountMode: me.account.accountMode,
@@ -1525,7 +1531,7 @@ export const useVelio = create<VelioState>()(
         const directory = saved.directory ?? [];
         syncDirectory(directory);
         const profile = saved.profile
-          ? { ...saved.profile, name: publicDisplayName(saved.profile.name) }
+          ? { ...saved.profile, name: publicDisplayName(saved.profile.name), email: contactEmail(saved.profile.email) }
           : current.profile;
         return {
           ...current,
