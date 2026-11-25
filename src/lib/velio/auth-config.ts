@@ -18,6 +18,22 @@ export function bankIdConfigured(): boolean {
   return Boolean(env("BANKID_API_URL") && env("BANKID_API_KEY"));
 }
 
+export const IDURA_DEFAULT_ISSUER = "https://velio.test.idura.broker";
+export const IDURA_DEFAULT_CLIENT_ID = "urn:my:application:identifier:289054";
+
+export function iduraIssuer(): string {
+  return env("IDURA_ISSUER") || IDURA_DEFAULT_ISSUER;
+}
+
+export function iduraClientId(): string {
+  return env("IDURA_CLIENT_ID") || IDURA_DEFAULT_CLIENT_ID;
+}
+
+/** True only when the server holds the client secret. The secret is never sent to the app. */
+export function iduraConfigured(): boolean {
+  return Boolean(env("IDURA_CLIENT_SECRET") && iduraIssuer() && iduraClientId());
+}
+
 export function appBaseUrl(request?: Request): string {
   const fromEnv = env("APP_BASE_URL").replace(/\/$/, "");
   if (fromEnv) return fromEnv;
@@ -35,6 +51,8 @@ export function authCapabilities() {
     email: emailConfigured(),
     sms: smsConfigured(),
     bankid: bankIdConfigured(),
+    idura: iduraConfigured(),
+    freja: iduraConfigured(),
     sampleFallback: false,
   };
 }

@@ -5,8 +5,8 @@ export const dynamic = "force-dynamic";
 const noStore = { "cache-control": "private, no-store" };
 
 /**
- * Session probe / refresh only. New sessions are created exclusively by
- * Google OAuth, verified email OTP, or verified SMS OTP.
+ * Session probe / refresh only. New sessions are created by Idura
+ * (BankID or Freja eID), Google OAuth, verified email OTP, or verified SMS OTP.
  */
 export async function POST(request: Request) {
   const account = await getAccountBySession(request);

@@ -4,7 +4,7 @@ const isGhPages = process.env.GITHUB_PAGES === "1";
 const basePath = isGhPages ? "/Velio" : "";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["@electric-sql/pglite", "pg"],
+  serverExternalPackages: ["@electric-sql/pglite", "pg", "openid-client"],
   env: {
     NEXT_PUBLIC_BASE_PATH: process.env.NEXT_PUBLIC_BASE_PATH || basePath,
   },

@@ -1,7 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "@/lib/db";
+import { serverSecret } from "@/lib/velio/auth-secrets";
+import { isEidOnlyProvider, redactProviderId } from "@/lib/velio/eid-policy";
+import {
+  encryptPersonalNumber,
+  normalizePersonalNumber,
+  personalNumberLookupHash,
+} from "@/lib/velio/personal-number";
 
-export type AuthProvider = "bankid" | "google" | "apple" | "phone" | "email";
+export type AuthProvider = "bankid" | "freja" | "google" | "apple" | "phone" | "email";
 
 export type Account = {
   id: string;
@@ -66,7 +73,7 @@ export function accountPublic(account: Account) {
     name: account.name,
     email: account.email,
     phone: account.phone,
-    providerId: account.providerId,
+    providerId: redactProviderId(account.providerId),
     accountMode: account.accountMode,
     emailVerified: account.emailVerified,
     phoneVerified: account.phoneVerified,
@@ -125,9 +132,11 @@ export async function getAccountByGoogleSub(sub: string): Promise<Account | null
 }
 
 export async function getAccountByEmail(email: string): Promise<Account | null> {
+  const normalized = email.trim().toLowerCase();
+  if (!normalized.includes("@")) return null;
   const rows = await sql<AccountRow>(
     `select ${ACCOUNT_SELECT} from accounts where lower(email) = lower($1) order by created_at asc limit 1`,
-    [email],
+    [normalized],
   );
   return rows[0] ? mapAccount(rows[0]) : null;
 }
@@ -193,7 +202,7 @@ export async function createAccount(input: {
   const phone = input.phone.trim();
   if (name.length < 2) throw new Error("invalid_name");
   if (email && (email.length < 5 || !email.includes("@"))) throw new Error("invalid_email");
-  if (!email && input.provider !== "phone" && input.provider !== "bankid") throw new Error("invalid_email");
+  if (!email && input.provider !== "phone" && !isEidOnlyProvider(input.provider)) throw new Error("invalid_email");
   if (phone.length < 6 && input.provider === "phone") throw new Error("invalid_phone");
 
   const wantsBusiness = input.accountMode === "business";
@@ -202,6 +211,7 @@ export async function createAccount(input: {
 
   const id = `acc-${randomUUID().slice(0, 8)}`;
   const mode = wantsBusiness && idVerified ? "business" : "customer";
+  const storedEmail = email || (isEidOnlyProvider(input.provider) ? "" : `${id}@users.velio.local`);
   await sql(
     `insert into accounts (
        id, provider, name, email, phone, provider_id, account_mode,
@@ -211,7 +221,7 @@ export async function createAccount(input: {
       id,
       input.provider,
       name,
-      email || `${id}@users.velio.local`,
+      storedEmail,
       phone || "",
       input.providerId ?? null,
       mode,
@@ -225,6 +235,12 @@ export async function createAccount(input: {
   return loginWithAccountId(id);
 }
 
+async function assertLowAssuranceLogin(account: Account): Promise<void> {
+  if (isEidOnlyProvider(account.provider)) throw new Error("eid_only");
+  const rows = await sql<{ eid_sub: string | null }>(`select eid_sub from accounts where id = $1`, [account.id]);
+  if (rows[0]?.eid_sub) throw new Error("eid_only");
+}
+
 export async function upsertGoogleAccount(input: {
   sub: string;
   email: string;
@@ -233,6 +249,7 @@ export async function upsertGoogleAccount(input: {
 }): Promise<{ account: Account; token: string }> {
   const existing = await getAccountByGoogleSub(input.sub);
   if (existing) {
+    await assertLowAssuranceLogin(existing);
     await sql(
       `update accounts set email = $2, name = coalesce(nullif($3,''), name), email_verified = $4, provider = 'google'
        where id = $1`,
@@ -243,6 +260,7 @@ export async function upsertGoogleAccount(input: {
 
   const byEmail = await getAccountByEmail(input.email);
   if (byEmail) {
+    await assertLowAssuranceLogin(byEmail);
     await sql(
       `update accounts set google_sub = $2, email_verified = true, provider = 'google', name = coalesce(nullif($3,''), name)
        where id = $1`,
@@ -270,6 +288,7 @@ export async function loginOrCreateVerifiedEmail(input: {
   const email = input.email.trim().toLowerCase();
   const existing = await getAccountByEmail(email);
   if (existing) {
+    await assertLowAssuranceLogin(existing);
     await sql(`update accounts set email_verified = true where id = $1`, [existing.id]);
     const result = await loginWithAccountId(existing.id);
     return { ...result, created: false };
@@ -293,6 +312,7 @@ export async function loginOrCreateVerifiedPhone(input: {
   const phone = input.phone.trim();
   const existing = await getAccountByPhone(phone);
   if (existing) {
+    await assertLowAssuranceLogin(existing);
     await sql(`update accounts set phone_verified = true where id = $1`, [existing.id]);
     const result = await loginWithAccountId(existing.id);
     return { ...result, created: false };
@@ -308,36 +328,160 @@ export async function loginOrCreateVerifiedPhone(input: {
   return { ...result, created: true };
 }
 
-export async function loginOrCreateBankId(input: {
-  name?: string;
-  personalNumber?: string;
-}): Promise<{ account: Account; token: string; created: boolean }> {
-  const personal = (input.personalNumber || "").replace(/\D/g, "");
-  if (personal && personal.length !== 10 && personal.length !== 12) {
-    throw new Error("invalid_personal_number");
+function isUniqueViolation(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const code = "code" in error ? String((error as { code?: string }).code) : "";
+  if (code === "23505") return true;
+  const message = error instanceof Error ? error.message : "";
+  return /duplicate key|unique constraint/i.test(message);
+}
+
+async function findEidAccount(input: {
+  sub: string | null;
+  personalNumberHash: string | null;
+  legacyProviderId: string | null;
+}): Promise<Account | null> {
+  if (input.sub) {
+    const bySub = await sql<AccountRow>(`select ${ACCOUNT_SELECT} from accounts where eid_sub = $1 limit 1`, [
+      input.sub,
+    ]);
+    if (bySub[0]) return mapAccount(bySub[0]);
   }
-  const providerId = personal ? `pn-${personal}` : `bid-${randomUUID().slice(0, 10)}`;
-  const existing = personal ? await getAccountByProviderId(providerId) : null;
+  if (input.personalNumberHash) {
+    const byHash = await sql<AccountRow>(
+      `select ${ACCOUNT_SELECT} from accounts where personal_number_hash = $1 limit 1`,
+      [input.personalNumberHash],
+    );
+    if (byHash[0]) return mapAccount(byHash[0]);
+  }
+  if (input.legacyProviderId) {
+    const byLegacy = await sql<AccountRow>(
+      `select ${ACCOUNT_SELECT} from accounts
+       where provider_id = $1 and provider in ('bankid', 'freja') limit 1`,
+      [input.legacyProviderId],
+    );
+    if (byLegacy[0]) return mapAccount(byLegacy[0]);
+  }
+  return null;
+}
+
+/**
+ * Create or resume an account from a verified BankID or Freja identity.
+ * Personnummer is stored encrypted, with a keyed hash for lookup. It is not
+ * written into provider_id and is not returned to the client.
+ * The account stays BankID/Freja-only: email, SMS, and Google cannot enter it.
+ */
+export async function loginOrCreateEidAccount(input: {
+  sub: string | null;
+  name: string;
+  personalNumber: string | null;
+  scheme: "bankid" | "freja";
+  identityScheme: string;
+  acr: string;
+}): Promise<{ account: Account; token: string; created: boolean }> {
+  const personal = input.personalNumber ? normalizePersonalNumber(input.personalNumber) : null;
+  if (input.personalNumber && !personal) throw new Error("invalid_personal_number");
+  const secret = serverSecret();
+  const personalNumberHash = personal ? personalNumberLookupHash(personal, secret) : null;
+  const personalNumberEnc = personal ? encryptPersonalNumber(personal, secret) : null;
+  const legacyProviderId = personal ? `pn-${personal}` : null;
+  const name = input.name.trim().length >= 2 ? input.name.trim() : "Användare";
+
+  const existing = await findEidAccount({
+    sub: input.sub,
+    personalNumberHash,
+    legacyProviderId,
+  });
   if (existing) {
+    if (!isEidOnlyProvider(existing.provider)) throw new Error("eid_only");
+    const nextProviderId =
+      existing.providerId && /^pn-\d{10,12}$/.test(existing.providerId) ? null : existing.providerId;
     await sql(
-      `update accounts set provider = 'bankid', id_verified = true, id_method = 'bankid',
-              name = coalesce(nullif($2,''), name)
+      `update accounts set
+         provider = $2,
+         name = $3,
+         id_verified = true,
+         id_method = $4,
+         eid_sub = coalesce(eid_sub, $5),
+         identity_scheme = $6,
+         eid_acr = $7,
+         personal_number_hash = coalesce(personal_number_hash, $8),
+         personal_number_enc = coalesce(personal_number_enc, $9),
+         provider_id = $10
        where id = $1`,
-      [existing.id, input.name?.trim() || ""],
+      [
+        existing.id,
+        input.scheme,
+        name,
+        input.scheme,
+        input.sub,
+        input.identityScheme,
+        input.acr,
+        personalNumberHash,
+        personalNumberEnc,
+        nextProviderId,
+      ],
     );
     const result = await loginWithAccountId(existing.id);
     return { ...result, created: false };
   }
-  const result = await createAccount({
-    provider: "bankid",
+
+  let created: { account: Account; token: string };
+  try {
+    created = await createAccount({
+      provider: input.scheme,
+      name,
+      email: "",
+      phone: "",
+      providerId: null,
+      idVerified: true,
+      idMethod: input.scheme,
+    });
+  } catch (error) {
+    if (!isUniqueViolation(error)) throw error;
+    const raced = await findEidAccount({ sub: input.sub, personalNumberHash, legacyProviderId });
+    if (!raced) throw error;
+    const result = await loginWithAccountId(raced.id);
+    return { ...result, created: false };
+  }
+
+  try {
+    await sql(
+      `update accounts set
+         eid_sub = $2,
+         identity_scheme = $3,
+         eid_acr = $4,
+         personal_number_hash = $5,
+         personal_number_enc = $6
+       where id = $1`,
+      [created.account.id, input.sub, input.identityScheme, input.acr, personalNumberHash, personalNumberEnc],
+    );
+  } catch (error) {
+    await sql(`delete from accounts where id = $1`, [created.account.id]);
+    if (!isUniqueViolation(error)) throw error;
+    const raced = await findEidAccount({ sub: input.sub, personalNumberHash, legacyProviderId });
+    if (!raced) throw error;
+    const result = await loginWithAccountId(raced.id);
+    return { ...result, created: false };
+  }
+  return { ...created, created: true };
+}
+
+export async function loginOrCreateBankId(input: {
+  name?: string;
+  personalNumber?: string;
+}): Promise<{ account: Account; token: string; created: boolean }> {
+  const raw = input.personalNumber?.trim() || "";
+  const personal = raw ? normalizePersonalNumber(raw) : null;
+  if (raw && !personal) throw new Error("invalid_personal_number");
+  return loginOrCreateEidAccount({
+    sub: null,
     name: input.name?.trim() || "Användare",
-    email: "",
-    phone: "",
-    providerId,
-    idVerified: true,
-    idMethod: "bankid",
+    personalNumber: personal,
+    scheme: "bankid",
+    identityScheme: "sebankid",
+    acr: "direct-bankid",
   });
-  return { ...result, created: true };
 }
 
 export async function updateAccount(

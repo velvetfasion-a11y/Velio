@@ -2179,7 +2179,12 @@ export function BankIdSheet() {
       if (isStaticHost()) {
         throw new Error("BankID kräver en aktiverad BankID-koppling som öppnar BankID-appen.");
       }
-      const { startBankIdLogin, collectBankIdLogin, fetchMe } = await import("@/lib/velio/auth-api");
+      const { fetchAuthCapabilities, startBankIdLogin, collectBankIdLogin, fetchMe } = await import("@/lib/velio/auth-api");
+      const caps = await fetchAuthCapabilities();
+      if (caps.idura) {
+        window.location.href = `${process.env.NEXT_PUBLIC_BASE_PATH || ""}/api/auth/idura/start?method=bankid`;
+        return;
+      }
       const started = await startBankIdLogin();
       setLaunchUrl(started.launchUrl);
       setStatus("Öppna BankID-appen och identifiera dig.");
@@ -2226,7 +2231,7 @@ export function BankIdSheet() {
           else void start();
         }}
       >
-        {busy ? "Startar…" : "Öppna BankID"}
+        {busy ? "Startar…" : "Logga in med BankID"}
       </Btn>
       <Btn variant="secondary" className="mt-2" onClick={closeSheet}>
         Avbryt

@@ -2,7 +2,7 @@ import type { ServiceId } from "@/lib/velio/data";
 import type { ChatCard } from "@/lib/velio/store";
 import { encodeCardMessage } from "@/lib/velio/chat-codec";
 
-export type AuthProvider = "bankid" | "google" | "apple" | "phone" | "email";
+export type AuthProvider = "bankid" | "freja" | "google" | "apple" | "phone" | "email";
 
 export type AccountDto = {
   id: string;
@@ -78,10 +78,14 @@ export async function fetchAuthCapabilities(): Promise<{
   email: boolean;
   sms: boolean;
   bankid: boolean;
+  idura: boolean;
+  freja: boolean;
   sampleFallback: boolean;
 }> {
   const response = await fetch(apiPath("/api/auth/capabilities"), { credentials: "same-origin", cache: "no-store" });
-  if (!response.ok) return { google: false, email: false, sms: false, bankid: false, sampleFallback: false };
+  if (!response.ok) {
+    return { google: false, email: false, sms: false, bankid: false, idura: false, freja: false, sampleFallback: false };
+  }
   return json(response);
 }
 

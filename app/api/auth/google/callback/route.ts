@@ -1,4 +1,5 @@
 import { appBaseUrl } from "@/lib/velio/auth-config";
+import { EID_ONLY_MESSAGE } from "@/lib/velio/eid-policy";
 import { exchangeGoogleCode, STATE_COOKIE } from "@/lib/velio/google-oauth";
 import { sessionCookie, upsertGoogleAccount } from "@/lib/velio/session";
 
@@ -55,7 +56,12 @@ export async function GET(request: Request) {
     headers.append("set-cookie", clearState);
     return new Response(null, { status: 302, headers });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Google-inloggning misslyckades";
+    const message =
+      error instanceof Error && error.message === "eid_only"
+        ? EID_ONLY_MESSAGE
+        : error instanceof Error
+          ? error.message
+          : "Google-inloggning misslyckades";
     const headers = new Headers({
       Location: `${base}/?authError=${encodeURIComponent(message)}`,
     });

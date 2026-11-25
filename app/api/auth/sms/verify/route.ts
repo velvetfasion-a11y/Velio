@@ -1,3 +1,4 @@
+import { EID_ONLY_MESSAGE } from "@/lib/velio/eid-policy";
 import { verifyChallenge } from "@/lib/velio/otp";
 import { accountPublic, loginOrCreateVerifiedPhone, sessionCookie } from "@/lib/velio/session";
 
@@ -23,11 +24,19 @@ export async function POST(request: Request) {
   }
 
   const nameFromPayload = typeof checked.payload.name === "string" ? checked.payload.name : "";
-  const result = await loginOrCreateVerifiedPhone({
-    phone: checked.target,
-    name: body.name || nameFromPayload,
-    email: body.email,
-  });
+  let result;
+  try {
+    result = await loginOrCreateVerifiedPhone({
+      phone: checked.target,
+      name: body.name || nameFromPayload,
+      email: body.email,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === "eid_only") {
+      return Response.json({ error: "eid_only", message: EID_ONLY_MESSAGE }, { status: 403, headers: noStore });
+    }
+    throw error;
+  }
 
   return Response.json(
     {

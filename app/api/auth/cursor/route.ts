@@ -1,4 +1,5 @@
 import { getIdentity } from "../../../../cursor/identity";
+import { EID_ONLY_MESSAGE } from "@/lib/velio/eid-policy";
 import { accountPublic, loginOrCreateVerifiedEmail, sessionCookie, updateAccount } from "@/lib/velio/session";
 
 export const dynamic = "force-dynamic";
@@ -27,7 +28,15 @@ export async function POST(request: Request) {
   }
 
   const name = identity.name?.trim() || email.split("@")[0] || "VELIO-användare";
-  const result = await loginOrCreateVerifiedEmail({ email, name });
+  let result;
+  try {
+    result = await loginOrCreateVerifiedEmail({ email, name });
+  } catch (error) {
+    if (error instanceof Error && error.message === "eid_only") {
+      return Response.json({ error: "eid_only", message: EID_ONLY_MESSAGE }, { status: 403, headers: noStore });
+    }
+    throw error;
+  }
 
   // Bind Cursor subject as identity proof for Business (not a substitute for BankID in SE production,
   // but a signed host identity rather than self-attested form fields).

@@ -389,10 +389,10 @@ export function ProfileScreens() {
         <div className="font-display text-4xl font-bold tracking-tight">VELIO</div>
         <h2 className="mt-3 font-display text-2xl font-semibold">Välkommen</h2>
         <p className="mt-2 mb-6 max-w-xs text-sm leading-relaxed text-muted">
-          Logga in med BankID, Google, e-post eller mobil. Utförare verifieras med BankID eller pass.
+          Logga in med BankID eller Freja eID, Google, e-post eller mobil. Ett BankID-konto kan inte också loggas in med e-post.
         </p>
         <Btn variant="bank" onClick={() => setSheet("bankid")}>
-          <Shield className="size-4" /> Öppna BankID
+          <Shield className="size-4" /> Logga in med BankID
         </Btn>
       </div>
     );
