@@ -22,7 +22,7 @@ import {
   TrendingUp,
   User,
 } from "lucide-react";
-import { initialsOf, kr, serviceById } from "@/lib/velio/data";
+import { initialsOf, kr, publicDisplayName, serviceById } from "@/lib/velio/data";
 import { HistoryCard } from "@/components/velio/history";
 import { VerifyIdScreen } from "@/components/velio/verify-id";
 import { useVelio, type Booking } from "@/lib/velio/store";
@@ -421,9 +421,9 @@ export function ProfileScreens() {
           <path d="M70 0c-30 50 40 70-10 130-30 36 40 90 120 90V0H70Z" fill="currentColor" />
         </svg>
         <div className="relative flex items-center gap-4">
-          <span className="grid size-[4.5rem] shrink-0 place-items-center rounded-full bg-[#f3ece3] font-serif text-2xl">{initialsOf(profile.name)}</span>
+          <span className="grid size-[4.5rem] shrink-0 place-items-center rounded-full bg-[#f3ece3] font-serif text-2xl">{initialsOf(publicDisplayName(profile.name) || "V")}</span>
           <div>
-            <h2 className="font-serif text-[1.7rem] leading-none font-medium">{profile.name}</h2>
+            <h2 className="font-serif text-[1.7rem] leading-none font-medium">{publicDisplayName(profile.name) || "Din profil"}</h2>
             <p className="mt-2 flex items-center gap-1 text-sm font-medium text-[#3d8f4a]">
               <span className="grid size-4 place-items-center rounded-full border border-[#3d8f4a] text-[10px]">✓</span>
               {verifyLabel}

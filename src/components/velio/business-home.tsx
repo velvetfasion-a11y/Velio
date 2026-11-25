@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ArrowLeft, ArrowLeftRight, Briefcase, Calendar, Check, ChevronLeft, ChevronRight, Clock, Coffee, MapPin, MessageCircle, SlidersHorizontal } from "lucide-react";
+import { greetingName } from "@/lib/velio/data";
 import { useVelio } from "@/lib/velio/store";
 import { AppHeader } from "@/components/velio/header";
 import { cn } from "@/lib/cn";
@@ -77,7 +78,7 @@ export function BusinessHome() {
   const [breakFrom, setBreakFrom] = useState("12:00");
   const [breakTo, setBreakTo] = useState("13:00");
   const openJobs = posted.filter((job) => !skipped.includes(job.id) && job.ownerId !== accountId);
-  const first = profile.name.split(" ")[0] || profile.name;
+  const first = greetingName(profile.name);
   const current = weeks[weekKey(mondayOf(0))] ?? defaultDays();
   const todayIndex = (new Date().getDay() + 6) % 7;
   const todayHours = current[todayIndex];
@@ -151,7 +152,7 @@ export function BusinessHome() {
       <div className="mt-1 flex items-center gap-3">
         <img src={asset("/velio/profile.jpg")} alt="" className="size-14 shrink-0 rounded-full object-cover object-[center_20%]" />
         <div className="min-w-0 flex-1">
-          <h1 className="font-serif text-[1.65rem] leading-none">Hej {first}</h1>
+          <h1 className="font-serif text-[1.65rem] leading-none">{first ? `Hej ${first}` : "Hej"}</h1>
           <p className="mt-1 text-sm text-[#5c564f]">Arbetsläge · VELIO Business</p>
         </div>
         <button

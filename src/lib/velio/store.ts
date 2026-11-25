@@ -5,6 +5,7 @@ import {
   kr,
   providerById,
   providers,
+  publicDisplayName,
   serviceById,
   setProviders,
   type Provider,
@@ -612,7 +613,7 @@ export const useVelio = create<VelioState>()(
           idVerified: Boolean(account.idVerified),
           idMethod: account.idMethod ?? null,
           profile: {
-            name: account.name,
+            name: publicDisplayName(account.name),
             phone: account.phone || get().profile.phone,
             email: account.email,
           },
@@ -631,7 +632,7 @@ export const useVelio = create<VelioState>()(
           accountId: me.account.id,
           authProvider: me.account.provider,
           profile: {
-            name: me.account.name,
+            name: publicDisplayName(me.account.name),
             phone: me.account.phone,
             email: me.account.email,
           },
@@ -656,10 +657,6 @@ export const useVelio = create<VelioState>()(
                 businessForm: null,
               }),
         });
-        if (!wasLoggedIn) {
-          const first = me.account.name.split(" ")[0] || me.account.name;
-          get().showToast(first ? `Välkommen, ${first}` : "Välkommen");
-        }
       },
       loginWithAccountId: async (provider, accountId) => {
         const me = await loginWithAccount(provider, accountId);
@@ -734,7 +731,7 @@ export const useVelio = create<VelioState>()(
           chats: nextChats,
           peers: mapped.peers,
           profile: {
-            name: me.account.name,
+            name: publicDisplayName(me.account.name),
             phone: me.account.phone || get().profile.phone,
             email: me.account.email,
           },

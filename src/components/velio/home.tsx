@@ -33,7 +33,7 @@ import {
   Zap,
   type LucideIcon,
 } from "lucide-react";
-import { providerById, ratingLabel, serviceById, services, type ServiceIcon, type ServiceId } from "@/lib/velio/data";
+import { greetingName, providerById, ratingLabel, serviceById, services, type ServiceIcon, type ServiceId } from "@/lib/velio/data";
 import { useVelio } from "@/lib/velio/store";
 import { AppHeader } from "@/components/velio/header";
 import { cn } from "@/lib/cn";
@@ -108,7 +108,7 @@ export function Home() {
   const go = useVelio((state) => state.go);
   const profile = useVelio((state) => state.profile);
   const directory = useVelio((state) => state.directory);
-  const firstName = profile.name.split(" ")[0] || "du";
+  const firstName = greetingName(profile.name);
   const [showAll, setShowAll] = useState(false);
   const [saved, setSaved] = useState<Record<string, boolean>>({});
   const query = search.trim().toLowerCase();
@@ -130,7 +130,9 @@ export function Home() {
         <div className="relative pb-2">
           <AppHeader tone="glass" />
           <div className="px-4">
-          <h1 className="mt-2 font-serif text-[2.55rem] leading-none font-medium tracking-tight">Hej {firstName}</h1>
+          <h1 className="mt-2 font-serif text-[2.55rem] leading-none font-medium tracking-tight">
+            {firstName ? `Hej ${firstName}` : "Hej"}
+          </h1>
           <p className="mt-2 max-w-[15.5rem] text-sm leading-snug text-paper/95">
             Hitta rätt person för jobbet – snabbt, säkert och enkelt.
           </p>

@@ -98,6 +98,18 @@ export function ratingLabel(value: number) {
   return value.toLocaleString("sv-SE", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 }
 
+/** Hide placeholder login labels such as "BankID-användare". */
+export function publicDisplayName(name: string | null | undefined) {
+  const trimmed = (name ?? "").replace(/\s+/g, " ").trim();
+  if (!trimmed) return "";
+  if (/bankid|google-användare|apple-användare|^användare$/i.test(trimmed)) return "";
+  return trimmed;
+}
+
+export function greetingName(name: string | null | undefined) {
+  return publicDisplayName(name).split(" ")[0] ?? "";
+}
+
 export function initialsOf(name: string) {
   return name
     .split(" ")
