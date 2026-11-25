@@ -45,8 +45,13 @@ const faqs: { q: string; a: string; settings?: boolean }[] = [
     a: "Öppna Inställningar. Skriv i fältet och tryck Spara till höger om just det fältet.",
     settings: true,
   },
-  {
-    q: "Hur delar jag min plats?",
+    {
+      q: "Hur sätter jag på notifikationer?",
+      a: "Öppna Inställningar och tryck på Notifikationer. Välj Sätt på notifikationer och tillåt aviseringar när telefonen frågar. Står det att det inte gick, kontakta support.",
+      settings: true,
+    },
+    {
+      q: "Hur delar jag min plats?",
     a: "Tryck Dela plats högst upp, eller slå på Plats under Inställningar. Du kan också skriva en önskad plats i arbetsinformationen.",
   },
   {
@@ -101,6 +106,7 @@ export function ProfileScreens() {
   const setSheet = useVelio((state) => state.setSheet);
   const notifications = useVelio((state) => state.notifications);
   const setNotifications = useVelio((state) => state.setNotifications);
+  const enableNotifications = useVelio((state) => state.enableNotifications);
   const locationOn = useVelio((state) => state.locationOn);
   const userLocation = useVelio((state) => state.userLocation);
   const clearLocation = useVelio((state) => state.clearLocation);
@@ -113,6 +119,9 @@ export function ProfileScreens() {
   const [exp, setExp] = useState("");
   const [legal, setLegal] = useState<"privacy" | "terms" | null>(null);
   const [confirm, setConfirm] = useState<"business" | "account" | null>(null);
+  const [noticeAsk, setNoticeAsk] = useState(false);
+  const [noticeFailed, setNoticeFailed] = useState(false);
+  const [noticeBusy, setNoticeBusy] = useState(false);
   useEffect(() => {
     if (screen !== "settings") setConfirm(null);
   }, [screen]);
@@ -368,19 +377,70 @@ export function ProfileScreens() {
             <section>
               <h2 className="mb-2 px-1 text-xs font-semibold tracking-wide text-[#8a8178]">ENHETEN</h2>
               <div className="divide-y divide-[#f0ebe6] overflow-hidden rounded-[1.4rem] border border-[#efeae4] bg-white">
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={notifications}
-                  onClick={() => setNotifications(!notifications)}
-                  className="flex w-full items-center gap-3 px-4 py-3.5 text-left"
-                >
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-[15px]">Notifikationer</span>
-                    <span className="mt-0.5 block text-xs text-[#8a8178]">{notifications ? "Aviseringar är på" : "Aviseringar är av"}</span>
-                  </span>
-                  <SettingSwitch on={notifications} />
-                </button>
+                <div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={notifications}
+                    onClick={() => {
+                      if (notifications) {
+                        setNotifications(false);
+                        setNoticeAsk(false);
+                        setNoticeFailed(false);
+                        return;
+                      }
+                      setNoticeFailed(false);
+                      setNoticeAsk(true);
+                    }}
+                    className="flex w-full items-center gap-3 px-4 py-3.5 text-left"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[15px]">Notifikationer</span>
+                      <span className="mt-0.5 block text-xs text-[#8a8178]">{notifications ? "På" : "Av"}</span>
+                    </span>
+                    <SettingSwitch on={notifications} />
+                  </button>
+                  {noticeAsk ? (
+                    <div className="border-t border-[#f0ebe6] px-4 py-3.5">
+                      <p className="text-[15px] font-semibold">Sätt på notifikationer</p>
+                      <p className="mt-1 text-sm leading-relaxed text-[#5c564f]">Du får aviseringar om uppdrag och meddelanden. Telefonen frågar om lov.</p>
+                      <div className="mt-3 flex gap-2">
+                        <button type="button" onClick={() => setNoticeAsk(false)} className="h-10 flex-1 rounded-full border border-[#e6dfd6] text-sm font-semibold">
+                          Inte nu
+                        </button>
+                        <button
+                          type="button"
+                          disabled={noticeBusy}
+                          onClick={() => {
+                            setNoticeBusy(true);
+                            void enableNotifications()
+                              .then((result) => {
+                                setNoticeAsk(false);
+                                if (result === "granted") {
+                                  setNoticeFailed(false);
+                                  showToast("Notifikationer är på");
+                                  return;
+                                }
+                                setNoticeFailed(true);
+                              })
+                              .finally(() => setNoticeBusy(false));
+                          }}
+                          className="h-10 flex-1 rounded-full bg-[#2a211c] text-sm font-semibold text-white disabled:opacity-50"
+                        >
+                          Sätt på
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                  {noticeFailed && !notifications ? (
+                    <div className="border-t border-[#f0ebe6] px-4 py-3.5">
+                      <p className="text-sm leading-relaxed text-[#8a3d2a]">Det gick inte att slå på notifikationer.</p>
+                      <button type="button" onClick={() => go("help")} className="mt-2 text-sm font-semibold text-[#6e5636]">
+                        Kontakta support
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
                 <button
                   type="button"
                   role="switch"

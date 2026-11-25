@@ -50,6 +50,7 @@ export function VelioApp() {
   useEffect(() => {
     void Promise.resolve(useVelio.persist.rehydrate())
       .then(async () => {
+        useVelio.getState().reconcileNotifications();
         await bootstrapAuth();
       })
       .finally(() => setReady(true));

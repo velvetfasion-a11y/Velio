@@ -394,6 +394,8 @@ type VelioState = {
   allowLocation: () => Promise<void>;
   clearLocation: () => void;
   setNotifications: (notifications: boolean) => void;
+  enableNotifications: () => Promise<"granted" | "denied" | "unsupported">;
+  reconcileNotifications: () => void;
   pushNotification: (input: Omit<AppNotification, "id" | "createdAt" | "read"> & { id?: string; createdAt?: string; read?: boolean }) => void;
   markNotificationRead: (id: string) => void;
   openBookingFromNotification: (bookingId: string) => void;
@@ -539,7 +541,7 @@ export const useVelio = create<VelioState>()(
       locationBusy: false,
       locationError: null,
       onboardFocus: null,
-      notifications: true,
+      notifications: false,
       appNotifications: seedNotifications,
       search: "",
       serviceId: null,
@@ -1023,6 +1025,37 @@ export const useVelio = create<VelioState>()(
       },
       setNotifications: (notifications) => {
         set({ notifications });
+      },
+      reconcileNotifications: () => {
+        const allowed = typeof Notification !== "undefined" && Notification.permission === "granted";
+        if (get().notifications && !allowed) set({ notifications: false });
+      },
+      enableNotifications: async () => {
+        if (typeof Notification === "undefined" || typeof Notification.requestPermission !== "function") {
+          set({ notifications: false });
+          return "unsupported";
+        }
+        let permission = Notification.permission;
+        if (permission !== "granted") {
+          try {
+            permission = await Notification.requestPermission();
+          } catch {
+            set({ notifications: false });
+            return "unsupported";
+          }
+        }
+        if (permission !== "granted") {
+          set({ notifications: false });
+          return "denied";
+        }
+        set({ notifications: true });
+        try {
+          const shown = new Notification("VELIO", { body: "Notifikationer är på." });
+          window.setTimeout(() => shown.close(), 6000);
+        } catch {
+          // Permission is on even if this browser cannot show a banner.
+        }
+        return "granted";
       },
       pushNotification: (input) => {
         if (!get().notifications && input.kind !== "info") {
@@ -1573,6 +1606,7 @@ export const useVelio = create<VelioState>()(
           sheet = null;
         }
         const navStack = Array.isArray(saved.navStack) ? saved.navStack.filter(isScreen) : [];
+        const notificationsAllowed = typeof Notification !== "undefined" && Notification.permission === "granted";
         const chats = { ...(saved.chats ?? {}) };
         const appNotifications = saved.appNotifications ?? [];
         const bookings = saved.bookings ?? [];
@@ -1601,6 +1635,7 @@ export const useVelio = create<VelioState>()(
           posted: saved.posted ?? [],
           directory,
           cart: [],
+          notifications: saved.notifications === true && notificationsAllowed,
         };
       },
     },
