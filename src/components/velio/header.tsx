@@ -3,8 +3,8 @@ import { cn } from "@/lib/cn";
 import { useVelio } from "@/lib/velio/store";
 
 export function AppHeader({ tone = "cream" }: { tone?: "cream" | "glass" }) {
-  const setSheet = useVelio((state) => state.setSheet);
   const go = useVelio((state) => state.go);
+  const unread = useVelio((state) => state.appNotifications.some((item) => !item.read));
   const glass = tone === "glass";
 
   return (
@@ -20,14 +20,14 @@ export function AppHeader({ tone = "cream" }: { tone?: "cream" | "glass" }) {
       <button
         type="button"
         aria-label="Notiser"
-        onClick={() => setSheet("notes")}
+        onClick={() => go("notifications")}
         className={cn(
           "relative grid size-10 place-items-center rounded-full",
           glass ? "border border-paper/40 bg-ink/20 text-paper backdrop-blur-sm" : "border border-line bg-cream",
         )}
       >
         <Bell className="size-5" />
-        <span className="absolute top-1.5 right-1.5 size-2 rounded-full bg-gold" />
+        {unread ? <span className="absolute top-1.5 right-1.5 size-2 rounded-full bg-gold" /> : null}
       </button>
     </div>
   );

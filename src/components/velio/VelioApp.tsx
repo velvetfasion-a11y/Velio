@@ -4,6 +4,7 @@ import { cn } from "@/lib/cn";
 import { useVelio, type Screen } from "@/lib/velio/store";
 import { Home as HomeScreen, HomeSheets, InboxScreen, SearchScreen } from "@/components/velio/home";
 import { HistoryScreen } from "@/components/velio/history";
+import { NotificationsScreen } from "@/components/velio/notifications";
 import { ServiceScreen } from "@/components/velio/service";
 import { OnboardSheet, ProfileScreens } from "@/components/velio/profile";
 import { LoginScreen } from "@/components/velio/login";
@@ -74,8 +75,13 @@ export function VelioApp() {
     if (id === "profile") return profileScreens.includes(screen);
     return screen === id;
   };
-  const showChrome = screen !== "home" && screen !== "service" && screen !== "history" && screen !== "inbox";
-  const unread = useVelio((state) => Object.keys(state.chats).length > 0);
+  const showChrome =
+    screen !== "home" &&
+    screen !== "service" &&
+    screen !== "history" &&
+    screen !== "inbox" &&
+    screen !== "notifications";
+  const unread = useVelio((state) => Object.keys(state.chats).some((key) => (state.chats[key]?.length ?? 0) > 0));
 
   if (!ready) {
     return (
@@ -100,6 +106,7 @@ export function VelioApp() {
               {screen === "home" ? (accountMode === "business" ? <BusinessHome /> : <HomeScreen />) : null}
               {screen === "search" ? <SearchScreen /> : null}
               {screen === "inbox" ? <InboxScreen /> : null}
+              {screen === "notifications" ? <NotificationsScreen /> : null}
               {screen === "service" ? <ServiceScreen /> : null}
               {screen === "history" ? <HistoryScreen /> : null}
               {profileScreens.includes(screen) ? <ProfileScreens /> : null}

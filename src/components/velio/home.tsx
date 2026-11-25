@@ -380,16 +380,37 @@ export function InboxScreen() {
   const chats = useVelio((state) => state.chats);
   const peers = useVelio((state) => state.peers);
   const openThread = useVelio((state) => state.openThread);
-  const threads = Object.entries(chats).filter(([, messages]) => messages.length);
+  const closeSheet = useVelio((state) => state.closeSheet);
+
+  useEffect(() => {
+    // Meddelanden is always the conversation list — never keep a chat sheet open here.
+    closeSheet();
+  }, [closeSheet]);
+
+  const threadIds = Array.from(
+    new Set([...Object.keys(chats), ...Object.keys(peers)].filter((id) => (chats[id]?.length ?? 0) > 0 || peers[id])),
+  ).filter((id) => (chats[id]?.length ?? 0) > 0);
+
+  const threads = threadIds
+    .map((providerId) => {
+      const messages = chats[providerId] ?? [];
+      const last = messages[messages.length - 1];
+      return { providerId, messages, last };
+    })
+    .sort((a, b) => {
+      const aTime = a.last?.time || "";
+      const bTime = b.last?.time || "";
+      return bTime.localeCompare(aTime);
+    });
 
   return (
     <div className="bg-cream">
       <AppHeader />
-      <div className="px-4 pt-5">
+      <div className="px-4 pt-5 pb-8">
         <h1 className="mb-5 font-serif text-[2.6rem] leading-none font-medium">Meddelanden</h1>
         {threads.length === 0 ? <p className="text-sm text-muted">Inga meddelanden ännu.</p> : null}
         <div className="space-y-3">
-          {threads.map(([providerId, messages]) => {
+          {threads.map(({ providerId, messages, last }) => {
             const provider = providerById(providerId);
             const peer = peers[providerId];
             const name = provider?.name ?? peer?.name ?? "Kontakt";
@@ -401,10 +422,25 @@ export function InboxScreen() {
                 .join("")
                 .slice(0, 2)
                 .toUpperCase();
-            const last = messages[messages.length - 1];
             const card = [...messages].reverse().find((message) => message.card)?.card;
             const active = (provider?.etaMin ?? 99) <= 20;
-            const presence = card?.kind === "enroute" ? "På väg" : card?.kind === "done" ? "På plats" : active ? "Aktiv nu" : provider ? `Om ${provider.etaMin} min` : "Synkad";
+            const presence =
+              card?.kind === "enroute"
+                ? "På väg"
+                : card?.kind === "done"
+                  ? "På plats"
+                  : active
+                    ? "Aktiv nu"
+                    : provider
+                      ? `Om ${provider.etaMin} min`
+                      : "Chatt";
+            const preview =
+              last?.text ||
+              (last?.card?.kind === "request"
+                ? "Bokningsförfrågan"
+                : last?.card
+                  ? "Uppdatering i chatten"
+                  : "Öppna konversationen");
             return (
               <button
                 key={providerId}
@@ -430,7 +466,7 @@ export function InboxScreen() {
                       {presence}
                     </span>
                   </span>
-                  <span className="mt-0.5 block truncate text-sm text-muted">{last?.text}</span>
+                  <span className="mt-0.5 block truncate text-sm text-muted">{preview}</span>
                 </span>
               </button>
             );
@@ -445,7 +481,6 @@ export function HomeSheets() {
   const sheet = useVelio((state) => state.sheet);
   if (sheet === "menu") return <MenuSheet />;
   if (sheet === "job") return <JobSheet />;
-  if (sheet === "notes") return <NotesSheet />;
   if (sheet === "filters") return <FilterSheet />;
   return null;
 }
@@ -704,29 +739,6 @@ function MiniDate({ onPick }: { onPick: (label: string) => void }) {
         ))}
       </div>
     </div>
-  );
-}
-
-function NotesSheet() {
-  const closeSheet = useVelio((state) => state.closeSheet);
-  const openThread = useVelio((state) => state.openThread);
-  const chats = useVelio((state) => state.chats);
-  const last = chats["st-cleanpro"]?.[chats["st-cleanpro"].length - 1];
-  return (
-    <BottomSheet title="Notiser" onClose={closeSheet}>
-      {last ? (
-        <button
-          type="button"
-          onClick={() => openThread("st-cleanpro")}
-          className="w-full rounded-2xl bg-soft px-4 py-3 text-left"
-        >
-          <span className="block font-semibold">CleanPro</span>
-          <span className="text-sm text-muted">{last.text}</span>
-        </button>
-      ) : (
-        <p className="text-sm text-muted">Inga nya notiser.</p>
-      )}
-    </BottomSheet>
   );
 }
 

@@ -36,6 +36,7 @@ export type Screen =
   | "home"
   | "search"
   | "inbox"
+  | "notifications"
   | "service"
   | "history"
   | "profile"
@@ -47,6 +48,16 @@ export type Screen =
   | "verify-id"
   | "settings"
   | "help";
+
+export type AppNotification = {
+  id: string;
+  kind: "booking_accepted" | "booking_declined" | "booking_requested" | "booking_done" | "message" | "info";
+  title: string;
+  body: string;
+  bookingId?: string;
+  createdAt: string;
+  read: boolean;
+};
 
 export type Sheet =
   | "provider"
@@ -111,7 +122,7 @@ export type Booking = {
   tip: number | null;
   location: string;
   rating: number | null;
-  status: "done" | "enroute" | "scheduled" | "requested" | "accepted";
+  status: "done" | "enroute" | "scheduled" | "requested" | "accepted" | "declined";
   holdKr?: number;
 };
 
@@ -215,6 +226,55 @@ const seedBookings: Booking[] = [
     status: "done",
     holdKr: 890,
   },
+  {
+    id: "b-declined",
+    serviceId: "stad",
+    providerId: "st-cleanpro",
+    whenLabel: "I morgon 10:00",
+    cost: 620,
+    tip: null,
+    location: "Södermalm",
+    rating: null,
+    status: "declined",
+    holdKr: 620,
+  },
+];
+
+const seedChats: Record<string, ChatMsg[]> = {
+  "st-cleanpro": [
+    { id: "c1", from: "me", text: "Hej! Kan du komma idag klockan 14?", time: "14:02" },
+    { id: "c2", from: "them", text: "Ja, det passar mig.", time: "14:05" },
+  ],
+};
+
+const seedNotifications: AppNotification[] = [
+  {
+    id: "n-accepted-erik",
+    kind: "booking_accepted",
+    title: "Bokning accepterad",
+    body: "Erik Lind har accepterat din bokning för elektriker.",
+    bookingId: "b-erik",
+    createdAt: "2026-11-25T12:10:00.000Z",
+    read: false,
+  },
+  {
+    id: "n-declined-clean",
+    kind: "booking_declined",
+    title: "Bokning nekad",
+    body: "CleanPro kunde tyvärr inte ta din städning imorgon.",
+    bookingId: "b-declined",
+    createdAt: "2026-11-25T11:40:00.000Z",
+    read: false,
+  },
+  {
+    id: "n-done-sofia",
+    kind: "booking_done",
+    title: "Uppdrag klart",
+    body: "Sofia har markerat städningen som klar.",
+    bookingId: "b1",
+    createdAt: "2026-11-17T15:50:00.000Z",
+    read: true,
+  },
 ];
 
 const seedCart: CartItem[] = [
@@ -237,6 +297,7 @@ type VelioState = {
   peers: Record<string, PeerInfo>;
   locationOn: boolean;
   notifications: boolean;
+  appNotifications: AppNotification[];
   search: string;
   serviceId: ServiceId | null;
   providerId: string | null;
@@ -289,6 +350,9 @@ type VelioState = {
   logout: () => void;
   allowLocation: () => void;
   setNotifications: (notifications: boolean) => void;
+  pushNotification: (input: Omit<AppNotification, "id" | "createdAt" | "read"> & { id?: string; createdAt?: string; read?: boolean }) => void;
+  markNotificationRead: (id: string) => void;
+  openBookingFromNotification: (bookingId: string) => void;
   setProfile: (profile: Profile) => void;
   addCard: (card: PayCard) => void;
   addToCart: () => void;
@@ -457,6 +521,7 @@ export const useVelio = create<VelioState>()(
       peers: {},
       locationOn: false,
       notifications: true,
+      appNotifications: seedNotifications,
       search: "",
       serviceId: null,
       providerId: null,
@@ -481,17 +546,20 @@ export const useVelio = create<VelioState>()(
       ],
       cart: seedCart,
       chats: {
-        "st-cleanpro": [
-          { id: "c1", from: "me", text: "Hej! Kan du komma idag klockan 14?", time: "14:02" },
-          { id: "c2", from: "them", text: "Ja, det passar mig.", time: "14:05" },
-        ],
+        ...seedChats,
         "el-erik": erikThread,
       },
       bookings: seedBookings,
       posted: [],
       activeBookingId: null,
       toast: null,
-      go: (screen) => set({ screen, sheet: null, mapMode: screen === "service" ? get().mapMode : false }),
+      go: (screen) =>
+        set({
+          screen,
+          // Always leave chat/provider sheets when switching tabs so Meddelanden shows the list.
+          sheet: null,
+          mapMode: screen === "service" ? get().mapMode : false,
+        }),
       openService: (serviceId) =>
         set({
           serviceId,
@@ -504,7 +572,7 @@ export const useVelio = create<VelioState>()(
         }),
       openProvider: (providerId) => set({ providerId, sheet: "provider" }),
       openThread: (peerKey, opts) => {
-        set({ providerId: peerKey, sheet: "chat" });
+        set({ providerId: peerKey, sheet: "chat", screen: get().screen === "inbox" ? "inbox" : get().screen });
         void (async () => {
           const marketplace = providerById(peerKey);
           const opened = await openConversation(
@@ -515,11 +583,12 @@ export const useVelio = create<VelioState>()(
                 : { accountId: peerKey },
           );
           if (!opened) {
-            get().showToast("Kunde inte öppna chatten");
+            // Keep the local thread open even when sync API is unavailable.
             return;
           }
           const threadKey = opened.threadKey || peerKey;
           const messages = await fetchMessages(opened.conversationId);
+          const existing = get().chats[threadKey] ?? [];
           set({
             providerId: threadKey,
             conversationByProvider: {
@@ -536,7 +605,8 @@ export const useVelio = create<VelioState>()(
             },
             chats: {
               ...get().chats,
-              [threadKey]: mapSyncedMessages(messages),
+              // Don't replace a non-empty local thread with an empty remote result.
+              [threadKey]: messages.length ? mapSyncedMessages(messages) : existing,
             },
           });
         })();
@@ -600,7 +670,8 @@ export const useVelio = create<VelioState>()(
       },
       applyMe: (me) => {
         const wasLoggedIn = get().loggedIn;
-        const mapped = applyConversations(me.conversations, wasLoggedIn ? get().chats : {}, wasLoggedIn ? get().peers : {});
+        // Always keep local threads so Meddelanden doesn't wipe chats on login/sync.
+        const mapped = applyConversations(me.conversations, get().chats, get().peers);
         set({
           authError: null,
           loggedIn: true,
@@ -618,15 +689,18 @@ export const useVelio = create<VelioState>()(
           idVerified: Boolean(me.account.idVerified),
           idMethod: me.account.idMethod ?? null,
           posted: jobsToPosted(me.jobs),
-          conversationByProvider: mapped.conversationByProvider,
+          conversationByProvider: {
+            ...get().conversationByProvider,
+            ...mapped.conversationByProvider,
+          },
           chats: mapped.chats,
           peers: mapped.peers,
+          // Keep local bookings/notiser across login so Meddelanden and Notiser stay populated.
           ...(wasLoggedIn
             ? {}
             : {
-                bookings: [],
                 cart: [],
-                cards: [],
+                cards: get().cards.length ? get().cards : [],
                 activeBookingId: null,
                 listing: null,
                 businessForm: null,
@@ -737,6 +811,7 @@ export const useVelio = create<VelioState>()(
           cart: [],
           posted: [],
           cards: [],
+          appNotifications: [],
           activeBookingId: null,
           listing: null,
           businessForm: null,
@@ -751,6 +826,41 @@ export const useVelio = create<VelioState>()(
       },
       setNotifications: (notifications) => {
         set({ notifications });
+      },
+      pushNotification: (input) => {
+        if (!get().notifications && input.kind !== "info") {
+          // Preference off still keeps booking status events visible in-app.
+        }
+        const note: AppNotification = {
+          id: input.id ?? uid(),
+          kind: input.kind,
+          title: input.title,
+          body: input.body,
+          bookingId: input.bookingId,
+          createdAt: input.createdAt ?? new Date().toISOString(),
+          read: input.read ?? false,
+        };
+        set({ appNotifications: [note, ...get().appNotifications] });
+      },
+      markNotificationRead: (id) => {
+        set({
+          appNotifications: get().appNotifications.map((item) => (item.id === id ? { ...item, read: true } : item)),
+        });
+      },
+      openBookingFromNotification: (bookingId) => {
+        const booking = get().bookings.find((item) => item.id === bookingId);
+        if (!booking) {
+          get().showToast("Bokningen hittades inte");
+          return;
+        }
+        const unread = get().appNotifications.find((item) => item.bookingId === bookingId && !item.read);
+        if (unread) get().markNotificationRead(unread.id);
+        set({
+          screen: "history",
+          sheet: "receipt",
+          receiptId: bookingId,
+          activeBookingId: bookingId,
+        });
       },
       setProfile: (profile) => {
         set({ profile });
@@ -790,6 +900,15 @@ export const useVelio = create<VelioState>()(
         });
         set({ cart: [], bookings: [...created, ...bookings], sheet: "request", activeBookingId: created[0]?.id ?? null, screen: "history" });
         get().showToast("Förfrågningar skickade. Minimibeloppen är reserverade, inget dras om arbetet inte utförs.");
+        for (const item of created) {
+          const provider = providerById(item.providerId);
+          get().pushNotification({
+            kind: "booking_requested",
+            title: "Förfrågan skickad",
+            body: `Väntar på svar från ${provider?.name ?? "utföraren"}.`,
+            bookingId: item.id,
+          });
+        }
         window.setTimeout(() => {
           const ids = new Set(created.map((item) => item.id));
           const still = get().bookings.filter((item) => ids.has(item.id) && item.status === "requested");
@@ -797,7 +916,16 @@ export const useVelio = create<VelioState>()(
           set({
             bookings: get().bookings.map((item) => (ids.has(item.id) && item.status === "requested" ? { ...item, status: "accepted" } : item)),
           });
-          get().showToast("Utförarna har accepterat. Nu kan ni chatta.");
+          for (const item of still) {
+            const provider = providerById(item.providerId);
+            get().pushNotification({
+              kind: "booking_accepted",
+              title: "Bokning accepterad",
+              body: `${provider?.name ?? "Utföraren"} har accepterat din bokning.`,
+              bookingId: item.id,
+            });
+          }
+          get().showToast("Utförarna har accepterat. Se notiser för detaljer.");
         }, 2400);
       },
       openChat: () => {
@@ -988,6 +1116,12 @@ export const useVelio = create<VelioState>()(
           sheet: "request",
         });
         get().showToast(`${kr(provider.price)} reserverat. Inget dras om arbetet inte utförs.`);
+        get().pushNotification({
+          kind: "booking_requested",
+          title: "Förfrågan skickad",
+          body: `Väntar på att ${provider.name.split(" ")[0]} accepterar.`,
+          bookingId: booking.id,
+        });
         const first = provider.name.split(" ")[0];
         window.setTimeout(() => {
           const current = get().bookings.find((item) => item.id === booking.id);
@@ -995,8 +1129,13 @@ export const useVelio = create<VelioState>()(
           set({
             bookings: get().bookings.map((item) => (item.id === booking.id ? { ...item, status: "accepted" } : item)),
           });
-          void get().openThread(provider.id);
-          get().showToast(`${first} har accepterat. Nu kan ni chatta.`);
+          get().pushNotification({
+            kind: "booking_accepted",
+            title: "Bokning accepterad",
+            body: `${first} har accepterat din bokning. Nu kan ni chatta.`,
+            bookingId: booking.id,
+          });
+          get().showToast(`${first} har accepterat. Se notiser eller Meddelanden.`);
         }, 2400);
       },
       openReceipt: (id) => set({ receiptId: id, sheet: "receipt" }),
@@ -1037,6 +1176,14 @@ export const useVelio = create<VelioState>()(
             booking.id === id ? { ...booking, status: "done", rating, tip } : booking,
           ),
         });
+        if (id) {
+          get().pushNotification({
+            kind: "booking_done",
+            title: "Uppdrag klart",
+            body: "Bokningen är markerad som klar.",
+            bookingId: id,
+          });
+        }
         get().showToast("Tack för betyget");
       },
       submitReview: (rating, tip) => {
@@ -1105,14 +1252,44 @@ export const useVelio = create<VelioState>()(
       },
     }),
     {
-      name: "velio",
+      name: "velio-v3",
       skipHydration: true,
       storage: createJSONStorage(() => (typeof window === "undefined" ? memoryStorage : localStorage)),
       partialize: (state) => ({
         loginIntro: state.loginIntro,
         locationOn: state.locationOn,
         notifications: state.notifications,
+        chats: state.chats,
+        peers: state.peers,
+        conversationByProvider: state.conversationByProvider,
+        appNotifications: state.appNotifications,
+        bookings: state.bookings,
       }),
+      merge: (persisted, current) => {
+        const saved = (persisted ?? {}) as Partial<VelioState>;
+        const chats = { ...current.chats, ...(saved.chats ?? {}) };
+        // Restore demo threads if a previous session wiped the inbox empty.
+        if (!Object.keys(chats).some((key) => (chats[key]?.length ?? 0) > 0)) {
+          Object.assign(chats, seedChats, { "el-erik": erikThread });
+        }
+        const appNotifications =
+          saved.appNotifications && saved.appNotifications.length
+            ? saved.appNotifications
+            : current.appNotifications;
+        const bookings = saved.bookings && saved.bookings.length ? saved.bookings : current.bookings;
+        return {
+          ...current,
+          ...saved,
+          chats,
+          peers: { ...current.peers, ...(saved.peers ?? {}) },
+          conversationByProvider: {
+            ...current.conversationByProvider,
+            ...(saved.conversationByProvider ?? {}),
+          },
+          appNotifications,
+          bookings,
+        };
+      },
     },
   ),
 );
@@ -1122,6 +1299,7 @@ export function bookingStatusLabel(status: Booking["status"]) {
   if (status === "enroute") return "På väg";
   if (status === "requested") return "Väntar";
   if (status === "accepted") return "Accepterad";
+  if (status === "declined") return "Nekad";
   return "Planerad";
 }
 

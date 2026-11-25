@@ -234,10 +234,15 @@ export function ChatSheet() {
     node.scrollTop = node.scrollHeight;
   }, [lastId, messages.length]);
 
-  if (accountMode === "business") return <WorkerChat onClose={closeSheet} />;
+  const backToInbox = () => {
+    closeSheet();
+    go("inbox");
+  };
+
+  if (accountMode === "business") return <WorkerChat onClose={backToInbox} />;
   if (!provider && !peer) return null;
   if (!provider && peer) {
-    return <SyncedPeerChat peerName={peer.name} messages={messages} draft={draft} setDraft={setDraft} onSend={() => { if (!draft.trim()) return; sendChat(draft); setDraft(""); }} onClose={() => (screen === "inbox" ? closeSheet() : setSheet(null))} />;
+    return <SyncedPeerChat peerName={peer.name} messages={messages} draft={draft} setDraft={setDraft} onSend={() => { if (!draft.trim()) return; sendChat(draft); setDraft(""); }} onClose={backToInbox} />;
   }
   if (!provider) return null;
   const status = presence(messages);
@@ -266,14 +271,22 @@ export function ChatSheet() {
     <div className="absolute inset-0 z-30 flex flex-col bg-[#f7f3ee]">
       <div className="px-4 pt-3">
         <div className="flex items-center">
-          <button type="button" aria-label="Tillbaka" onClick={() => (screen === "inbox" ? closeSheet() : setSheet("provider"))} className="grid size-9 place-items-center">
+          <button type="button" aria-label="Tillbaka" onClick={backToInbox} className="grid size-9 place-items-center">
             <ArrowLeft className="size-5" />
           </button>
           <button type="button" onClick={() => { closeSheet(); go("home"); }} className="flex-1 text-center font-serif text-[1.7rem] tracking-[0.28em]">VELIO</button>
           <button type="button" aria-label="Ring" onClick={() => showToast(`Ringer ${provider.name.split(" ")[0]}…`)} className="grid size-9 place-items-center">
             <Phone className="size-5" />
           </button>
-          <button type="button" aria-label="Notiser" onClick={() => showToast("Inga nya notiser")} className="relative grid size-9 place-items-center">
+          <button
+            type="button"
+            aria-label="Notiser"
+            onClick={() => {
+              closeSheet();
+              go("notifications");
+            }}
+            className="relative grid size-9 place-items-center"
+          >
             <Bell className="size-5" />
             <span className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-gold" />
           </button>
