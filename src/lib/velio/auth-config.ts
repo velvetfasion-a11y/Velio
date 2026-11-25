@@ -14,6 +14,10 @@ export function smsConfigured(): boolean {
   return Boolean(env("TWILIO_ACCOUNT_SID") && env("TWILIO_AUTH_TOKEN") && env("TWILIO_FROM_NUMBER"));
 }
 
+export function bankIdConfigured(): boolean {
+  return Boolean(env("BANKID_API_URL") && env("BANKID_API_KEY"));
+}
+
 export function appBaseUrl(request?: Request): string {
   const fromEnv = env("APP_BASE_URL").replace(/\/$/, "");
   if (fromEnv) return fromEnv;
@@ -30,6 +34,7 @@ export function authCapabilities() {
     google: googleConfigured(),
     email: emailConfigured(),
     sms: smsConfigured(),
+    bankid: bankIdConfigured(),
     sampleFallback: false,
   };
 }

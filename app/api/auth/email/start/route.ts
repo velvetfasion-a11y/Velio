@@ -11,7 +11,7 @@ export async function POST(request: Request) {
     return Response.json(
       {
         error: "email_not_configured",
-        message: "E-postinloggning kräver RESEND_API_KEY och EMAIL_FROM.",
+        message: "E-postinloggning är inte aktiverad ännu. Koden skickas bara till din mejlbox när e-postleverans är på.",
       },
       { status: 503, headers: noStore },
     );

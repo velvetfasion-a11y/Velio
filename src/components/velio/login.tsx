@@ -1,28 +1,20 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft } from "lucide-react";
 import { useVelio } from "@/lib/velio/store";
 import {
+  collectBankIdLogin,
   fetchAuthCapabilities,
   fetchMe,
-  loginWithBankId,
+  startBankIdLogin,
   startEmailOtp,
   startSmsOtp,
   verifyEmailOtp,
   verifySmsOtp,
 } from "@/lib/velio/auth-api";
-import {
-  isStaticHost,
-  localBankIdSignIn,
-  localGoogleSignIn,
-  localMePayload,
-  localStartEmailOtp,
-  localStartSmsOtp,
-  localVerifyEmailOtp,
-  localVerifySmsOtp,
-} from "@/lib/velio/local-auth";
+import { isStaticHost, localGoogleSignIn, localMePayload } from "@/lib/velio/local-auth";
 import { googleGisAvailable, signInWithGoogleGis } from "@/lib/velio/google-gis";
 
-type Step = "methods" | "bankid" | "bankid-confirm" | "email" | "email-code" | "phone" | "phone-code";
+type Step = "methods" | "bankid-open" | "email" | "email-code" | "phone" | "phone-code";
 
 export function LoginScreen() {
   const applyMe = useVelio((state) => state.applyMe);
@@ -35,20 +27,29 @@ export function LoginScreen() {
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [challengeId, setChallengeId] = useState("");
-  const [deliveryCode, setDeliveryCode] = useState<string | null>(null);
   const [hint, setHint] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
-  const [caps, setCaps] = useState({ google: false, email: false, sms: false });
-  const [personalNumber, setPersonalNumber] = useState("");
-  const [bankPhase, setBankPhase] = useState<"wait" | "ready">("wait");
+  const [caps, setCaps] = useState({ google: false, email: false, sms: false, bankid: false });
+  const [bankOrderRef, setBankOrderRef] = useState("");
+  const [bankLaunchUrl, setBankLaunchUrl] = useState("");
+  const [bankStatus, setBankStatus] = useState("Startar BankID…");
+  const pollRef = useRef<number | null>(null);
   const staticHost = typeof window !== "undefined" && isStaticHost();
 
   useEffect(() => {
     if (staticHost) {
-      setCaps({ google: googleGisAvailable(), email: true, sms: true });
+      // Static hosts have no API routes — never fake email/SMS/BankID delivery.
+      setCaps({ google: googleGisAvailable(), email: false, sms: false, bankid: false });
       return;
     }
-    void fetchAuthCapabilities().then((next) => setCaps(next));
+    void fetchAuthCapabilities().then((next) =>
+      setCaps({
+        google: next.google,
+        email: next.email,
+        sms: next.sms,
+        bankid: Boolean(next.bankid),
+      }),
+    );
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const err = params.get("authError");
@@ -62,55 +63,86 @@ export function LoginScreen() {
   }, [staticHost]);
 
   useEffect(() => {
-    if (step !== "bankid-confirm") return;
-    setBankPhase("wait");
-    const timer = window.setTimeout(() => setBankPhase("ready"), 900);
-    return () => window.clearTimeout(timer);
-  }, [step]);
+    return () => {
+      if (pollRef.current) window.clearInterval(pollRef.current);
+    };
+  }, []);
+
+  const stopBankPoll = () => {
+    if (pollRef.current) {
+      window.clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  };
 
   const back = () => {
+    stopBankPoll();
     setLocalError(null);
     setHint(null);
-    setDeliveryCode(null);
     setCode("");
+    setBankLaunchUrl("");
+    setBankOrderRef("");
     if (step === "email-code") setStep("email");
     else if (step === "phone-code") setStep("phone");
-    else if (step === "bankid-confirm") setStep("bankid");
     else setStep("methods");
   };
 
-  const startBankId = () => {
-    setLocalError(null);
-    const digits = personalNumber.replace(/\D/g, "");
-    if (digits && digits.length !== 10 && digits.length !== 12) {
-      setLocalError("Ange personnummer som ÅÅÅÅMMDDXXXX.");
-      return;
+  const openBankIdApp = (url: string) => {
+    const opened = window.open(url, "_blank", "noopener,noreferrer");
+    if (!opened) {
+      window.location.href = url;
     }
-    setStep("bankid-confirm");
   };
 
-  const confirmBankId = async () => {
-    if (busy || bankPhase !== "ready") return;
-    setBusy(true);
+  const startBankId = async () => {
+    if (busy) return;
     setLocalError(null);
-    setAuthError(null);
+    if (staticHost || !caps.bankid) {
+      setLocalError("BankID är inte aktiverat ännu. Det krävs en BankID-koppling som öppnar BankID-appen.");
+      return;
+    }
+    setBusy(true);
+    setStep("bankid-open");
+    setBankStatus("Startar BankID…");
     try {
-      if (staticHost) {
-        const account = localBankIdSignIn({
-          name: name.trim() || undefined,
-          personalNumber: personalNumber || undefined,
-        });
-        applyMe(localMePayload(account));
-        return;
-      }
-      const me = await loginWithBankId({
-        name: name.trim() || undefined,
-        personalNumber: personalNumber || undefined,
-      });
-      if (!me.authenticated) throw new Error("BankID-inloggning misslyckades");
-      applyMe(me);
+      // No name/phone/personnummer in the app — BankID provides identity after the user signs.
+      const started = await startBankIdLogin();
+      setChallengeId(started.challengeId);
+      setBankOrderRef(started.orderRef);
+      setBankLaunchUrl(started.launchUrl);
+      setBankStatus("Öppna BankID-appen och identifiera dig.");
+      openBankIdApp(started.launchUrl);
+
+      stopBankPoll();
+      pollRef.current = window.setInterval(() => {
+        void (async () => {
+          try {
+            const result = await collectBankIdLogin({
+              challengeId: started.challengeId,
+              orderRef: started.orderRef,
+            });
+            if (result.status === "pending") {
+              setBankStatus("Väntar på att du identifierar dig i BankID-appen…");
+              return;
+            }
+            stopBankPoll();
+            if (result.status === "failed") {
+              setLocalError(result.message || "BankID misslyckades");
+              setStep("methods");
+              return;
+            }
+            const me = await fetchMe();
+            if (!me.authenticated) throw new Error("BankID-inloggning misslyckades");
+            applyMe(me);
+          } catch (error) {
+            stopBankPoll();
+            setLocalError(error instanceof Error ? error.message : "BankID-inloggning misslyckades");
+          }
+        })();
+      }, 2000);
     } catch (error) {
-      setLocalError(error instanceof Error ? error.message : "BankID-inloggning misslyckades");
+      setStep("methods");
+      setLocalError(error instanceof Error ? error.message : "Kunde inte starta BankID");
     } finally {
       setBusy(false);
     }
@@ -147,22 +179,15 @@ export function LoginScreen() {
     setBusy(true);
     setLocalError(null);
     try {
-      if (staticHost) {
-        const result = await localStartEmailOtp(email.trim(), name.trim() || undefined);
-        setChallengeId(result.challengeId);
-        setDeliveryCode(result.deliveryCode);
-        setHint(result.message);
-        setStep("email-code");
-        return;
+      if (staticHost || !caps.email) {
+        throw new Error("E-postinloggning skickar koden till din mejlbox och är inte aktiverad ännu.");
       }
-      if (!caps.email) throw new Error("E-postinloggning är inte aktiverad ännu.");
       const result = await startEmailOtp(email.trim(), name.trim() || undefined);
       setChallengeId(result.challengeId);
-      setDeliveryCode(null);
-      setHint(result.message ?? "Kolla din inkorg.");
+      setHint(result.message ?? "Vi har skickat en kod till din mejlbox. Kolla inkorgen (och skräppost).");
       setStep("email-code");
     } catch (error) {
-      setLocalError(error instanceof Error ? error.message : "Kunde inte skicka kod");
+      setLocalError(error instanceof Error ? error.message : "Kunde inte skicka kod till mejlen");
     } finally {
       setBusy(false);
     }
@@ -170,20 +195,12 @@ export function LoginScreen() {
 
   const confirmEmail = async () => {
     if (busy) return;
-    if (code.trim().length < 4) return setLocalError("Ange koden från e-posten");
+    if (code.trim().length < 4) return setLocalError("Ange koden från din mejlbox");
     setBusy(true);
     setLocalError(null);
     setAuthError(null);
     try {
-      if (staticHost) {
-        const account = await localVerifyEmailOtp({
-          challengeId,
-          code: code.trim(),
-          name: name.trim() || undefined,
-        });
-        applyMe(localMePayload(account));
-        return;
-      }
+      if (staticHost) throw new Error("E-postinloggning är inte aktiverad på den här versionen.");
       const me = await verifyEmailOtp({
         challengeId,
         code: code.trim(),
@@ -204,19 +221,12 @@ export function LoginScreen() {
     setBusy(true);
     setLocalError(null);
     try {
-      if (staticHost) {
-        const result = await localStartSmsOtp(phone.trim(), name.trim() || undefined);
-        setChallengeId(result.challengeId);
-        setDeliveryCode(result.deliveryCode);
-        setHint(result.message);
-        setStep("phone-code");
-        return;
+      if (staticHost || !caps.sms) {
+        throw new Error("SMS-inloggning skickar koden till din telefon och är inte aktiverad ännu.");
       }
-      if (!caps.sms) throw new Error("SMS-inloggning är inte aktiverad ännu.");
       const result = await startSmsOtp(phone.trim(), name.trim() || undefined);
       setChallengeId(result.challengeId);
-      setDeliveryCode(null);
-      setHint(result.message ?? "Kolla ditt SMS.");
+      setHint(result.message ?? "Vi har skickat en kod via SMS.");
       setStep("phone-code");
     } catch (error) {
       setLocalError(error instanceof Error ? error.message : "Kunde inte skicka SMS");
@@ -232,15 +242,7 @@ export function LoginScreen() {
     setLocalError(null);
     setAuthError(null);
     try {
-      if (staticHost) {
-        const account = await localVerifySmsOtp({
-          challengeId,
-          code: code.trim(),
-          name: name.trim() || undefined,
-        });
-        applyMe(localMePayload(account));
-        return;
-      }
+      if (staticHost) throw new Error("SMS-inloggning är inte aktiverad på den här versionen.");
       const me = await verifySmsOtp({
         challengeId,
         code: code.trim(),
@@ -281,12 +283,12 @@ export function LoginScreen() {
           <>
             <h1 className="mt-8 text-center font-serif text-[2.7rem] leading-none font-medium text-[#2a211c]">Logga in</h1>
             <p className="mx-auto mt-3 max-w-[17rem] text-center text-sm leading-snug text-[#6e6964]">
-              BankID, Google, e-post med engångskod eller mobil med SMS.
+              BankID öppnar BankID-appen. E-post- och SMS-kod skickas till dig — aldrig i appen.
             </p>
 
             <div className="mt-8 rounded-[1.7rem] border border-white/80 bg-white/45 p-3 shadow-[0_18px_50px_rgba(70,50,20,0.08)] backdrop-blur-xl">
               <div className="space-y-2.5">
-                <Method label="Fortsätt med BankID" onClick={() => setStep("bankid")} icon={<BankIdMark />} disabled={busy} />
+                <Method label="Fortsätt med BankID" onClick={() => void startBankId()} icon={<BankIdMark />} disabled={busy} />
                 <Method label="Fortsätt med Google" onClick={() => void onGoogle()} icon={<GoogleMark />} disabled={busy} />
                 <Method label="Fortsätt med e-post" onClick={() => setStep("email")} icon={<MailMark />} disabled={busy} />
                 <Method label="Fortsätt med mobilnummer" onClick={() => setStep("phone")} icon={<PhoneMark />} disabled={busy} />
@@ -295,44 +297,24 @@ export function LoginScreen() {
           </>
         ) : null}
 
-        {step === "bankid" || step === "bankid-confirm" ? (
+        {step === "bankid-open" ? (
           <>
             <h1 className="mt-4 text-center font-serif text-[2.2rem] leading-none font-medium text-[#2a211c]">BankID</h1>
-            <p className="mx-auto mt-3 max-w-[18rem] text-center text-sm leading-snug text-[#6e6964]">
-              {step === "bankid"
-                ? "Identifiera dig säkert med BankID för att logga in."
-                : bankPhase === "wait"
-                  ? "Öppnar BankID…"
-                  : "Godkänn inloggningen i BankID-appen."}
-            </p>
-            {step === "bankid" ? (
-              <div className="mt-5 space-y-3">
-                <Field label="Namn (valfritt)" value={name} onChange={setName} placeholder="För- och efternamn" />
-                <Field
-                  label="Personnummer (valfritt)"
-                  value={personalNumber}
-                  onChange={setPersonalNumber}
-                  placeholder="ÅÅÅÅMMDDXXXX"
-                />
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={startBankId}
-                  className="mt-2 h-12 w-full rounded-full bg-[#F7C948] text-[15px] font-semibold text-[#1a1a1a] disabled:opacity-60"
-                >
-                  Starta BankID
-                </button>
-              </div>
-            ) : (
+            <p className="mx-auto mt-3 max-w-[18rem] text-center text-sm leading-snug text-[#6e6964]">{bankStatus}</p>
+            <div className="mt-5 space-y-3">
               <button
                 type="button"
-                disabled={busy || bankPhase !== "ready"}
-                onClick={() => void confirmBankId()}
-                className="mt-5 h-12 w-full rounded-full bg-[#F7C948] text-[15px] font-semibold text-[#1a1a1a] disabled:opacity-60"
+                disabled={!bankLaunchUrl || busy}
+                onClick={() => bankLaunchUrl && openBankIdApp(bankLaunchUrl)}
+                className="h-12 w-full rounded-full bg-[#F7C948] text-[15px] font-semibold text-[#1a1a1a] disabled:opacity-60"
               >
-                {busy ? "Loggar in…" : bankPhase === "wait" ? "Öppnar BankID…" : "Godkänn och logga in"}
+                Öppna BankID
               </button>
-            )}
+              <p className="text-center text-xs text-[#8a847e]">
+                Identifiera dig i BankID-appen. VELIO hämtar ditt namn därifrån — inget fylls i här.
+              </p>
+              {bankOrderRef ? <p className="text-center text-[10px] text-[#c4bbb2]">Order {bankOrderRef.slice(0, 12)}…</p> : null}
+            </div>
           </>
         ) : null}
 
@@ -343,8 +325,8 @@ export function LoginScreen() {
             </h1>
             <p className="mx-auto mt-3 max-w-[18rem] text-center text-sm leading-snug text-[#6e6964]">
               {step === "email"
-                ? "Vi skapar en engångskod. Du måste bekräfta innan du loggas in."
-                : `Ange koden för ${email}.`}
+                ? "Vi skickar en engångskod till din mejlbox. Koden visas aldrig i appen."
+                : `Ange koden som skickades till ${email}.`}
             </p>
             <div className="mt-5 space-y-3">
               {step === "email" ? (
@@ -353,24 +335,17 @@ export function LoginScreen() {
                   <Field label="E-post" value={email} onChange={setEmail} placeholder="namn@mail.se" type="email" />
                 </>
               ) : (
-                <Field label="Verifieringskod" value={code} onChange={setCode} placeholder="6 siffror" />
+                <Field label="Verifieringskod från mejlen" value={code} onChange={setCode} placeholder="6 siffror" />
               )}
             </div>
             {hint ? <p className="mt-3 text-center text-sm text-[#6e6964]">{hint}</p> : null}
-            {deliveryCode ? (
-              <div className="mt-3 rounded-2xl border border-[#efeae4] bg-[#fbf8f4] px-4 py-3 text-center">
-                <p className="text-xs font-medium tracking-wide text-[#8a847e] uppercase">Engångskod</p>
-                <p className="mt-1 font-semibold tracking-[0.35em] text-[#2a211c]">{deliveryCode}</p>
-                <p className="mt-1 text-xs text-[#8a847e]">Giltig i 10 minuter · max 5 försök</p>
-              </div>
-            ) : null}
             <button
               type="button"
               disabled={busy}
               onClick={() => void (step === "email" ? sendEmail() : confirmEmail())}
               className="mt-5 h-12 w-full rounded-full bg-[#6e5636] text-[15px] font-semibold text-white disabled:opacity-60"
             >
-              {busy ? "Vänta…" : step === "email" ? "Skicka kod" : "Bekräfta och logga in"}
+              {busy ? "Vänta…" : step === "email" ? "Skicka kod till mejlen" : "Bekräfta och logga in"}
             </button>
           </>
         ) : null}
@@ -381,7 +356,9 @@ export function LoginScreen() {
               {step === "phone" ? "Mobilnummer" : "SMS-kod"}
             </h1>
             <p className="mx-auto mt-3 max-w-[18rem] text-center text-sm leading-snug text-[#6e6964]">
-              {step === "phone" ? "Vi skapar en SMS-kod som du anger för att logga in." : `Ange koden för ${phone}.`}
+              {step === "phone"
+                ? "Vi skickar en SMS-kod till din telefon. Koden visas aldrig i appen."
+                : `Ange koden som skickades till ${phone}.`}
             </p>
             <div className="mt-5 space-y-3">
               {step === "phone" ? (
@@ -390,17 +367,10 @@ export function LoginScreen() {
                   <Field label="Mobilnummer" value={phone} onChange={setPhone} placeholder="+46 70 …" />
                 </>
               ) : (
-                <Field label="SMS-kod" value={code} onChange={setCode} placeholder="6 siffror" />
+                <Field label="SMS-kod från telefonen" value={code} onChange={setCode} placeholder="6 siffror" />
               )}
             </div>
             {hint ? <p className="mt-3 text-center text-sm text-[#6e6964]">{hint}</p> : null}
-            {deliveryCode ? (
-              <div className="mt-3 rounded-2xl border border-[#efeae4] bg-[#fbf8f4] px-4 py-3 text-center">
-                <p className="text-xs font-medium tracking-wide text-[#8a847e] uppercase">Engångskod</p>
-                <p className="mt-1 font-semibold tracking-[0.35em] text-[#2a211c]">{deliveryCode}</p>
-                <p className="mt-1 text-xs text-[#8a847e]">Giltig i 10 minuter · max 5 försök</p>
-              </div>
-            ) : null}
             <button
               type="button"
               disabled={busy}
@@ -442,6 +412,8 @@ function Field({
         placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
         className="h-12 w-full rounded-full border border-[#efeae4] bg-white/80 px-4 text-[15px] outline-none"
+        autoComplete={type === "email" ? "email" : "one-time-code"}
+        inputMode={type === "email" ? "email" : "numeric"}
       />
     </label>
   );

@@ -1,4 +1,4 @@
-import { Bell, Menu } from "lucide-react";
+import { Bell } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useVelio } from "@/lib/velio/store";
 
@@ -9,17 +9,7 @@ export function AppHeader({ tone = "cream" }: { tone?: "cream" | "glass" }) {
 
   return (
     <div className="grid grid-cols-[2.5rem_1fr_2.5rem] items-center px-4 py-3">
-      <button
-        type="button"
-        aria-label="Meny"
-        onClick={() => setSheet("menu")}
-        className={cn(
-          "grid size-10 place-items-center rounded-full",
-          glass ? "bg-ink/45 text-paper backdrop-blur-sm" : "bg-sand text-ink",
-        )}
-      >
-        <Menu className="size-5" />
-      </button>
+      <span aria-hidden="true" className="size-10" />
       <button
         type="button"
         onClick={() => go("home")}

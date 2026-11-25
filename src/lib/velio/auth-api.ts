@@ -77,10 +77,11 @@ export async function fetchAuthCapabilities(): Promise<{
   google: boolean;
   email: boolean;
   sms: boolean;
+  bankid: boolean;
   sampleFallback: boolean;
 }> {
   const response = await fetch(apiPath("/api/auth/capabilities"), { credentials: "same-origin", cache: "no-store" });
-  if (!response.ok) return { google: false, email: false, sms: false, sampleFallback: false };
+  if (!response.ok) return { google: false, email: false, sms: false, bankid: false, sampleFallback: false };
   return json(response);
 }
 
@@ -182,21 +183,57 @@ export async function verifySmsOtp(input: {
   return fetchMe();
 }
 
-export async function loginWithBankId(input?: {
-  name?: string;
-  personalNumber?: string;
-}): Promise<MeResponse> {
-  const response = await fetch(apiPath("/api/auth/bankid/login"), {
+export async function startBankIdLogin(personalNumber?: string) {
+  const response = await fetch(apiPath("/api/auth/bankid/start"), {
     method: "POST",
     credentials: "same-origin",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(input ?? {}),
+    body: JSON.stringify({ personalNumber }),
   });
-  if (!response.ok) {
-    const data = await json<{ message?: string }>(response);
-    throw new Error(data.message || "BankID-inloggning misslyckades");
+  const data = await json<{
+    challengeId?: string;
+    orderRef?: string;
+    autoStartToken?: string;
+    launchUrl?: string;
+    message?: string;
+    error?: string;
+  }>(response);
+  if (!response.ok) throw new Error(data.message || data.error || "Kunde inte starta BankID");
+  return data as {
+    challengeId: string;
+    orderRef: string;
+    autoStartToken: string;
+    launchUrl: string;
+    message?: string;
+  };
+}
+
+export async function collectBankIdLogin(input: {
+  challengeId: string;
+  orderRef: string;
+}): Promise<
+  | { status: "pending"; hintCode?: string }
+  | { status: "failed"; message?: string }
+  | { status: "complete"; authenticated: true }
+> {
+  const response = await fetch(apiPath("/api/auth/bankid/collect"), {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const data = await json<{
+    status?: string;
+    message?: string;
+    error?: string;
+    hintCode?: string;
+    authenticated?: boolean;
+  }>(response);
+  if (data.status === "pending") return { status: "pending", hintCode: data.hintCode };
+  if (data.status === "failed" || !response.ok) {
+    return { status: "failed", message: data.message || data.error || "BankID misslyckades" };
   }
-  return fetchMe();
+  return { status: "complete", authenticated: true };
 }
 
 export async function startBankIdVerification(personalNumber?: string) {

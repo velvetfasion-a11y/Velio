@@ -377,7 +377,7 @@ export function ProfileScreens() {
           Logga in med BankID, Google, e-post eller mobil. Utförare verifieras med BankID eller pass.
         </p>
         <Btn variant="bank" onClick={() => setSheet("bankid")}>
-          <Shield className="size-4" /> Logga in med BankID
+          <Shield className="size-4" /> Öppna BankID
         </Btn>
       </div>
     );

@@ -2101,31 +2101,64 @@ export function BankIdSheet() {
   const closeSheet = useVelio((state) => state.closeSheet);
   const applyMe = useVelio((state) => state.applyMe);
   const showToast = useVelio((state) => state.showToast);
-  const [phase, setPhase] = useState<"wait" | "ready">("wait");
   const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState("Tryck för att öppna BankID-appen.");
+  const [launchUrl, setLaunchUrl] = useState<string | null>(null);
+  const pollRef = useRef<number | null>(null);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setPhase("ready"), 900);
-    return () => window.clearTimeout(timer);
+    return () => {
+      if (pollRef.current) window.clearInterval(pollRef.current);
+    };
   }, []);
 
-  const confirm = async () => {
-    if (busy || phase !== "ready") return;
+  const openApp = (url: string) => {
+    const opened = window.open(url, "_blank", "noopener,noreferrer");
+    if (!opened) window.location.href = url;
+  };
+
+  const start = async () => {
+    if (busy) return;
     setBusy(true);
+    setStatus("Startar BankID…");
     try {
-      const { isStaticHost, localBankIdSignIn, localMePayload } = await import("@/lib/velio/local-auth");
+      const { isStaticHost } = await import("@/lib/velio/local-auth");
       if (isStaticHost()) {
-        applyMe(localMePayload(localBankIdSignIn()));
-      } else {
-        const { loginWithBankId } = await import("@/lib/velio/auth-api");
-        const me = await loginWithBankId();
-        if (!me.authenticated) throw new Error("BankID-inloggning misslyckades");
-        applyMe(me);
+        throw new Error("BankID kräver en aktiverad BankID-koppling som öppnar BankID-appen.");
       }
-      showToast("Inloggad med BankID");
-      closeSheet();
+      const { startBankIdLogin, collectBankIdLogin, fetchMe } = await import("@/lib/velio/auth-api");
+      const started = await startBankIdLogin();
+      setLaunchUrl(started.launchUrl);
+      setStatus("Öppna BankID-appen och identifiera dig.");
+      openApp(started.launchUrl);
+      if (pollRef.current) window.clearInterval(pollRef.current);
+      pollRef.current = window.setInterval(() => {
+        void (async () => {
+          const result = await collectBankIdLogin({
+            challengeId: started.challengeId,
+            orderRef: started.orderRef,
+          });
+          if (result.status === "pending") {
+            setStatus("Väntar på BankID-appen…");
+            return;
+          }
+          if (pollRef.current) window.clearInterval(pollRef.current);
+          if (result.status === "failed") {
+            setStatus(result.message || "BankID misslyckades");
+            return;
+          }
+          const me = await fetchMe();
+          if (!me.authenticated) throw new Error("BankID-inloggning misslyckades");
+          applyMe(me);
+          showToast("Inloggad med BankID");
+          closeSheet();
+        })().catch((error) => {
+          if (pollRef.current) window.clearInterval(pollRef.current);
+          setStatus(error instanceof Error ? error.message : "BankID misslyckades");
+        });
+      }, 2000);
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "BankID misslyckades");
+      setStatus(error instanceof Error ? error.message : "BankID misslyckades");
     } finally {
       setBusy(false);
     }
@@ -2133,11 +2166,15 @@ export function BankIdSheet() {
 
   return (
     <BottomSheet title="BankID" onClose={closeSheet}>
-      <p className="mb-4 text-sm leading-relaxed text-muted">
-        {phase === "wait" ? "Öppnar BankID…" : "Godkänn inloggningen i BankID-appen."}
-      </p>
-      <Btn disabled={phase !== "ready" || busy} onClick={() => void confirm()}>
-        {busy ? "Loggar in…" : "Godkänn"}
+      <p className="mb-4 text-sm leading-relaxed text-muted">{status}</p>
+      <Btn
+        disabled={busy}
+        onClick={() => {
+          if (launchUrl) openApp(launchUrl);
+          else void start();
+        }}
+      >
+        {busy ? "Startar…" : "Öppna BankID"}
       </Btn>
       <Btn variant="secondary" className="mt-2" onClick={closeSheet}>
         Avbryt
