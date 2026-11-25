@@ -271,6 +271,52 @@ function syncDirectory(directory: Provider[]) {
   setProviders(directory);
 }
 
+const screens: Screen[] = [
+  "home",
+  "search",
+  "inbox",
+  "notifications",
+  "service",
+  "history",
+  "profile",
+  "edit",
+  "payments",
+  "bookings",
+  "posted",
+  "business",
+  "verify-id",
+  "settings",
+  "help",
+];
+
+const sheets: Exclude<Sheet, null>[] = [
+  "provider",
+  "chat",
+  "receipt",
+  "book",
+  "cart",
+  "location",
+  "bankid",
+  "sort",
+  "onboard",
+  "track",
+  "menu",
+  "job",
+  "notes",
+  "filters",
+  "request",
+  "pay",
+  "rate",
+];
+
+function isScreen(value: unknown): value is Screen {
+  return typeof value === "string" && screens.includes(value as Screen);
+}
+
+function isSheet(value: unknown): value is Sheet {
+  return value === null || (typeof value === "string" && sheets.includes(value as Exclude<Sheet, null>));
+}
+
 type VelioState = {
   screen: Screen;
   navStack: Screen[];
@@ -326,7 +372,7 @@ type VelioState = {
   setArea: (area: string | null) => void;
   showToast: (toast: string) => void;
   bootstrapAuth: () => Promise<void>;
-  applyMe: (me: Extract<MeResponse, { authenticated: true }>) => void;
+  applyMe: (me: Extract<MeResponse, { authenticated: true }>, opts?: { keepPlace?: boolean }) => void;
   setAuthError: (error: string | null) => void;
   applyAccountFlags: (account: AccountDto) => void;
   loginWithProvider: (provider: AuthProvider) => Promise<void>;
@@ -650,7 +696,7 @@ export const useVelio = create<VelioState>()(
           const { getLocalSessionAccount, isStaticHost, localMePayload } = await import("@/lib/velio/local-auth");
           if (typeof window !== "undefined" && isStaticHost()) {
             const local = getLocalSessionAccount();
-            if (local) get().applyMe(localMePayload(local));
+            if (local) get().applyMe(localMePayload(local), { keepPlace: true });
             set({ authReady: true, authError: null, loggedIn: Boolean(local) });
             return;
           }
@@ -667,7 +713,7 @@ export const useVelio = create<VelioState>()(
             });
             return;
           }
-          get().applyMe(me);
+          get().applyMe(me, { keepPlace: true });
           set({ authReady: true });
         } catch {
           set({
@@ -691,8 +737,9 @@ export const useVelio = create<VelioState>()(
           },
         });
       },
-      applyMe: (me) => {
+      applyMe: (me, opts) => {
         const wasLoggedIn = get().loggedIn;
+        const keepPlace = Boolean(opts?.keepPlace);
         const own = ownBusiness({ accountId: me.account.id, directory: get().directory, loggedIn: true });
         const accountMode =
           own || get().accountMode === "business" || me.account.accountMode === "business"
@@ -704,8 +751,8 @@ export const useVelio = create<VelioState>()(
           authError: null,
           loggedIn: true,
           loginIntro: true,
-          sheet: null,
-          screen: wasLoggedIn ? get().screen : "home",
+          sheet: keepPlace ? get().sheet : null,
+          screen: keepPlace || wasLoggedIn ? get().screen : "home",
           accountId: me.account.id,
           authProvider: me.account.provider,
           profile: {
@@ -740,7 +787,7 @@ export const useVelio = create<VelioState>()(
                 areas: own.areas,
               }
             : get().listing,
-          ...(wasLoggedIn
+          ...(keepPlace || wasLoggedIn
             ? {}
             : {
                 cart: [],
@@ -828,7 +875,7 @@ export const useVelio = create<VelioState>()(
         return true;
       },
       refreshSync: async () => {
-        if (!get().loggedIn) return;
+        if (!get().loggedIn || isStaticHost()) return;
         const me = await fetchMe();
         if (!me.authenticated) return;
         const mapped = applyConversations(me.conversations, get().chats, get().peers);
@@ -1452,9 +1499,26 @@ export const useVelio = create<VelioState>()(
         accountMode: state.accountMode,
         idVerified: state.idVerified,
         idMethod: state.idMethod,
+        screen: state.screen,
+        navStack: state.navStack,
+        sheet: state.sheet,
+        serviceId: state.serviceId,
+        providerId: state.providerId,
+        receiptId: state.receiptId,
+        activeBookingId: state.activeBookingId,
+        mapMode: state.mapMode,
       }),
       merge: (persisted, current) => {
         const saved = (persisted ?? {}) as Partial<VelioState>;
+        const serviceId = saved.serviceId ?? null;
+        const providerId = saved.providerId ?? null;
+        let screen = isScreen(saved.screen) ? saved.screen : current.screen;
+        if (screen === "service" && !serviceId) screen = "home";
+        let sheet = isSheet(saved.sheet) ? saved.sheet : null;
+        if ((sheet === "provider" || sheet === "chat" || sheet === "book" || sheet === "pay" || sheet === "rate") && !providerId) {
+          sheet = null;
+        }
+        const navStack = Array.isArray(saved.navStack) ? saved.navStack.filter(isScreen) : [];
         const chats = { ...(saved.chats ?? {}) };
         const appNotifications = saved.appNotifications ?? [];
         const bookings = saved.bookings ?? [];
@@ -1466,6 +1530,12 @@ export const useVelio = create<VelioState>()(
         return {
           ...current,
           ...saved,
+          screen,
+          navStack,
+          sheet,
+          serviceId,
+          providerId,
+          mapMode: screen === "service" ? Boolean(saved.mapMode) : false,
           profile,
           chats,
           peers: { ...(saved.peers ?? {}) },
