@@ -32,7 +32,7 @@ import {
   type MeResponse,
 } from "@/lib/velio/auth-api";
 import { chatDtoToMsg, previewMessageText, resolveTakeRequestStatuses } from "@/lib/velio/chat-codec";
-import { isStaticHost } from "@/lib/velio/local-auth";
+import { isStaticHost, localDeleteAccount, localSetAccountMode } from "@/lib/velio/local-auth";
 
 function mapSyncedMessages(
   messages: { id: string; from: "me" | "them"; text: string; time?: string }[],
@@ -389,6 +389,8 @@ type VelioState = {
   refreshSync: () => Promise<void>;
   login: () => void;
   logout: () => void;
+  removeBusiness: () => void;
+  deleteAccount: () => void;
   allowLocation: () => Promise<void>;
   clearLocation: () => void;
   setNotifications: (notifications: boolean) => void;
@@ -936,6 +938,52 @@ export const useVelio = create<VelioState>()(
           accountMode: "customer",
           idVerified: false,
           idMethod: null,
+        });
+      },
+      removeBusiness: () => {
+        const own = ownBusiness({ accountId: get().accountId, directory: get().directory, loggedIn: true });
+        const directory = own ? get().directory.filter((item) => item.id !== own.id) : get().directory;
+        syncDirectory(directory);
+        set({
+          directory,
+          listing: null,
+          businessForm: null,
+          accountMode: "customer",
+          providerId: null,
+          sheet: null,
+        });
+        if (typeof window !== "undefined" && isStaticHost()) localSetAccountMode("customer");
+        get().showToast("VELIO Business är borttaget");
+      },
+      deleteAccount: () => {
+        const accountId = get().accountId;
+        const own = ownBusiness({ accountId, directory: get().directory, loggedIn: true });
+        const directory = own ? get().directory.filter((item) => item.id !== own.id) : get().directory;
+        syncDirectory(directory);
+        if (typeof window !== "undefined" && isStaticHost()) localDeleteAccount();
+        else void logoutRemote();
+        set({
+          loggedIn: false,
+          screen: "home",
+          sheet: null,
+          accountId: null,
+          authProvider: null,
+          conversationByProvider: {},
+          peers: {},
+          chats: {},
+          bookings: [],
+          cart: [],
+          posted: accountId ? get().posted.filter((job) => job.ownerId !== accountId) : [],
+          cards: [],
+          appNotifications: [],
+          activeBookingId: null,
+          directory,
+          listing: null,
+          businessForm: null,
+          accountMode: "customer",
+          idVerified: false,
+          idMethod: null,
+          profile: { name: "", phone: "", email: "" },
         });
       },
       allowLocation: async () => {

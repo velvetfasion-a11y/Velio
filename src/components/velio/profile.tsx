@@ -29,22 +29,41 @@ import { cn } from "@/lib/cn";
 import { Btn, Field, ProfilePhoto, ScreenHeader } from "@/components/velio/ui";
 import { asset } from "@/lib/velio/asset";
 
-const faqs = [
+const faqs: { q: string; a: string; settings?: boolean }[] = [
   {
-    q: "Hur fungerar RUT-avdrag?",
-    a: "På många hushållsnära tjänster kan RUT dras direkt på priset. Utföraren ser om jobbet kvalificerar innan ni startar.",
+    q: "Hur raderar jag mitt konto?",
+    a: "Öppna Profil och sedan Inställningar. Längst ner väljer du Radera konto och bekräftar. Namn, kontaktuppgifter och VELIO Business tas bort från den här enheten, och du loggas ut.",
+    settings: true,
   },
   {
-    q: "Är utförarna kontrollerade?",
-    a: "Utförare måste verifiera sig med BankID eller pass innan VELIO Business aktiveras.",
+    q: "Hur tar jag bort VELIO Business?",
+    a: "Öppna Inställningar och välj Radera VELIO Business. Företagsprofilen och uppdrag du tar som utförare försvinner. Ditt kundkonto är kvar.",
+    settings: true,
+  },
+  {
+    q: "Hur ändrar jag namn eller e-post?",
+    a: "Öppna Inställningar. Skriv i fältet och tryck Spara till höger om just det fältet.",
+    settings: true,
+  },
+  {
+    q: "Hur delar jag min plats?",
+    a: "Tryck Dela plats högst upp, eller slå på Plats under Inställningar. Du kan också skriva en önskad plats i arbetsinformationen.",
+  },
+  {
+    q: "Hur hittar jag uppdrag?",
+    a: "I arbetsläget visas uppdrag inom ditt yrke under jobbtiderna. Från Meddelanden når du samma sida via Hitta uppdrag.",
   },
   {
     q: "Kan jag avboka?",
-    a: "Ja. Öppna ett pågående uppdrag från hem och välj Avbryt. I den skarpa tjänsten kan sen avbokning kosta.",
+    a: "Öppna uppdraget och välj Avbryt. Gör det så tidigt du kan, så att den andra parten hinner se det.",
   },
   {
     q: "Hur betalar jag?",
-    a: "Apple Pay, kort, Swish eller kontant. Du hanterar metoderna under Jag och Betalningsmetoder.",
+    a: "När jobbet är klart betalar du med Apple Pay, kort, Swish eller kontant. Sparade kort finns under Profil och Betalningsmetoder.",
+  },
+  {
+    q: "Hur fungerar RUT-avdrag?",
+    a: "På många hushållsnära tjänster kan RUT dras på priset. Utföraren ser om jobbet kvalificerar innan ni startar.",
   },
 ];
 
@@ -85,12 +104,18 @@ export function ProfileScreens() {
   const locationOn = useVelio((state) => state.locationOn);
   const userLocation = useVelio((state) => state.userLocation);
   const clearLocation = useVelio((state) => state.clearLocation);
+  const removeBusiness = useVelio((state) => state.removeBusiness);
+  const deleteAccount = useVelio((state) => state.deleteAccount);
   const showToast = useVelio((state) => state.showToast);
-  const [openFaq, setOpenFaq] = useState<number | null>(0);
+  const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [issue, setIssue] = useState("");
   const [last4, setLast4] = useState("");
   const [exp, setExp] = useState("");
   const [legal, setLegal] = useState<"privacy" | "terms" | null>(null);
+  const [confirm, setConfirm] = useState<"business" | "account" | null>(null);
+  useEffect(() => {
+    if (screen !== "settings") setConfirm(null);
+  }, [screen]);
 
   if (screen === "payments") {
     return (
@@ -296,8 +321,8 @@ export function ProfileScreens() {
             <h2 className="mt-3 font-serif text-[1.7rem] leading-none">{legal === "privacy" ? "Integritetspolicy" : "Användarvillkor"}</h2>
             <p className="mt-3 text-sm leading-relaxed text-[#5c564f]">
               {legal === "privacy"
-                ? "VELIO använder namn, telefon och e-post för att visa din profil och koppla dig till uppdrag. Plats används bara när du själv delar den, för att hitta jobb i ditt område."
-                : "Ett uppdrag gäller den tid och det pris som båda har bekräftat. Avbokning görs från uppdraget. Betalning sker med den metod som valts för jobbet."}
+                ? "VELIO använder namn, telefon och e-post för att visa din profil och koppla dig till uppdrag. Plats används bara när du själv delar den, för att hitta jobb i ditt område. Under Inställningar kan du ta bort VELIO Business eller radera hela kontot från den här enheten."
+                : "Ett uppdrag gäller den tid och det pris som båda har bekräftat. Avbokning görs från uppdraget. Betalning sker med den metod som valts för jobbet. Du kan avsluta VELIO Business eller radera kontot när du vill, under Inställningar."}
             </p>
           </div>
         ) : (
@@ -375,8 +400,16 @@ export function ProfileScreens() {
             </section>
 
             <section>
+              <h2 className="mb-2 px-1 text-xs font-semibold tracking-wide text-[#8a8178]">OM VELIO</h2>
               <div className="overflow-hidden rounded-[1.4rem] border border-[#efeae4] bg-white">
-                <button type="button" onClick={() => setLegal("privacy")} className="flex w-full items-center gap-3 px-4 py-3.5 text-left">
+                <button type="button" onClick={() => go("help")} className="flex w-full items-center gap-3 px-4 py-3.5 text-left">
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[15px]">Hjälp och support</span>
+                    <span className="mt-0.5 block text-xs text-[#8a8178]">Vanliga frågor, till exempel hur du raderar kontot</span>
+                  </span>
+                  <ChevronRight className="size-4 text-[#b7afa6]" />
+                </button>
+                <button type="button" onClick={() => setLegal("privacy")} className="flex w-full items-center gap-3 border-t border-[#f0ebe6] px-4 py-3.5 text-left">
                   <span className="min-w-0 flex-1 text-[15px]">Integritetspolicy</span>
                   <ChevronRight className="size-4 text-[#b7afa6]" />
                 </button>
@@ -385,6 +418,56 @@ export function ProfileScreens() {
                   <ChevronRight className="size-4 text-[#b7afa6]" />
                 </button>
               </div>
+            </section>
+
+            <section>
+              <h2 className="mb-2 px-1 text-xs font-semibold tracking-wide text-[#8a8178]">KONTO</h2>
+              {confirm ? (
+                <div className="rounded-[1.4rem] border border-[#efeae4] bg-white px-4 py-4">
+                  <h3 className="font-serif text-[1.45rem] leading-none">{confirm === "business" ? "Ta bort VELIO Business?" : "Radera kontot?"}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-[#5c564f]">
+                    {confirm === "business"
+                      ? "Företagsprofilen tas bort. Du är kvar som kund och kan logga in som vanligt."
+                      : "Namn, kontaktuppgifter och VELIO Business tas bort från den här enheten. Du loggas ut."}
+                  </p>
+                  <div className="mt-4 flex gap-2">
+                    <button type="button" onClick={() => setConfirm(null)} className="h-11 flex-1 rounded-full border border-[#e6dfd6] text-sm font-semibold">
+                      Avbryt
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm === "business") removeBusiness();
+                        else deleteAccount();
+                        setConfirm(null);
+                      }}
+                      className="h-11 flex-1 rounded-full bg-[#8a3d2a] text-sm font-semibold text-white"
+                    >
+                      {confirm === "business" ? "Ta bort" : "Radera konto"}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="overflow-hidden rounded-[1.4rem] border border-[#efeae4] bg-white">
+                  <button type="button" onClick={logout} className="flex w-full items-center px-4 py-3.5 text-left text-[15px]">
+                    Logga ut
+                  </button>
+                  {accountMode === "business" || own ? (
+                    <button type="button" onClick={() => setConfirm("business")} className="flex w-full items-center border-t border-[#f0ebe6] px-4 py-3.5 text-left">
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[15px] text-[#8a3d2a]">Radera VELIO Business</span>
+                        <span className="mt-0.5 block text-xs text-[#8a8178]">Företagskontot tas bort. Kundkontot är kvar.</span>
+                      </span>
+                    </button>
+                  ) : null}
+                  <button type="button" onClick={() => setConfirm("account")} className="flex w-full items-center border-t border-[#f0ebe6] px-4 py-3.5 text-left">
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-[15px] text-[#8a3d2a]">Radera konto</span>
+                      <span className="mt-0.5 block text-xs text-[#8a8178]">Allt på den här enheten tas bort och du loggas ut.</span>
+                    </span>
+                  </button>
+                </div>
+              )}
               <p className="mt-4 text-center text-xs text-[#a39c94]">VELIO 1.0.0</p>
             </section>
           </div>
@@ -395,37 +478,58 @@ export function ProfileScreens() {
 
   if (screen === "help") {
     return (
-      <div className="px-5 pt-4">
+      <div className="px-5 pt-2 pb-8">
         <ScreenHeader title="Hjälp och support" />
-        <div className="mb-5 divide-y divide-line rounded-2xl border border-line px-4">
-          {faqs.map((faq, index) => (
-            <button key={faq.q} type="button" onClick={() => setOpenFaq(openFaq === index ? null : index)} className="w-full py-3 text-left">
-              <span className="block font-medium">{faq.q}</span>
-              {openFaq === index ? <span className="mt-1 block text-sm leading-relaxed text-muted">{faq.a}</span> : null}
-            </button>
-          ))}
+        <h2 className="mb-2 px-1 text-xs font-semibold tracking-wide text-[#8a8178]">VANLIGA FRÅGOR</h2>
+        <div className="overflow-hidden rounded-[1.4rem] border border-[#efeae4] bg-white">
+          {faqs.map((faq, index) => {
+            const open = openFaq === index;
+            return (
+              <div key={faq.q} className={index === 0 ? "" : "border-t border-[#f0ebe6]"}>
+                <button type="button" aria-expanded={open} onClick={() => setOpenFaq(open ? null : index)} className="flex w-full items-center gap-3 px-4 py-3.5 text-left">
+                  <span className="min-w-0 flex-1 text-[15px]">{faq.q}</span>
+                  <ChevronRight className={cn("size-4 shrink-0 text-[#b7afa6] transition", open && "rotate-90")} />
+                </button>
+                {open ? (
+                  <div className="px-4 pb-4">
+                    <p className="text-sm leading-relaxed text-[#5c564f]">{faq.a}</p>
+                    {faq.settings ? (
+                      <button type="button" onClick={() => go("settings")} className="mt-3 text-sm font-semibold text-[#6e5636]">
+                        Öppna inställningar
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
         </div>
-        <label className="mb-3 block">
-          <span className="mb-1.5 block text-sm font-medium">Rapportera ett problem</span>
-          <textarea
-            value={issue}
-            onChange={(event) => setIssue(event.target.value)}
-            className="h-24 w-full rounded-xl border border-line px-3 py-3 text-base outline-none focus:border-ink"
-            placeholder="Vad gick fel?"
-          />
-        </label>
-        <Btn
-          onClick={() => {
-            if (issue.trim().length < 4) {
-              showToast("Beskriv problemet kort");
-              return;
-            }
-            setIssue("");
-            showToast("Tack, vi har tagit emot det");
-          }}
-        >
-          Skicka
-        </Btn>
+        <h2 className="mt-5 mb-2 px-1 text-xs font-semibold tracking-wide text-[#8a8178]">KONTAKTA OSS</h2>
+        <div className="rounded-[1.4rem] border border-[#efeae4] bg-white px-4 py-4">
+          <label className="block">
+            <span className="text-[15px]">Rapportera ett problem</span>
+            <textarea
+              value={issue}
+              onChange={(event) => setIssue(event.target.value)}
+              className="mt-2 h-24 w-full resize-none rounded-2xl border border-[#efeae4] bg-[#fbf8f4] px-3 py-3 text-sm outline-none"
+              placeholder="Beskriv vad som hände"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={() => {
+              if (issue.trim().length < 4) {
+                showToast("Beskriv problemet kort");
+                return;
+              }
+              setIssue("");
+              showToast("Tack, vi har tagit emot det");
+            }}
+            className="mt-3 h-10 rounded-full bg-[#2a211c] px-4 text-sm font-semibold text-white"
+          >
+            Skicka
+          </button>
+        </div>
       </div>
     );
   }

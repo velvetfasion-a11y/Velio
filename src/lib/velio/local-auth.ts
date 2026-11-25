@@ -82,6 +82,13 @@ export function clearLocalSession() {
   localStorage.removeItem(SESSION_KEY);
 }
 
+export function localDeleteAccount() {
+  const account = getLocalSessionAccount();
+  if (account) writeAccounts(readAccounts().filter((item) => item.id !== account.id));
+  clearLocalSession();
+  localStorage.removeItem("velio-schedule-v1");
+}
+
 function readAttempts(challengeId: string): number {
   try {
     const raw = JSON.parse(localStorage.getItem(OTP_ATTEMPTS_KEY) || "{}") as Record<string, number>;
