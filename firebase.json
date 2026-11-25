@@ -1,0 +1,23 @@
+{
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json",
+    "database": "(default)",
+    "location": "europe-north1"
+  },
+  "auth": {
+    "providers": {
+      "emailPassword": true,
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "VELIO",
+        "supportEmail": "velvetfasion@gmail.com",
+        "authorizedRedirectUris": [
+          "https://velio-se.firebaseapp.com/__/auth/handler",
+          "https://velvetfasion-a11y.github.io",
+          "https://velvetfasion-a11y.github.io/Velio",
+          "http://localhost"
+        ]
+      }
+    }
+  }
+}

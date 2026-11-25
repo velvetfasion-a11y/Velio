@@ -18,11 +18,9 @@ import {
 import { resolveCurrentLocation, type UserLocation } from "@/lib/velio/geo";
 import {
   createAccountRemote,
-  createJobRemote,
   fetchMe,
   fetchMessages,
   loginWithAccount,
-  logoutRemote,
   openConversation,
   updateProfileRemote,
   type AccountDto,
@@ -32,8 +30,9 @@ import {
   type MeResponse,
 } from "@/lib/velio/auth-api";
 import { chatDtoToMsg, previewMessageText, resolveTakeRequestStatuses } from "@/lib/velio/chat-codec";
-import { isStaticHost, localDeleteAccount, localSetAccountMode } from "@/lib/velio/local-auth";
-import { demoWallet, emptyWallet, payoutFee, type PayoutSpeed, type WalletState } from "@/lib/velio/wallet";
+import { isStaticHost, localSetAccountMode } from "@/lib/velio/local-auth";
+import { isCloudActive, setPreferCustomer } from "@/lib/firebase/session";
+import { emptyWallet, type PayoutSpeed, type WalletState } from "@/lib/velio/wallet";
 
 function mapSyncedMessages(
   messages: { id: string; from: "me" | "them"; text: string; time?: string }[],
@@ -47,10 +46,8 @@ export function ownBusiness(state: {
   directory: Provider[];
   loggedIn: boolean;
 }): Provider | undefined {
-  const exact = state.accountId ? state.directory.find((item) => item.id === `biz-${state.accountId}`) : undefined;
-  if (exact) return exact;
-  if (!state.loggedIn || state.directory.length === 0) return undefined;
-  return state.directory[state.directory.length - 1];
+  if (!state.accountId) return undefined;
+  return state.directory.find((item) => item.id === state.accountId || item.id === `biz-${state.accountId}`);
 }
 
 export type Screen =
@@ -170,6 +167,8 @@ export type Listing = {
   sellerKind?: "company" | "private";
   /** Published without a real identity check. */
   demo?: boolean;
+  /** Private. Written only to users/{uid}.nationalId, never onto the public profile. */
+  nationalId?: string;
 };
 
 export type BusinessForm = {
@@ -221,6 +220,17 @@ export type PostedJob = {
   price: number;
   ownerId?: string;
   ownerName?: string;
+  status?: string;
+};
+
+export type JobOffer = {
+  id: string;
+  ownerId: string;
+  jobId: string;
+  jobOwnerId: string;
+  amount: number;
+  message: string;
+  status: "pending" | "accepted" | "declined" | "withdrawn";
 };
 
 export type PeerInfo = {
@@ -414,6 +424,9 @@ type VelioState = {
   chats: Record<string, ChatMsg[]>;
   bookings: Booking[];
   posted: PostedJob[];
+  jobOffers: JobOffer[];
+  acceptOffer: (id: string) => void;
+  declineOffer: (id: string) => void;
   activeBookingId: string | null;
   toast: string | null;
   go: (screen: Screen, opts?: { replace?: boolean }) => void;
@@ -647,6 +660,7 @@ export const useVelio = create<VelioState>()(
       chats: {},
       bookings: seedBookings,
       posted: [],
+      jobOffers: [],
       activeBookingId: null,
       toast: null,
       go: (screen, opts) => {
@@ -694,6 +708,10 @@ export const useVelio = create<VelioState>()(
       },
       openProvider: (providerId) => set({ providerId, sheet: "provider" }),
       openThread: (peerKey, opts) => {
+        if (isCloudActive()) {
+          set({ providerId: peerKey, sheet: "chat", screen: get().screen === "inbox" ? "inbox" : get().screen });
+          return;
+        }
         const marketplace = providerById(peerKey);
         const booking =
           get().bookings.find((item) => item.providerId === peerKey && item.status !== "done" && item.status !== "declined") ??
@@ -778,28 +796,71 @@ export const useVelio = create<VelioState>()(
       },
       bootstrapAuth: async () => {
         try {
-          const { getLocalSessionAccount, isStaticHost, localMePayload } = await import("@/lib/velio/local-auth");
-          if (typeof window !== "undefined" && isStaticHost()) {
-            const local = getLocalSessionAccount();
-            if (local) get().applyMe(localMePayload(local), { keepPlace: true });
-            set({ authReady: true, authError: null, loggedIn: Boolean(local) });
-            return;
+          const { authErrorSv, authReady, consumeRedirect, watchAuth } = await import("@/lib/firebase/auth");
+          const { ensureAccount, startCloudSession, stopCloudSession } = await import("@/lib/firebase/cloud");
+          await authReady();
+          try {
+            await consumeRedirect();
+          } catch (error) {
+            set({ authError: authErrorSv(error) });
           }
-          const me = await fetchMe();
-          if (!me.authenticated) {
-            set({
-              authReady: true,
-              authError: null,
-              loggedIn: false,
-              accountId: null,
-              authProvider: null,
-              idVerified: false,
-              idMethod: null,
+          await new Promise<void>((resolve) => {
+            let first = true;
+            watchAuth((user) => {
+              void (async () => {
+                try {
+                  if (!user) {
+                    stopCloudSession();
+                    setProviders([]);
+                    set({
+                      loggedIn: false,
+                      authReady: true,
+                      accountId: null,
+                      authProvider: null,
+                      directory: [],
+                      posted: [],
+                      jobOffers: [],
+                      chats: {},
+                      peers: {},
+                      conversationByProvider: {},
+                      addresses: [],
+                      wallet: emptyWallet(),
+                      listing: null,
+                      accountMode: "customer",
+                    });
+                    return;
+                  }
+                  await ensureAccount(user);
+                  startCloudSession(user.uid);
+                  const name = publicDisplayName(user.displayName) || publicDisplayName(user.email?.split("@")[0]);
+                  set({
+                    loggedIn: true,
+                    authReady: true,
+                    authError: null,
+                    accountId: user.uid,
+                    authProvider: user.providerData[0]?.providerId ?? "password",
+                    profile: {
+                      name: name || get().profile.name,
+                      email: contactEmail(user.email) || get().profile.email,
+                      phone: get().profile.phone,
+                      avatar: get().profile.avatar,
+                    },
+                  });
+                } catch {
+                  set({
+                    authReady: true,
+                    authError: "Kunde inte öppna kontot just nu.",
+                    loggedIn: Boolean(user),
+                  });
+                } finally {
+                  if (first) {
+                    first = false;
+                    resolve();
+                  }
+                }
+              })();
             });
-            return;
-          }
-          get().applyMe(me, { keepPlace: true });
-          set({ authReady: true });
+          });
         } catch {
           set({
             authReady: true,
@@ -928,6 +989,16 @@ export const useVelio = create<VelioState>()(
       saveProfile: async (nextProfile) => {
         const profile = nextProfile ?? get().profile;
         set({ profile: { ...profile, avatar: profile.avatar ?? get().profile.avatar } });
+        if (isCloudActive()) {
+          try {
+            const { saveAccountProfile } = await import("@/lib/firebase/cloud");
+            await saveAccountProfile({ name: profile.name, email: profile.email, phone: profile.phone });
+          } catch (error) {
+            const { cloudErrorSv } = await import("@/lib/firebase/cloud");
+            get().showToast(cloudErrorSv(error));
+            return false;
+          }
+        }
         const { isStaticHost, localUpdateAccount } = await import("@/lib/velio/local-auth");
         const syncDirectoryName = () => {
           const own = ownBusiness({ accountId: get().accountId, directory: get().directory, loggedIn: true });
@@ -966,7 +1037,7 @@ export const useVelio = create<VelioState>()(
         return true;
       },
       refreshSync: async () => {
-        if (!get().loggedIn || isStaticHost()) return;
+        if (!get().loggedIn || isCloudActive() || isStaticHost()) return;
         const me = await fetchMe();
         if (!me.authenticated) return;
         const mapped = applyConversations(me.conversations, get().chats, get().peers);
@@ -997,10 +1068,13 @@ export const useVelio = create<VelioState>()(
         set({ screen: "profile", sheet: null });
       },
       logout: () => {
-        void import("@/lib/velio/local-auth").then(({ clearLocalSession, isStaticHost }) => {
-          if (isStaticHost()) clearLocalSession();
-          else void logoutRemote();
-        });
+        void (async () => {
+          const { stopCloudSession } = await import("@/lib/firebase/cloud");
+          const { signOutFirebase } = await import("@/lib/firebase/auth");
+          stopCloudSession();
+          await signOutFirebase();
+        })();
+        setProviders([]);
         set({
           loggedIn: false,
           screen: "home",
@@ -1013,6 +1087,8 @@ export const useVelio = create<VelioState>()(
           bookings: [],
           cart: [],
           posted: [],
+          jobOffers: [],
+          directory: [],
           cards: [],
           appNotifications: [],
           activeBookingId: null,
@@ -1024,6 +1100,10 @@ export const useVelio = create<VelioState>()(
         });
       },
       removeBusiness: () => {
+        setPreferCustomer(true);
+        void import("@/lib/firebase/cloud").then(({ deleteWorkerProfile, cloudErrorSv }) =>
+          deleteWorkerProfile().catch((error: unknown) => get().showToast(cloudErrorSv(error))),
+        );
         const own = ownBusiness({ accountId: get().accountId, directory: get().directory, loggedIn: true });
         const directory = own ? get().directory.filter((item) => item.id !== own.id) : get().directory;
         syncDirectory(directory);
@@ -1044,8 +1124,18 @@ export const useVelio = create<VelioState>()(
         const own = ownBusiness({ accountId, directory: get().directory, loggedIn: true });
         const directory = own ? get().directory.filter((item) => item.id !== own.id) : get().directory;
         syncDirectory(directory);
-        if (typeof window !== "undefined" && isStaticHost()) localDeleteAccount();
-        else void logoutRemote();
+        void (async () => {
+          try {
+            const { deleteMyCloudData, stopCloudSession } = await import("@/lib/firebase/cloud");
+            const { deleteSignedInUser } = await import("@/lib/firebase/auth");
+            await deleteMyCloudData();
+            stopCloudSession();
+            await deleteSignedInUser();
+          } catch (error) {
+            const { cloudErrorSv } = await import("@/lib/firebase/cloud");
+            get().showToast(cloudErrorSv(error));
+          }
+        })();
         set({
           loggedIn: false,
           screen: "home",
@@ -1057,7 +1147,8 @@ export const useVelio = create<VelioState>()(
           chats: {},
           bookings: [],
           cart: [],
-          posted: accountId ? get().posted.filter((job) => job.ownerId !== accountId) : [],
+          posted: [],
+          jobOffers: [],
           cards: [],
           appNotifications: [],
           activeBookingId: null,
@@ -1203,6 +1294,15 @@ export const useVelio = create<VelioState>()(
           get().showToast("Adressen finns redan");
           return false;
         }
+        if (isCloudActive()) {
+          const isDefault = addresses.length === 0;
+          void import("@/lib/firebase/cloud").then(({ createCloudAddress, cloudErrorSv }) =>
+            createCloudAddress({ label: nextLabel, line: nextLine, lat, lng, isDefault })
+              .then(() => get().showToast("Adressen är sparad"))
+              .catch((error: unknown) => get().showToast(cloudErrorSv(error))),
+          );
+          return true;
+        }
         const id = uid();
         const item = { id, label: nextLabel, line: nextLine, primary: addresses.length === 0, lat, lng };
         set({
@@ -1219,6 +1319,14 @@ export const useVelio = create<VelioState>()(
         const nextLine = line.trim();
         const nextLabel = label.trim() || "Hem";
         if (nextLine.length < 3) return false;
+        if (isCloudActive()) {
+          void import("@/lib/firebase/cloud").then(({ updateCloudAddress, cloudErrorSv }) =>
+            updateCloudAddress(id, { label: nextLabel, line: nextLine, lat, lng })
+              .then(() => get().showToast("Adressen är uppdaterad"))
+              .catch((error: unknown) => get().showToast(cloudErrorSv(error))),
+          );
+          return true;
+        }
         const addresses = get().addresses.map((item) =>
           item.id === id ? { ...item, label: nextLabel, line: nextLine, lat, lng } : item,
         );
@@ -1245,6 +1353,14 @@ export const useVelio = create<VelioState>()(
         get().showToast(`${item.label} är vald`);
       },
       removeAddress: (id) => {
+        if (isCloudActive()) {
+          void import("@/lib/firebase/cloud").then(({ deleteCloudAddress, cloudErrorSv }) =>
+            deleteCloudAddress(id)
+              .then(() => get().showToast("Adressen är borttagen"))
+              .catch((error: unknown) => get().showToast(cloudErrorSv(error))),
+          );
+          return;
+        }
         const addresses = get().addresses.filter((item) => item.id !== id);
         if (addresses.length && !addresses.some((item) => item.primary)) addresses[0] = { ...addresses[0], primary: true };
         const activeGone = get().activeAddressId === id;
@@ -1262,6 +1378,14 @@ export const useVelio = create<VelioState>()(
         get().showToast("Adressen är borttagen");
       },
       makePrimaryAddress: (id) => {
+        if (isCloudActive()) {
+          void import("@/lib/firebase/cloud").then(({ makeCloudDefaultAddress, cloudErrorSv }) =>
+            makeCloudDefaultAddress(id)
+              .then(() => get().showToast("Standardadress sparad"))
+              .catch((error: unknown) => get().showToast(cloudErrorSv(error))),
+          );
+          return;
+        }
         set({ addresses: get().addresses.map((item) => ({ ...item, primary: item.id === id })) });
         get().showToast("Standardadress sparad");
       },
@@ -1346,6 +1470,15 @@ export const useVelio = create<VelioState>()(
         const providerId = get().providerId;
         const trimmed = text.trim();
         if (!providerId || !trimmed) return;
+        if (isCloudActive()) {
+          const optimistic: ChatMsg = { id: uid(), from: "me", text: trimmed, time: clock() };
+          const prev = get().chats[providerId] ?? [];
+          set({ chats: { ...get().chats, [providerId]: [...prev, optimistic] } });
+          void import("@/lib/firebase/cloud").then(({ sendPeerMessage, cloudErrorSv }) =>
+            sendPeerMessage(providerId, trimmed).catch((error: unknown) => get().showToast(cloudErrorSv(error))),
+          );
+          return;
+        }
         void (async () => {
           let conversationId = get().conversationByProvider[providerId];
           const threadKey = get().providerId || providerId;
@@ -1454,6 +1587,31 @@ export const useVelio = create<VelioState>()(
         const ownerId = job.ownerId;
         if (!ownerId) {
           get().showToast("Kunde inte hitta kunden");
+          return;
+        }
+        if (isCloudActive()) {
+          void (async () => {
+            try {
+              const { sendCloudOffer, sendPeerMessage } = await import("@/lib/firebase/cloud");
+              const own = ownBusiness({ accountId: get().accountId, directory: get().directory, loggedIn: true });
+              const amount = job.price > 0 ? job.price : own?.price ?? 0;
+              const message = "Jag kan ta uppdraget.";
+              await sendCloudOffer({ jobId: job.id, jobOwnerId: ownerId, amount, message });
+              await sendPeerMessage(ownerId, message, job.id);
+              set({
+                providerId: ownerId,
+                sheet: "chat",
+                peers: {
+                  ...get().peers,
+                  [ownerId]: { id: ownerId, name: job.ownerName || "Kund", providerId: null },
+                },
+              });
+              get().showToast("Offerten är skickad");
+            } catch (error) {
+              const { cloudErrorSv } = await import("@/lib/firebase/cloud");
+              get().showToast(cloudErrorSv(error));
+            }
+          })();
           return;
         }
         void (async () => {
@@ -1684,6 +1842,7 @@ export const useVelio = create<VelioState>()(
           get().showToast("BankID eller pass krävs för VELIO Business");
           return;
         }
+        setPreferCustomer(accountMode === "customer");
         set({
           accountMode,
           ...(accountMode === "business" && own
@@ -1712,6 +1871,7 @@ export const useVelio = create<VelioState>()(
         void import("@/lib/velio/local-auth").then(({ isStaticHost, localSetAccountMode }) => {
           if (isStaticHost()) localSetAccountMode(accountMode);
         });
+        if (isCloudActive()) return;
         void updateProfileRemote({ accountMode }).then((saved) => {
           if (saved && !ownsListing) {
             set({
@@ -1727,104 +1887,122 @@ export const useVelio = create<VelioState>()(
           kycPending: { document, reference, submittedAt: new Date().toISOString() },
         });
       },
-      connectPayoutBank: (bank) => {
-        set({ wallet: { ...get().wallet, bank } });
+      connectPayoutBank: () => {
+        get().showToast("Bankkoppling är inte aktiverad. Inget sparas och ingen bank tar emot uppgifterna.");
       },
-      requestPayout: (amount, speed) => {
-        const wallet = get().wallet;
-        if (!wallet.bank) return "Koppla ett bankkonto först";
-        const fee = payoutFee(speed);
-        if (!Number.isFinite(amount) || amount < 1) return "Skriv ett belopp";
-        if (amount > wallet.available) return "Beloppet är större än tillgängligt saldo";
-        if (amount <= fee) return "Beloppet behöver täcka avgiften";
-        const id = `UT-${Date.now().toString().slice(-6)}`;
-        const note =
-          speed === "instant"
-            ? `Avgift ${fee} kr. Demo: ingen bank har tagit emot uttaget.`
-            : "Ingen avgift. 1–2 bankdagar. Demo: ingen bank har tagit emot uttaget.";
-        set({
-          wallet: {
-            ...wallet,
-            available: wallet.available - amount,
-            txs: [
-              {
-                id,
-                title: speed === "instant" ? "Uttag · direkt" : "Uttag · 1–2 bankdagar",
-                amount: -amount,
-                bucket: "sent",
-                at: "Nu",
-                note,
-              },
-              ...wallet.txs,
-            ],
-          },
-        });
-        return { id, amount, fee, net: amount - fee, speed };
-      },
+      requestPayout: () => "Utbetalningar är inte kopplade. Ingen bank tar emot pengar.",
       publishDemoBusiness: (listing) => {
         const profile = get().profile;
-        const id = get().accountId ? `biz-${get().accountId}` : `biz-${uid()}`;
-        const previous = get().directory.find((item) => item.id === id);
-        const serviceIds = listing.serviceIds ?? (listing.serviceId ? [listing.serviceId] : []);
-        const where = areaSummary(listing.areas);
-        const published = listingToProvider({
-          id,
-          name: profile.name || listing.companyName || "Mitt företag",
-          serviceId: serviceIds[0] ?? listing.serviceId,
-          serviceIds,
-          otherTrade: listing.otherTrade,
-          title: listing.title,
-          desc: listing.desc,
-          price: listing.price,
-          area: where.area,
-          place: where.place,
-          experience: listing.experience,
-          photo: profile.avatar || previous?.photo,
-          photos: listing.photos,
-          offers: listing.offers,
-          includes: listing.includes,
-          qualifications: listing.qualifications,
-          extras: listing.extras,
-          areas: listing.areas,
-          companyName: listing.companyName,
-          orgNumber: listing.orgNumber,
-          fTax: listing.fTax,
-          sellerKind: listing.sellerKind,
-          demo: true,
-        });
-        const directory = [...get().directory.filter((item) => item.id !== id), published];
-        syncDirectory(directory);
-        set({
-          listing: { ...listing, demo: true },
-          directory,
-          accountMode: "business",
-          idVerified: false,
-          idMethod: "demo",
-          sheet: "provider",
-          screen: "business",
-          providerId: id,
-          wallet: get().wallet.txs.length ? get().wallet : demoWallet(),
-        });
-        void import("@/lib/velio/local-auth").then(({ isStaticHost: staticHost, localSetAccountMode: setMode }) => {
-          if (staticHost()) setMode("business");
-        });
-        get().showToast("Profilen är publicerad som Demo. Den är inte verifierad.");
+        const id = get().accountId;
+        if (!id) {
+          get().showToast("Logga in innan du publicerar");
+          return;
+        }
+        void (async () => {
+          try {
+            const { describeWorker, publishWorkerProfile } = await import("@/lib/firebase/cloud");
+            const serviceIds = listing.serviceIds ?? (listing.serviceId ? [listing.serviceId] : []);
+            const names = serviceIds.flatMap((serviceId) => {
+              const name = serviceById(serviceId)?.name;
+              return name ? [name] : [];
+            });
+            const who = profile.name || listing.companyName || "Privatperson";
+            const companyName = listing.sellerKind === "private" ? who : listing.companyName || who;
+            const description = describeWorker({
+              desc: listing.desc,
+              offers: listing.offers,
+              sellerKind: listing.sellerKind,
+              fTax: listing.fTax,
+            });
+            const serviceArea = (listing.areas?.[0] || "Sverige").slice(0, 120);
+            await publishWorkerProfile({
+              displayName: who,
+              companyName,
+              description,
+              services: names,
+              serviceArea,
+              city: serviceArea,
+              sellerKind: listing.sellerKind === "company" ? "company" : "private",
+              orgNumber: listing.orgNumber,
+              nationalId: listing.nationalId,
+            });
+            const where = areaSummary(listing.areas);
+            const published = listingToProvider({
+              id,
+              name: companyName,
+              serviceId: serviceIds[0] ?? listing.serviceId,
+              serviceIds,
+              title: listing.sellerKind === "private" ? "Privatperson" : companyName,
+              desc: description,
+              price: listing.price,
+              area: where.area,
+              place: where.place,
+              offers: listing.offers,
+              areas: listing.areas,
+              companyName: listing.sellerKind === "company" ? companyName : undefined,
+              sellerKind: listing.sellerKind,
+              demo: true,
+            });
+            published.rating = 0;
+            published.reviews = 0;
+            const directory = [...get().directory.filter((item) => item.id !== id), published];
+            syncDirectory(directory);
+            setPreferCustomer(false);
+            set({
+              listing: { ...listing, demo: true },
+              directory,
+              accountMode: "business",
+              idVerified: false,
+              idMethod: "demo",
+              sheet: "provider",
+              screen: "business",
+              providerId: id,
+              wallet: emptyWallet(),
+            });
+            get().showToast("Profilen är publicerad som Demo. Den är inte verifierad.");
+          } catch (error) {
+            const { cloudErrorSv } = await import("@/lib/firebase/cloud");
+            get().showToast(cloudErrorSv(error));
+          }
+        })();
       },
       rememberBankIdNumber: (value) => {
         set({ bankIdPersonalNumber: value });
       },
-      addPosted: (job) => {
-        const local: PostedJob = {
-          id: `job-${uid()}`,
-          ownerId: get().accountId ?? undefined,
-          ownerName: get().profile.name || undefined,
-          ...job,
-        };
+      acceptOffer: (id) => {
         void (async () => {
-          const jobs = await createJobRemote(job);
-          if (jobs.length) set({ posted: jobsToPosted(jobs) });
-          else set({ posted: [local, ...get().posted.filter((item) => item.id !== local.id)] });
-          get().showToast("Uppdraget är publicerat");
+          try {
+            const { setCloudOfferStatus } = await import("@/lib/firebase/cloud");
+            await setCloudOfferStatus(id, "accepted");
+            get().showToast("Offerten är accepterad. Uppdraget är tilldelat.");
+          } catch (error) {
+            const { cloudErrorSv } = await import("@/lib/firebase/cloud");
+            get().showToast(cloudErrorSv(error));
+          }
+        })();
+      },
+      declineOffer: (id) => {
+        void (async () => {
+          try {
+            const { setCloudOfferStatus } = await import("@/lib/firebase/cloud");
+            await setCloudOfferStatus(id, "declined");
+            get().showToast("Offerten är avböjd");
+          } catch (error) {
+            const { cloudErrorSv } = await import("@/lib/firebase/cloud");
+            get().showToast(cloudErrorSv(error));
+          }
+        })();
+      },
+      addPosted: (job) => {
+        void (async () => {
+          try {
+            const { createCloudJob } = await import("@/lib/firebase/cloud");
+            await createCloudJob(job);
+            get().showToast("Uppdraget är publicerat");
+          } catch (error) {
+            const { cloudErrorSv } = await import("@/lib/firebase/cloud");
+            get().showToast(cloudErrorSv(error));
+          }
         })();
       },
     }),
@@ -1878,11 +2056,9 @@ export const useVelio = create<VelioState>()(
         }
         const navStack = Array.isArray(saved.navStack) ? saved.navStack.filter(isScreen) : [];
         const notificationsAllowed = typeof Notification !== "undefined" && Notification.permission === "granted";
-        const chats = { ...(saved.chats ?? {}) };
         const appNotifications = saved.appNotifications ?? [];
         const bookings = saved.bookings ?? [];
-        const directory = saved.directory ?? [];
-        syncDirectory(directory);
+        syncDirectory([]);
         const profile = saved.profile
           ? { ...saved.profile, name: publicDisplayName(saved.profile.name), email: contactEmail(saved.profile.email) }
           : current.profile;
@@ -1896,20 +2072,20 @@ export const useVelio = create<VelioState>()(
           providerId,
           mapMode: screen === "service" ? Boolean(saved.mapMode) : false,
           profile,
-          chats,
-          peers: { ...(saved.peers ?? {}) },
-          conversationByProvider: {
-            ...(saved.conversationByProvider ?? {}),
-          },
           appNotifications,
           bookings,
-          posted: saved.posted ?? [],
           favorites: Array.isArray(saved.favorites) ? saved.favorites.filter((id) => typeof id === "string") : [],
           addresses: Array.isArray(saved.addresses) ? saved.addresses.filter(isSavedAddress) : [],
           activeAddressId: typeof saved.activeAddressId === "string" ? saved.activeAddressId : null,
           setupDraft: saved.setupDraft && typeof saved.setupDraft === "object" ? saved.setupDraft : null,
           jobDraft: saved.jobDraft && typeof saved.jobDraft === "object" ? saved.jobDraft : null,
-          directory,
+          directory: [],
+          posted: [],
+          jobOffers: [],
+          chats: {},
+          peers: {},
+          conversationByProvider: {},
+          wallet: emptyWallet(),
           cart: [],
           notifications: saved.notifications === true && notificationsAllowed,
         };

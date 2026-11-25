@@ -411,7 +411,7 @@ function OffersPage({
             {tab === "new" ? (
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <button type="button" onClick={() => onDecline(job.id)} className="rounded-full border border-line py-2.5 text-sm font-semibold">Avböj</button>
-                <button type="button" onClick={() => onTake(job.id)} className="rounded-full bg-brown py-2.5 text-sm font-semibold text-white">Ta uppdrag</button>
+                <button type="button" onClick={() => onTake(job.id)} className="rounded-full bg-brown py-2.5 text-sm font-semibold text-white">Skicka offert</button>
               </div>
             ) : null}
           </article>

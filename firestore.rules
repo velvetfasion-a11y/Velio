@@ -1,0 +1,433 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model (prototype rules — review before launch)
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: Firebase Auth uid
+    // Private account + KYC. Never publicly readable (email, phone,
+    // personnummer, organisationsnummer live only here).
+    // Fields:
+    //   - uid: string (required, immutable, must equal document ID)
+    //   - email: string (optional)
+    //   - phone: string (optional)
+    //   - displayName: string (optional, 1-80)
+    //   - accountType: string (optional, 'private' | 'business')
+    //   - orgNumber: string (optional)
+    //   - nationalId: string (optional, personnummer — owner only)
+    //   - createdAt: timestamp (required on create)
+    //   - updatedAt: timestamp (required)
+    //
+    // Collection: profiles
+    // Document ID: Firebase Auth uid
+    // Public marketplace profile only (no PII).
+    // Fields:
+    //   - uid: string (required, immutable, must equal document ID)
+    //   - displayName: string (required, 1-80)
+    //   - photoURL: string (optional, http(s) URL)
+    //   - bio: string (optional, <= 2000)
+    //   - categories: list (optional, <= 20 strings)
+    //   - city: string (optional, <= 80; not a full street address)
+    //   - published: bool (required)
+    //   - createdAt: timestamp (required on create)
+    //   - updatedAt: timestamp (required)
+    //   - rating, reviewCount: number (optional; client may not set/change)
+    //
+    // Collection: businesses
+    // Document ID: Firebase Auth uid
+    // Public business page only. Org number / bank / national ID stay in users.
+    // Fields:
+    //   - uid: string (required, immutable, must equal document ID)
+    //   - companyName: string (required, 1-120)
+    //   - description: string (optional, <= 4000)
+    //   - services: list (optional, <= 30 strings)
+    //   - serviceArea: string (optional, <= 120)
+    //   - photoURL: string (optional, http(s) URL)
+    //   - published: bool (required)
+    //   - createdAt: timestamp (required on create)
+    //   - updatedAt: timestamp (required)
+    //
+    // Collection: jobs
+    // Document ID: auto-id
+    // Fields:
+    //   - ownerId: string (required, immutable, must equal auth.uid on create)
+    //   - title: string (required, 1-120)
+    //   - category: string (required, 1-80)
+    //   - description: string (optional, <= 8000)
+    //   - locationLabel: string (optional, <= 200)
+    //   - schedule: map (optional)
+    //   - budget: number (optional, >= 0)
+    //   - status: string (required, 'open'|'assigned'|'completed'|'cancelled')
+    //   - createdAt: timestamp (required on create)
+    //   - updatedAt: timestamp (required)
+    //
+    // Collection: offers
+    // Document ID: auto-id
+    // Fields:
+    //   - ownerId: string (required, immutable, offer author)
+    //   - jobId: string (required, immutable)
+    //   - jobOwnerId: string (required, immutable)
+    //   - amount: number (required, >= 0)
+    //   - message: string (optional, <= 4000)
+    //   - status: string (required, 'pending'|'accepted'|'declined'|'withdrawn')
+    //   - createdAt: timestamp (required on create)
+    //   - updatedAt: timestamp (required)
+    //
+    // Collection: chats
+    // Document ID: auto-id
+    // Fields:
+    //   - participantIds: list of 2-10 uid strings (required, immutable)
+    //   - jobId: string (optional)
+    //   - createdAt: timestamp (required on create)
+    //   - updatedAt: timestamp (optional)
+    // Subcollection: chats/{chatId}/messages/{messageId}
+    //   - senderId: string (required, must equal auth.uid)
+    //   - text: string (required, 1-4000)
+    //   - createdAt: timestamp (required on create)
+    //
+    // Collection: addresses
+    // Document ID: auto-id
+    // Fields:
+    //   - ownerId: string (required, immutable)
+    //   - label: string (required, 1-40)
+    //   - formattedAddress: string (required, 1-300)
+    //   - lat, lng: number (optional)
+    //   - placeId: string (optional, <= 256)
+    //   - isDefault: bool (required)
+    //   - createdAt: timestamp (required on create)
+    //   - updatedAt: timestamp (required)
+    //
+    // Collection: payouts
+    // Document ID: auto-id
+    // Written only by a trusted backend later (no client writes).
+    // Fields (for rules checks on read): ownerId: string
+    //
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isSignedInUser(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidEmail(email) {
+      return email is string &&
+        email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidUrl(url) {
+      return url is string &&
+        (url.matches("^https://.*") || url.matches("^http://.*")) &&
+        url.size() <= 2048;
+    }
+
+    function isValidOptionalString(data, field, minLen, maxLen) {
+      return !(field in data) ||
+        (data[field] is string &&
+         data[field].size() >= minLen &&
+         data[field].size() <= maxLen);
+    }
+
+    function isValidOptionalUrl(data, field) {
+      return !(field in data) || data[field] == null || isValidUrl(data[field]);
+    }
+
+    function isStringList(list, maxSize, maxItemLen) {
+      return list is list &&
+        list.size() <= maxSize &&
+        (list.size() == 0 || list[0] is string);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    function isValidTimestamp(ts) {
+      return ts is timestamp;
+    }
+
+    function isValidUser(data) {
+      return hasRequiredFields(['uid', 'createdAt', 'updatedAt']) &&
+        hasOnlyAllowedFields(['uid', 'email', 'phone', 'displayName', 'accountType', 'orgNumber', 'nationalId', 'createdAt', 'updatedAt']) &&
+        data.uid is string &&
+        data.uid == request.auth.uid &&
+        isValidTimestamp(data.createdAt) &&
+        isValidTimestamp(data.updatedAt) &&
+        isValidOptionalString(data, 'email', 3, 254) &&
+        (!('email' in data) || data.email == '' || isValidEmail(data.email)) &&
+        isValidOptionalString(data, 'phone', 0, 32) &&
+        isValidOptionalString(data, 'displayName', 1, 80) &&
+        (!('accountType' in data) || data.accountType in ['private', 'business']) &&
+        isValidOptionalString(data, 'orgNumber', 0, 32) &&
+        isValidOptionalString(data, 'nationalId', 0, 32);
+    }
+
+    function isValidProfile(data) {
+      return hasRequiredFields(['uid', 'displayName', 'published', 'createdAt', 'updatedAt']) &&
+        hasOnlyAllowedFields(['uid', 'displayName', 'photoURL', 'bio', 'categories', 'city', 'published', 'createdAt', 'updatedAt', 'rating', 'reviewCount']) &&
+        data.uid is string &&
+        data.uid == request.auth.uid &&
+        data.displayName is string &&
+        data.displayName.size() >= 1 &&
+        data.displayName.size() <= 80 &&
+        data.published is bool &&
+        isValidTimestamp(data.createdAt) &&
+        isValidTimestamp(data.updatedAt) &&
+        isValidOptionalUrl(data, 'photoURL') &&
+        isValidOptionalString(data, 'bio', 0, 2000) &&
+        isValidOptionalString(data, 'city', 0, 80) &&
+        (!('categories' in data) || isStringList(data.categories, 20, 80)) &&
+        !('rating' in data) &&
+        !('reviewCount' in data);
+    }
+
+    function isValidProfileUpdate(data) {
+      return hasRequiredFields(['uid', 'displayName', 'published', 'createdAt', 'updatedAt']) &&
+        hasOnlyAllowedFields(['uid', 'displayName', 'photoURL', 'bio', 'categories', 'city', 'published', 'createdAt', 'updatedAt', 'rating', 'reviewCount']) &&
+        data.uid is string &&
+        data.displayName is string &&
+        data.displayName.size() >= 1 &&
+        data.displayName.size() <= 80 &&
+        data.published is bool &&
+        isValidTimestamp(data.createdAt) &&
+        isValidTimestamp(data.updatedAt) &&
+        isValidOptionalUrl(data, 'photoURL') &&
+        isValidOptionalString(data, 'bio', 0, 2000) &&
+        isValidOptionalString(data, 'city', 0, 80) &&
+        (!('categories' in data) || isStringList(data.categories, 20, 80)) &&
+        areImmutableFieldsUnchanged(['uid', 'createdAt', 'rating', 'reviewCount']);
+    }
+
+    function isValidBusiness(data) {
+      return hasRequiredFields(['uid', 'companyName', 'published', 'createdAt', 'updatedAt']) &&
+        hasOnlyAllowedFields(['uid', 'companyName', 'description', 'services', 'serviceArea', 'photoURL', 'published', 'createdAt', 'updatedAt']) &&
+        data.uid is string &&
+        data.uid == request.auth.uid &&
+        data.companyName is string &&
+        data.companyName.size() >= 1 &&
+        data.companyName.size() <= 120 &&
+        data.published is bool &&
+        isValidTimestamp(data.createdAt) &&
+        isValidTimestamp(data.updatedAt) &&
+        isValidOptionalString(data, 'description', 0, 4000) &&
+        isValidOptionalString(data, 'serviceArea', 0, 120) &&
+        isValidOptionalUrl(data, 'photoURL') &&
+        (!('services' in data) || isStringList(data.services, 30, 80));
+    }
+
+    function isValidBusinessUpdate(data) {
+      return isValidBusiness(data) &&
+        areImmutableFieldsUnchanged(['uid', 'createdAt']);
+    }
+
+    function isValidJob(data) {
+      return hasRequiredFields(['ownerId', 'title', 'category', 'status', 'createdAt', 'updatedAt']) &&
+        hasOnlyAllowedFields(['ownerId', 'title', 'category', 'description', 'locationLabel', 'schedule', 'budget', 'status', 'createdAt', 'updatedAt']) &&
+        data.ownerId is string &&
+        data.title is string &&
+        data.title.size() >= 1 &&
+        data.title.size() <= 120 &&
+        data.category is string &&
+        data.category.size() >= 1 &&
+        data.category.size() <= 80 &&
+        data.status in ['open', 'assigned', 'completed', 'cancelled'] &&
+        isValidTimestamp(data.createdAt) &&
+        isValidTimestamp(data.updatedAt) &&
+        isValidOptionalString(data, 'description', 0, 8000) &&
+        isValidOptionalString(data, 'locationLabel', 0, 200) &&
+        (!('schedule' in data) || data.schedule is map) &&
+        (!('budget' in data) || (data.budget is number && data.budget >= 0));
+    }
+
+    function isValidOffer(data) {
+      return hasRequiredFields(['ownerId', 'jobId', 'jobOwnerId', 'amount', 'status', 'createdAt', 'updatedAt']) &&
+        hasOnlyAllowedFields(['ownerId', 'jobId', 'jobOwnerId', 'amount', 'message', 'status', 'createdAt', 'updatedAt']) &&
+        data.ownerId is string &&
+        data.jobId is string &&
+        data.jobId.size() >= 1 &&
+        data.jobId.size() <= 128 &&
+        data.jobOwnerId is string &&
+        data.amount is number &&
+        data.amount >= 0 &&
+        data.status in ['pending', 'accepted', 'declined', 'withdrawn'] &&
+        isValidTimestamp(data.createdAt) &&
+        isValidTimestamp(data.updatedAt) &&
+        isValidOptionalString(data, 'message', 0, 4000);
+    }
+
+    function isValidChat(data) {
+      return hasRequiredFields(['participantIds', 'createdAt']) &&
+        hasOnlyAllowedFields(['participantIds', 'jobId', 'createdAt', 'updatedAt']) &&
+        data.participantIds is list &&
+        data.participantIds.size() >= 2 &&
+        data.participantIds.size() <= 10 &&
+        request.auth.uid in data.participantIds &&
+        isValidTimestamp(data.createdAt) &&
+        isValidOptionalString(data, 'jobId', 1, 128) &&
+        (!('updatedAt' in data) || isValidTimestamp(data.updatedAt));
+    }
+
+    function isChatParticipant() {
+      return isAuthenticated() &&
+        resource.data.keys().hasAny(['participantIds']) &&
+        request.auth.uid in resource.data.participantIds;
+    }
+
+    function isValidMessage(data) {
+      return hasRequiredFields(['senderId', 'text', 'createdAt']) &&
+        hasOnlyAllowedFields(['senderId', 'text', 'createdAt']) &&
+        data.senderId is string &&
+        data.senderId == request.auth.uid &&
+        data.text is string &&
+        data.text.size() >= 1 &&
+        data.text.size() <= 4000 &&
+        isValidTimestamp(data.createdAt);
+    }
+
+    function isValidAddress(data) {
+      return hasRequiredFields(['ownerId', 'label', 'formattedAddress', 'isDefault', 'createdAt', 'updatedAt']) &&
+        hasOnlyAllowedFields(['ownerId', 'label', 'formattedAddress', 'lat', 'lng', 'placeId', 'isDefault', 'createdAt', 'updatedAt']) &&
+        data.ownerId is string &&
+        data.ownerId == request.auth.uid &&
+        data.label is string &&
+        data.label.size() >= 1 &&
+        data.label.size() <= 40 &&
+        data.formattedAddress is string &&
+        data.formattedAddress.size() >= 1 &&
+        data.formattedAddress.size() <= 300 &&
+        data.isDefault is bool &&
+        isValidTimestamp(data.createdAt) &&
+        isValidTimestamp(data.updatedAt) &&
+        isValidOptionalString(data, 'placeId', 0, 256) &&
+        (!('lat' in data) || data.lat is number) &&
+        (!('lng' in data) || data.lng is number);
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    match /users/{userId} {
+      allow read, delete: if isOwner(userId);
+      allow create: if isOwner(userId) &&
+        request.resource.data.uid == userId &&
+        isValidUser(request.resource.data);
+      allow update: if isOwner(userId) &&
+        isValidUser(request.resource.data) &&
+        areImmutableFieldsUnchanged(['uid', 'createdAt']);
+    }
+
+    match /profiles/{userId} {
+      allow read: if (resource.data.published == true) || isOwner(userId);
+      allow create: if isOwner(userId) &&
+        request.resource.data.uid == userId &&
+        isValidProfile(request.resource.data);
+      allow update: if isOwner(userId) &&
+        isValidProfileUpdate(request.resource.data);
+      allow delete: if isOwner(userId);
+    }
+
+    match /businesses/{userId} {
+      allow read: if (resource.data.published == true) || isOwner(userId);
+      allow create: if isOwner(userId) &&
+        request.resource.data.uid == userId &&
+        isValidBusiness(request.resource.data);
+      allow update: if isOwner(userId) &&
+        isValidBusinessUpdate(request.resource.data);
+      allow delete: if isOwner(userId);
+    }
+
+    match /jobs/{jobId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() &&
+        request.resource.data.ownerId == request.auth.uid &&
+        isValidJob(request.resource.data);
+      allow update: if isAuthenticated() &&
+        resource.data.ownerId == request.auth.uid &&
+        request.resource.data.ownerId == resource.data.ownerId &&
+        isValidJob(request.resource.data) &&
+        areImmutableFieldsUnchanged(['ownerId', 'createdAt']);
+      allow delete: if isAuthenticated() &&
+        resource.data.ownerId == request.auth.uid;
+    }
+
+    match /offers/{offerId} {
+      allow read: if isAuthenticated() &&
+        (request.auth.uid == resource.data.ownerId ||
+         request.auth.uid == resource.data.jobOwnerId);
+      allow create: if isAuthenticated() &&
+        request.resource.data.ownerId == request.auth.uid &&
+        request.resource.data.jobOwnerId != request.auth.uid &&
+        exists(/databases/$(database)/documents/jobs/$(request.resource.data.jobId)) &&
+        get(/databases/$(database)/documents/jobs/$(request.resource.data.jobId)).data.ownerId == request.resource.data.jobOwnerId &&
+        isValidOffer(request.resource.data);
+      allow update: if isAuthenticated() &&
+        (request.auth.uid == resource.data.ownerId ||
+         request.auth.uid == resource.data.jobOwnerId) &&
+        isValidOffer(request.resource.data) &&
+        areImmutableFieldsUnchanged(['ownerId', 'jobId', 'jobOwnerId', 'createdAt']);
+      allow delete: if isAuthenticated() &&
+        request.auth.uid == resource.data.ownerId;
+    }
+
+    match /chats/{chatId} {
+      allow read: if isChatParticipant();
+      allow create: if isAuthenticated() && isValidChat(request.resource.data);
+      allow update: if isChatParticipant() &&
+        isValidChat(request.resource.data) &&
+        areImmutableFieldsUnchanged(['participantIds', 'createdAt', 'jobId']);
+      // Participants may delete a chat they belong to, so account deletion can
+      // remove the thread. Messages are already deletable by their sender.
+      // Deploy this file for the change to take effect. Until then, chat
+      // documents can only be removed in the Firebase console.
+      allow delete: if isChatParticipant();
+
+      match /messages/{messageId} {
+        allow read: if isAuthenticated() &&
+          request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participantIds;
+        allow create: if isAuthenticated() &&
+          request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participantIds &&
+          isValidMessage(request.resource.data);
+        allow update: if false;
+        allow delete: if isAuthenticated() &&
+          resource.data.senderId == request.auth.uid &&
+          request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participantIds;
+      }
+    }
+
+    match /addresses/{addressId} {
+      allow read, delete: if isOwner(resource.data.ownerId);
+      allow create: if isAuthenticated() &&
+        request.resource.data.ownerId == request.auth.uid &&
+        isValidAddress(request.resource.data);
+      allow update: if isOwner(resource.data.ownerId) &&
+        isValidAddress(request.resource.data) &&
+        areImmutableFieldsUnchanged(['ownerId', 'createdAt']);
+    }
+
+    match /payouts/{payoutId} {
+      allow read: if isAuthenticated() &&
+        request.auth.uid == resource.data.ownerId;
+      allow create, update, delete: if false;
+    }
+  }
+}

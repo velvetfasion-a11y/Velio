@@ -267,6 +267,9 @@ export function ProfileScreens() {
   const addCard = useVelio((state) => state.addCard);
   const bookings = useVelio((state) => state.bookings);
   const posted = useVelio((state) => state.posted);
+  const jobOffers = useVelio((state) => state.jobOffers);
+  const acceptOffer = useVelio((state) => state.acceptOffer);
+  const declineOffer = useVelio((state) => state.declineOffer);
   const accountId = useVelio((state) => state.accountId);
   const directory = useVelio((state) => state.directory);
   const favorites = useVelio((state) => state.favorites);
@@ -447,6 +450,34 @@ export function ProfileScreens() {
                     <p className="mt-1 line-clamp-2 text-sm text-muted">{job.text}</p>
                     <p className="mt-1 text-xs text-muted">{job.when}</p>
                     <p className="text-xs text-muted">{job.address}</p>
+                    {job.status && job.status !== "open" ? (
+                      <p className="mt-1 text-xs font-semibold text-brown">{job.status === "assigned" ? "Tilldelat" : job.status === "completed" ? "Klart" : job.status === "cancelled" ? "Avbrutet" : job.status}</p>
+                    ) : null}
+                    <div className="mt-2 space-y-2">
+                      {jobOffers
+                        .filter((offer) => offer.jobId === job.id)
+                        .map((offer) => (
+                          <div key={offer.id} className="rounded-2xl bg-sand px-3 py-2">
+                            <p className="text-sm font-semibold">
+                              Offert {offer.amount.toLocaleString("sv-SE")} kr
+                              <span className="ml-2 font-medium text-muted">
+                                {offer.status === "pending" ? "Väntar" : offer.status === "accepted" ? "Accepterad" : offer.status === "declined" ? "Avböjd" : "Tillbakadragen"}
+                              </span>
+                            </p>
+                            {offer.message ? <p className="mt-1 text-sm text-muted">{offer.message}</p> : null}
+                            {offer.status === "pending" && offer.jobOwnerId === accountId ? (
+                              <div className="mt-2 flex gap-2">
+                                <button type="button" onClick={() => acceptOffer(offer.id)} className="h-9 rounded-full bg-brown px-3 text-sm font-semibold text-paper">
+                                  Acceptera
+                                </button>
+                                <button type="button" onClick={() => declineOffer(offer.id)} className="h-9 rounded-full border border-line px-3 text-sm font-semibold">
+                                  Avböj
+                                </button>
+                              </div>
+                            ) : null}
+                          </div>
+                        ))}
+                    </div>
                   </div>
                 </article>
               );
@@ -734,7 +765,7 @@ export function ProfileScreens() {
                   <p className="mt-2 text-sm leading-relaxed text-muted">
                     {confirm === "business"
                       ? "Företagsprofilen tas bort. Du är kvar som kund och kan logga in som vanligt."
-                      : "Namn, kontaktuppgifter och VELIO Business tas bort från den här enheten. Du loggas ut. Skriv RADERA med stora bokstäver för att bekräfta."}
+                      : "Kontot, profilen, uppdragen, offerterna och adresserna raderas. Chattar kan inte tas bort helt med de här reglerna. Skriv RADERA med stora bokstäver för att bekräfta."}
                   </p>
                   {confirm === "account" ? (
                     <label className="mt-3 block">

@@ -281,6 +281,7 @@ export function BusinessSetup() {
       areas: [`${where} · ${km} km`],
       sellerKind: seller === "private" ? "private" : "company",
       demo: true,
+      nationalId: seller === "private" ? pn : undefined,
       ...(seller === "private" || !company
         ? {}
         : { companyName: company.name, orgNumber: company.orgNumber, fTax: company.fTax }),
@@ -374,7 +375,7 @@ export function BusinessSetup() {
       : step === "org"
         ? "Bolag slår upp organisationsnummer. Utan bolag använder du personnummer i stället."
         : step === "person"
-          ? "Numret behövs för att veta vem som ska få betalt. I demoläget stannar det i den här webbläsaren, visas maskerat och skickas inte vidare."
+          ? "Numret behövs för att veta vem som ska få betalt. Det sparas bara på ditt privata konto, som bara du kan läsa, och visas inte på den publika profilen."
         : step === "company"
           ? "Uppgifterna kommer från demoregistret. F-skatt är inte kontrollerad mot Skatteverket."
           : step === "trades"
@@ -384,9 +385,9 @@ export function BusinessSetup() {
               : step === "area"
                 ? "Kunder inom radien kan hitta dig. Kartan är OpenStreetMap."
                 : step === "photo"
-                  ? "Valfritt. Bilden stannar i den här webbläsaren."
+                  ? "Valfritt. Förhandsvisning i den här webbläsaren. Uppladdning kommer snart."
                   : step === "work"
-                    ? "Valfritt. Högst fyra bilder, bara lokalt."
+                    ? "Valfritt. Högst fyra bilder som förhandsvisning. De laddas inte upp. Kommer snart."
                     : "Demo betyder att identiteten inte är verifierad. Du kan ändå publicera och se resultatet.";
 
   return (
@@ -468,7 +469,7 @@ export function BusinessSetup() {
                   ? "Ifyllt från BankID. Kontrollera att det stämmer. De fyra sista siffrorna är dolda tills du väljer att visa dem."
                   : identityVia === "bankid"
                     ? "När BankID svarar fylls personnumret i här. Det är inte kopplat, så du skriver det själv. De fyra sista siffrorna döljs när fältet är klart."
-                    : "De fyra sista siffrorna döljs när fältet är klart. Numret lämnar inte den här webbläsaren i demoläget."}
+                    : "De fyra sista siffrorna döljs när fältet är klart. Numret sparas bara på ditt privata konto."}
               </p>
             </div>
           ) : null}
@@ -607,7 +608,10 @@ export function BusinessSetup() {
                         const file = event.target.files?.[0];
                         event.target.value = "";
                         if (!file) return;
-                        void readPhoto(file).then((src) => setPhotos((current) => [...current, src].slice(0, 4)));
+                        void readPhoto(file).then((src) => {
+                          setPhotos((current) => [...current, src].slice(0, 4));
+                          showToast("Förhandsvisning här. Uppladdning kommer snart.");
+                        });
                       }}
                     />
                   </label>

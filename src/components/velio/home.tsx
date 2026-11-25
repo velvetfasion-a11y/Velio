@@ -251,7 +251,7 @@ export function Home() {
           <div className="rounded-[1.4rem] border border-dashed border-line bg-paper/60 px-4 py-5">
             <p className="font-semibold">Inga publicerade profiler ännu</p>
             <p className="mt-1 text-sm leading-relaxed text-muted">
-              VELIO visar bara riktiga personer. Skapa ett konto, verifiera dig och publicera din profil — eller posta ett uppdrag så att utförare kan hitta dig.
+              VELIO visar bara publicerade profiler. Det finns inga exempelkonton. Publicera din profil, eller posta ett uppdrag.
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <button type="button" onClick={() => go("profile")} className="rounded-full bg-ink px-4 py-2 text-sm font-semibold text-paper">

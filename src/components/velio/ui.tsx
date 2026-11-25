@@ -101,7 +101,7 @@ export function ProfilePhoto({ large = false, prompt = false }: { large?: boolea
           void readAvatarFile(file)
             .then((avatar) => {
               setAvatar(avatar);
-              showToast("Bilden är uppdaterad");
+              showToast("Förhandsvisning här. Uppladdning kommer snart.");
             })
             .catch(() => showToast("Bilden kunde inte läsas"));
         }}

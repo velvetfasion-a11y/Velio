@@ -28,7 +28,7 @@ export function WalletScreen() {
   return (
     <div className="px-5 pt-4 pb-8">
       <ScreenHeader title="Utbetalningar" onBack={() => (panel === "home" ? go("profile") : setPanel("home"))} />
-      <p className="text-xs font-semibold tracking-wide text-brown">DEMO</p>
+      <p className="text-xs font-semibold tracking-wide text-brown">INTE KOPPLAT</p>
 
       {panel === "home" ? (
         <>
@@ -72,7 +72,7 @@ export function WalletScreen() {
                 </li>
               ))
             ) : (
-              <li className="px-4 py-4 text-sm text-muted">Ingen historik ännu. Ett demosaldo läggs in när du publicerar en företagsprofil.</li>
+              <li className="px-4 py-4 text-sm text-muted">Ingen utbetalning ännu. Historiken läses från Firestore. Appen kan inte skapa uttag.</li>
             )}
           </ul>
         </>
@@ -81,7 +81,7 @@ export function WalletScreen() {
       {panel === "bank" ? (
         <div className="mt-4 space-y-3">
           <p className="text-sm leading-relaxed text-muted">
-            Platshållare för BankID eller en Tink-koppling. Clearingnummer och kontonummer sparas bara i den här webbläsaren och skickas inte till en bank.
+            Platshållare för BankID eller en Tink-koppling. Inget sparas och ingen bank tar emot uppgifterna.
           </p>
           <label className="block text-sm font-medium">
             Clearingnummer
@@ -96,7 +96,7 @@ export function WalletScreen() {
             onClick={() => {
               if (clearing.length !== 4 || account.length < 5) return showToast("Skriv clearing med 4 siffror och ett kontonummer");
               connectPayoutBank({ clearing, account });
-              showToast("Kontot är sparat i demoläget");
+              showToast("Bankkoppling är inte aktiverad");
               setPanel("home");
             }}
             className="h-14 w-full rounded-full bg-brown font-semibold text-paper"
