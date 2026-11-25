@@ -2189,7 +2189,7 @@ export function BankIdSheet() {
           const me = await fetchMe();
           if (!me.authenticated) throw new Error("BankID-inloggning misslyckades");
           applyMe(me);
-          showToast("Inloggad med BankID");
+          showToast(`Välkommen${me.account.name ? `, ${me.account.name.split(" ")[0]}` : ""}`);
           closeSheet();
         })().catch((error) => {
           if (pollRef.current) window.clearInterval(pollRef.current);

@@ -74,7 +74,6 @@ export function ProfileScreens() {
   const bookings = useVelio((state) => state.bookings);
   const posted = useVelio((state) => state.posted);
   const accountId = useVelio((state) => state.accountId);
-  const authProvider = useVelio((state) => state.authProvider);
   const openReceipt = useVelio((state) => state.openReceipt);
   const listing = useVelio((state) => state.listing);
   const accountMode = useVelio((state) => state.accountMode);
@@ -387,21 +386,7 @@ export function ProfileScreens() {
   }
 
   const email = profile.email;
-  const verifyLabel = idVerified
-    ? idMethod === "passport"
-      ? "ID verifierat med pass"
-      : "ID verifierat med BankID"
-    : authProvider === "google"
-      ? "Inloggad med Google"
-      : authProvider === "email"
-        ? "E-post bekräftad"
-        : authProvider === "phone"
-          ? "Mobil bekräftad"
-          : authProvider === "bankid"
-            ? "Inloggad med BankID"
-            : authProvider === "apple"
-              ? "Inloggad med Apple"
-              : "Konto aktivt";
+  const verifyLabel = idVerified ? "ID verifierat" : "Konto aktivt";
   const roleLabel = accountMode === "business" ? "Utförare" : "Kund";
   const quick = [
     { icon: Calendar, label: "Bokningar", badge: bookings.length, onClick: () => go("bookings") },

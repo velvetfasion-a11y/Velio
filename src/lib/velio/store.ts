@@ -627,7 +627,10 @@ export const useVelio = create<VelioState>()(
                 businessForm: null,
               }),
         });
-        if (!wasLoggedIn) get().showToast(`Inloggad som ${me.account.name}`);
+        if (!wasLoggedIn) {
+          const first = me.account.name.split(" ")[0] || me.account.name;
+          get().showToast(first ? `Välkommen, ${first}` : "Välkommen");
+        }
       },
       loginWithAccountId: async (provider, accountId) => {
         const me = await loginWithAccount(provider, accountId);
@@ -743,8 +746,7 @@ export const useVelio = create<VelioState>()(
       },
       allowLocation: async () => {
         if (get().locationBusy) return;
-        set({ locationBusy: true });
-        get().showToast("Hämtar din riktiga plats…");
+        set({ locationBusy: true, sheet: null });
         try {
           const userLocation = await resolveCurrentLocation();
           set({
@@ -753,13 +755,14 @@ export const useVelio = create<VelioState>()(
             locationBusy: false,
             sheet: null,
           });
-          get().showToast(`Plats delad: ${userLocation.label}`);
+          get().showToast(`Plats: ${userLocation.label}`);
         } catch (error) {
-          set({ locationBusy: false });
+          set({ locationBusy: false, sheet: "location" });
           const code = error && typeof error === "object" && "code" in error ? Number((error as GeolocationPositionError).code) : 0;
-          if (code === 1) get().showToast("Du nekade platsåtkomst i webbläsaren");
-          else if (code === 3) get().showToast("Det tog för lång tid att hitta platsen. Försök igen.");
-          else get().showToast("Kunde inte hämta din plats. Kontrollera att GPS är på.");
+          if (code === 1) get().showToast("Tillåt plats i webbläsarens fråga, annars fungerar det inte");
+          else if (code === 3) get().showToast("GPS tog för lång tid — öppna inställningar och försök igen");
+          else if (String(error).includes("unsupported")) get().showToast("Den här enheten har ingen platstjänst");
+          else get().showToast("Kunde inte hämta GPS. Kontrollera att platstjänster är på.");
         }
       },
       clearLocation: () => {
