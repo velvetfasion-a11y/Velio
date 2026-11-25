@@ -113,6 +113,22 @@ service cloud.firestore {
     // Written only by a trusted backend later (no client writes).
     // Fields (for rules checks on read): ownerId: string
     //
+    // Collection: calls
+    // Document ID: auto-id, or demo-{room} for the unauthenticated demo room.
+    // Only the two participants can read or write a real call.
+    // A demo document is the exception: callerId/calleeId are the fixed pair
+    // demo-customer and demo-worker, and the id is demo-{room}. It exists so
+    // two browsers can try a call without accounts. It is not private.
+    // Fields: callerId, calleeId, callerName, calleeName, status
+    //   (ringing|accepted|declined|ended|missed), video, createdAtMs,
+    //   offer, answer, offerRev, answerRev, demo, room, chatId, jobId,
+    //   createdAt, updatedAt, acceptedAt, endedAt.
+    // Subcollections: callerCandidates, calleeCandidates
+    //   { candidate, sdpMid, sdpMLineIndex }
+    //
+    // Collection: maskedBridges
+    // Written only by the payments API. Clients cannot read the real numbers.
+    //
     // ===============================================================
     // Helper Functions
     // ===============================================================
@@ -189,6 +205,113 @@ service cloud.firestore {
 
     function isPayoutStatus(value) {
       return value in ['none', 'scheduled', 'paid', 'failed'];
+    }
+
+    function isCallStatus(status) {
+      return status in ['ringing', 'accepted', 'declined', 'ended', 'missed'];
+    }
+
+    function isSdp(value) {
+      return value is map &&
+        value.keys().hasOnly(['type', 'sdp']) &&
+        value.type in ['offer', 'answer', 'pranswer', 'rollback'] &&
+        value.sdp is string &&
+        value.sdp.size() >= 1 &&
+        value.sdp.size() <= 30000;
+    }
+
+    function isDemoPair(data) {
+      return data.demo == true &&
+        data.room is string &&
+        data.room.size() >= 4 &&
+        data.room.size() <= 24 &&
+        ((data.callerId == 'demo-customer' && data.calleeId == 'demo-worker') ||
+         (data.callerId == 'demo-worker' && data.calleeId == 'demo-customer'));
+    }
+
+    function isCallParty() {
+      return isAuthenticated() &&
+        (resource.data.callerId == request.auth.uid ||
+         resource.data.calleeId == request.auth.uid);
+    }
+
+    function isDemoCallRead() {
+      return resource.data.demo == true &&
+        resource.data.callerId is string &&
+        resource.data.calleeId is string &&
+        ((resource.data.callerId == 'demo-customer' && resource.data.calleeId == 'demo-worker') ||
+         (resource.data.callerId == 'demo-worker' && resource.data.calleeId == 'demo-customer'));
+    }
+
+    function isCallShape(data) {
+      return hasRequiredFields(['callerId', 'calleeId', 'callerName', 'calleeName', 'status', 'video', 'createdAtMs', 'createdAt', 'updatedAt']) &&
+        hasOnlyAllowedFields(['callerId', 'calleeId', 'callerName', 'calleeName', 'status', 'video', 'createdAtMs', 'demo', 'room', 'chatId', 'jobId', 'offer', 'answer', 'offerRev', 'answerRev', 'createdAt', 'updatedAt', 'acceptedAt', 'endedAt']) &&
+        data.callerId is string &&
+        data.callerId.size() >= 1 &&
+        data.callerId.size() <= 128 &&
+        data.calleeId is string &&
+        data.calleeId.size() >= 1 &&
+        data.calleeId.size() <= 128 &&
+        data.callerId != data.calleeId &&
+        data.callerName is string &&
+        data.callerName.size() >= 1 &&
+        data.callerName.size() <= 80 &&
+        data.calleeName is string &&
+        data.calleeName.size() >= 1 &&
+        data.calleeName.size() <= 80 &&
+        isCallStatus(data.status) &&
+        data.video is bool &&
+        data.createdAtMs is number &&
+        data.createdAtMs > 0 &&
+        isValidTimestamp(data.createdAt) &&
+        isValidTimestamp(data.updatedAt) &&
+        (!('offer' in data) || isSdp(data.offer)) &&
+        (!('answer' in data) || isSdp(data.answer)) &&
+        (!('offerRev' in data) || (data.offerRev is number && data.offerRev >= 0 && data.offerRev <= 20)) &&
+        (!('answerRev' in data) || (data.answerRev is number && data.answerRev >= 0 && data.answerRev <= 20)) &&
+        (!('demo' in data) || data.demo is bool) &&
+        isValidOptionalString(data, 'room', 4, 24) &&
+        isValidOptionalString(data, 'chatId', 1, 128) &&
+        isValidOptionalString(data, 'jobId', 1, 128) &&
+        (!('acceptedAt' in data) || isValidTimestamp(data.acceptedAt)) &&
+        (!('endedAt' in data) || isValidTimestamp(data.endedAt));
+    }
+
+    function callImmutable() {
+      return areImmutableFieldsUnchanged(['callerId', 'calleeId', 'callerName', 'calleeName', 'createdAt', 'createdAtMs', 'demo', 'room', 'chatId', 'jobId']);
+    }
+
+    function sdpWrittenByRole() {
+      return isDemoCallRead() ||
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['offer', 'offerRev']) || resource.data.callerId == request.auth.uid) &&
+        (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['answer', 'answerRev']) || resource.data.calleeId == request.auth.uid);
+    }
+
+    function isIceCandidate(data) {
+      return data.keys().hasOnly(['candidate', 'sdpMid', 'sdpMLineIndex']) &&
+        data.candidate is string &&
+        data.candidate.size() >= 1 &&
+        data.candidate.size() <= 2000 &&
+        (!('sdpMid' in data) || (data.sdpMid is string && data.sdpMid.size() <= 32)) &&
+        (!('sdpMLineIndex' in data) || data.sdpMLineIndex is number);
+    }
+
+    function parentCall() {
+      return get(/databases/$(database)/documents/calls/$(callId)).data;
+    }
+
+    function isDemoCallParent() {
+      return parentCall().demo == true &&
+        ((parentCall().callerId == 'demo-customer' && parentCall().calleeId == 'demo-worker') ||
+         (parentCall().callerId == 'demo-worker' && parentCall().calleeId == 'demo-customer'));
+    }
+
+    function canTouchCall() {
+      return isAuthenticated() &&
+        (parentCall().callerId == request.auth.uid || parentCall().calleeId == request.auth.uid) ||
+        (parentCall().demo == true &&
+          ((parentCall().callerId == 'demo-customer' && parentCall().calleeId == 'demo-worker') ||
+           (parentCall().callerId == 'demo-worker' && parentCall().calleeId == 'demo-customer')));
     }
 
     function isValidUser(data) {
@@ -465,6 +588,46 @@ service cloud.firestore {
       allow update: if isOwner(resource.data.ownerId) &&
         isValidAddress(request.resource.data) &&
         areImmutableFieldsUnchanged(['ownerId', 'createdAt']);
+    }
+
+    match /calls/{callId} {
+      allow read: if isCallParty() || isDemoCallRead();
+      allow create: if isCallShape(request.resource.data) &&
+        request.resource.data.status == 'ringing' &&
+        (
+          (isAuthenticated() &&
+            request.resource.data.callerId == request.auth.uid &&
+            !('demo' in request.resource.data) &&
+            !callId.matches('demo-.*')) ||
+          (callId.matches('demo-[A-Za-z0-9]{4,24}') && isDemoPair(request.resource.data))
+        );
+      allow update: if (isCallParty() || isDemoCallRead()) &&
+        isCallShape(request.resource.data) &&
+        callImmutable() &&
+        sdpWrittenByRole();
+      allow delete: if isCallParty() || isDemoCallRead();
+
+      match /callerCandidates/{candidateId} {
+        allow read: if canTouchCall();
+        allow create: if canTouchCall() &&
+          isIceCandidate(request.resource.data) &&
+          (isDemoCallParent() || parentCall().callerId == request.auth.uid);
+        allow update: if false;
+        allow delete: if canTouchCall();
+      }
+
+      match /calleeCandidates/{candidateId} {
+        allow read: if canTouchCall();
+        allow create: if canTouchCall() &&
+          isIceCandidate(request.resource.data) &&
+          (isDemoCallParent() || parentCall().calleeId == request.auth.uid);
+        allow update: if false;
+        allow delete: if canTouchCall();
+      }
+    }
+
+    match /maskedBridges/{bridgeId} {
+      allow read, write: if false;
     }
 
     match /payouts/{payoutId} {

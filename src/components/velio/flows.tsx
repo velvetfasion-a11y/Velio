@@ -7,6 +7,9 @@ import { AppHeader, PlaceLink } from "@/components/velio/header";
 import { CityMap } from "@/components/velio/osm-map";
 import { Avatar, BottomSheet, Btn, FullScreen } from "@/components/velio/ui";
 import { asset } from "@/lib/velio/asset";
+import { openCallSheet } from "@/components/velio/call-host";
+import { MissedCallCard } from "@/components/velio/call-screen";
+import { MISSED_CALL_TEXT } from "@/lib/calls/ice";
 
 const EMPTY_CHAT: ChatMsg[] = [];
 
@@ -303,7 +306,7 @@ export function ChatSheet() {
   if (accountMode === "business") return <WorkerChat onClose={backToInbox} />;
   if (!provider && !peer) return null;
   if (!provider && peer) {
-    return <SyncedPeerChat peerName={peer.name} messages={messages} draft={draft} setDraft={setDraft} onSend={() => { if (!draft.trim()) return; sendChat(draft); setDraft(""); }} onClose={backToInbox} />;
+    return <SyncedPeerChat peerId={peer.id} peerName={peer.name} messages={messages} draft={draft} setDraft={setDraft} onSend={() => { if (!draft.trim()) return; sendChat(draft); setDraft(""); }} onClose={backToInbox} />;
   }
   if (!provider) return null;
   const status = presence(messages);
@@ -337,7 +340,7 @@ export function ChatSheet() {
             <ArrowLeft className="size-5" />
           </button>
           <button type="button" onClick={() => { closeSheet(); go("home"); }} className="flex-1 text-center font-serif text-[1.7rem] tracking-[0.28em]">VELIO</button>
-          <button type="button" aria-label="Ring" onClick={() => showToast(`Ringer ${provider.name.split(" ")[0]}…`)} className="grid size-9 place-items-center">
+          <button type="button" aria-label="Ring" onClick={() => openCallSheet({ peerId: provider.id, peerName: provider.name })} className="grid size-9 place-items-center">
             <Phone className="size-5" />
           </button>
           <button
@@ -407,7 +410,9 @@ export function ChatSheet() {
         {messages.map((message) => (
           <div key={message.id} className="mb-3">
             {message.day ? <p className="mb-3 text-center text-xs text-muted">{message.day}</p> : null}
-            {message.card?.kind === "slot" ? (
+            {message.text === MISSED_CALL_TEXT ? (
+              <MissedCallCard time={message.time} />
+            ) : message.card?.kind === "slot" ? (
               <TimeConfirmedCard when={message.card.when} place={message.card.place} service={message.card.service} time={message.time ?? ""} />
             ) : message.card?.kind === "reschedule" ? (
               <div className="rounded-[1.2rem] border border-line bg-white px-4 py-3">
@@ -828,6 +833,7 @@ function MiniWheel({ values, value, onChange }: { values: number[]; value: numbe
 }
 
 function SyncedPeerChat({
+  peerId,
   peerName,
   messages,
   draft,
@@ -835,6 +841,7 @@ function SyncedPeerChat({
   onSend,
   onClose,
 }: {
+  peerId: string;
   peerName: string;
   messages: ChatMsg[];
   draft: string;
@@ -863,7 +870,9 @@ function SyncedPeerChat({
           <ArrowLeft className="size-5" />
         </button>
         <p className="flex-1 text-center font-serif text-[1.7rem] tracking-[0.28em]">VELIO</p>
-        <span className="size-9" />
+        <button type="button" aria-label="Ring" onClick={() => openCallSheet({ peerId, peerName })} className="grid size-9 place-items-center">
+          <Phone className="size-5" />
+        </button>
       </div>
       <div className="flex items-center gap-3 px-4 py-2">
         <span className="grid size-12 shrink-0 place-items-center rounded-full bg-sand text-sm font-semibold">{initials}</span>
@@ -874,7 +883,11 @@ function SyncedPeerChat({
       </div>
       <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
         {messages.map((message) =>
-          message.card ? (
+          message.text === MISSED_CALL_TEXT ? (
+            <div key={message.id} className="mt-3">
+              <MissedCallCard time={message.time} />
+            </div>
+          ) : message.card ? (
             <div key={message.id} className="mt-3">
               <ChatCardView
                 message={message}
@@ -980,7 +993,7 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
           <ArrowLeft className="size-5" />
         </button>
         <p className="flex-1 text-center font-serif text-[1.7rem] tracking-[0.28em]">VELIO</p>
-        <button type="button" aria-label="Ring" onClick={() => showToast("Ringer kunden…")} className="grid size-9 place-items-center">
+        <button type="button" aria-label="Ring" onClick={() => threadKey && openCallSheet({ peerId: threadKey, peerName: customerName })} className="grid size-9 place-items-center">
           <Phone className="size-5" />
         </button>
         <button type="button" aria-label="Mer" onClick={() => showToast("Fler val kommer")} className="grid size-9 place-items-center">
@@ -1038,7 +1051,9 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
 
         {messages.map((message) => (
           <div key={message.id} className="mt-3">
-            {message.card?.kind === "request" ? (
+            {message.text === MISSED_CALL_TEXT ? (
+              <MissedCallCard time={message.time} />
+            ) : message.card?.kind === "request" ? (
               <ChatCardView
                 message={message}
                 onDetails={() => showToast(message.card?.kind === "request" ? message.card.about || message.card.service : "Detaljer")}

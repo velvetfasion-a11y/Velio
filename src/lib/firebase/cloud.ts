@@ -675,6 +675,22 @@ export async function setCloudOfferStatus(id: string, status: CloudOffer["status
   await updateDoc(doc(db(), "jobs", jobId), { status: "assigned", updatedAt: serverTimestamp() });
 }
 
+export function chatForPeer(peerUid: string) {
+  return chatByPeer.get(peerUid) ?? null;
+}
+
+export async function sendMissedCall(peerUid: string, callId: string) {
+  const meta = chatByPeer.get(peerUid);
+  if (!meta) return;
+  const id = `missed_${callId}`.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 80);
+  if (!id) return;
+  await setDoc(doc(db(), "chats", meta.id, "messages", id), {
+    senderId: uidOrThrow(),
+    text: "Missat samtal",
+    createdAt: serverTimestamp(),
+  });
+}
+
 export async function sendPeerMessage(peerUid: string, text: string, jobId?: string) {
   const uid = uidOrThrow();
   const body = text.trim().slice(0, 4000);
