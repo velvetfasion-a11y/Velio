@@ -1,5 +1,6 @@
 import { ArrowLeft, Bell, CheckCircle2, CircleX, ClipboardList, Info } from "lucide-react";
 import { useVelio, type AppNotification } from "@/lib/velio/store";
+import { PlaceLink } from "@/components/velio/header";
 import { cn } from "@/lib/cn";
 import { Btn } from "@/components/velio/ui";
 
@@ -39,7 +40,9 @@ export function NotificationsScreen() {
 
   return (
     <div className="bg-cream">
-      <div className="flex items-center gap-2 px-4 py-3">
+      <div className="px-4 pt-3">
+        <PlaceLink />
+        <div className="mt-1 flex items-center gap-2">
         <button type="button" aria-label="Tillbaka" onClick={goBack} className="grid size-10 place-items-center">
           <ArrowLeft className="size-5" />
         </button>
@@ -47,6 +50,7 @@ export function NotificationsScreen() {
         <span className="grid size-10 place-items-center" aria-hidden="true">
           <Bell className="size-5 text-muted" />
         </span>
+        </div>
       </div>
 
       <div className="px-4 pt-2 pb-8">

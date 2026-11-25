@@ -3,6 +3,7 @@ import { Download, FileText, Star, Bell, ArrowLeft, Heart, BadgeCheck, Shield, C
 import {
   kr,
   providerById,
+  providerDescription,
   ratingLabel,
   serviceById,
   sortLabels,
@@ -11,7 +12,7 @@ import {
 } from "@/lib/velio/data";
 import { ownBusiness, useVelio, bookingStatusLabel, type Booking, type ChatMsg } from "@/lib/velio/store";
 import { cn } from "@/lib/cn";
-import { AppHeader } from "@/components/velio/header";
+import { AppHeader, PlaceLink } from "@/components/velio/header";
 import { CityMap } from "@/components/velio/osm-map";
 import { Avatar, BottomSheet, Btn, FullScreen } from "@/components/velio/ui";
 import { asset } from "@/lib/velio/asset";
@@ -96,9 +97,7 @@ export function ProviderSheet() {
         <div className="relative text-paper">
           <AppHeader tone="glass" />
           <div className="mt-1 flex items-center justify-between px-4 pb-2">
-            <button type="button" aria-label="Tillbaka" onClick={closeSheet} className="grid size-10 place-items-center rounded-full border border-paper/50">
-              <ArrowLeft className="size-5" />
-            </button>
+            <span className="size-10" />
             <div className="relative">
               {provider.photo ? (
                 <img src={provider.photo} alt="" className="size-36 rounded-[1.6rem] border-4 border-paper object-cover shadow-lg" />
@@ -157,7 +156,17 @@ export function ProviderSheet() {
 
         <div className="mt-4 border-t border-line pt-4">
           <h3 className="text-lg font-semibold">Om</h3>
-          <p className="mt-1 text-sm leading-relaxed">{provider.about}</p>
+          {providerDescription(provider) ? (
+            <p className="mt-1 text-left text-sm leading-relaxed whitespace-pre-line">{providerDescription(provider)}</p>
+          ) : (
+            <p className="mt-1 text-sm text-muted">Ingen beskrivning ännu.</p>
+          )}
+          {provider.experience ? (
+            <p className="mt-3 text-left text-sm leading-relaxed">
+              <span className="font-semibold">Erfarenhet</span>
+              <span className="mt-0.5 block">{provider.experience}</span>
+            </p>
+          ) : null}
         </div>
 
         {tags.length ? (
@@ -197,18 +206,6 @@ export function ProviderSheet() {
           Skicka meddelande
         </button>
         ) : null}
-
-        <div className="mt-4 rounded-2xl bg-sand/70 p-4">
-          <span className="inline-flex gap-0.5">
-            {Array.from({ length: 5 }, (_, index) => (
-              <Star key={index} className="size-4 fill-ink text-ink" />
-            ))}
-          </span>
-          <p className="mt-2 text-sm leading-relaxed italic">“{provider.quote}”</p>
-          <p className="mt-3 text-sm text-muted">
-            {provider.reviewer} · {provider.reviewAgo}
-          </p>
-        </div>
       </div>
     </div>
   );
@@ -292,7 +289,8 @@ export function ChatSheet() {
   return (
     <div className="absolute inset-0 z-30 flex flex-col bg-[#f7f3ee]">
       <div className="px-4 pt-3">
-        <div className="flex items-center">
+        <PlaceLink />
+        <div className="mt-1 flex items-center">
           <button type="button" aria-label="Tillbaka" onClick={backToInbox} className="grid size-9 place-items-center">
             <ArrowLeft className="size-5" />
           </button>
@@ -1684,7 +1682,6 @@ export function RateSheet() {
   const booking = bookings.find((item) => item.providerId === providerId && item.status !== "done") ?? bookings.find((item) => item.providerId === providerId);
   const price = booking?.cost ?? provider?.price ?? 0;
   const [stars, setStars] = useState(5);
-  const [note, setNote] = useState("Utmärkt jobb! Snabb, tydlig och väldigt proffsig.");
   const [tipKey, setTipKey] = useState<"10" | "15" | "20" | "custom">("15");
   const [custom, setCustom] = useState("");
   const tips = [
@@ -1727,12 +1724,6 @@ export function RateSheet() {
               </button>
             ))}
           </div>
-          <textarea
-            value={note}
-            onChange={(event) => setNote(event.target.value)}
-            rows={3}
-            className="mt-5 w-full rounded-2xl border border-[#efeae4] bg-white px-4 py-3 text-[15px] outline-none"
-          />
           <p className="mt-5 font-semibold">Lägg till dricks (valfritt)</p>
           <div className="mt-3 grid grid-cols-4 gap-2">
             {tips.map((item) => (

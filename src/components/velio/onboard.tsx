@@ -269,19 +269,19 @@ export function OnboardSheet() {
     const amount = offers.find((offer) => offer.on)?.price || 0;
     if (!terms) return showToast("Godkänn villkoren för att publicera");
     if (amount <= 0) return showToast("Ange ett pris");
-    finishOnboard({ serviceId, desc: `${title.trim()}\n${desc.trim()}`, price: amount });
+    finishOnboard({
+      serviceId,
+      desc: desc.trim(),
+      price: amount,
+      experience: level.startsWith("Välj") ? "" : level,
+    });
   };
 
   return (
     <div className="sheet-in absolute inset-0 z-40 flex flex-col bg-[#f6f1ea]">
-      <AppHeader />
+      <AppHeader onBack={() => (step === 1 ? closeSheet() : setStep(step - 1))} />
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-3 pb-4">
-        <div className="mb-3 flex items-center gap-2">
-          <button type="button" aria-label="Tillbaka" onClick={() => (step === 1 ? closeSheet() : setStep(step - 1))}>
-            <ChevronRight className="size-5 rotate-180" />
-          </button>
-          <h2 className="text-xl font-semibold">Velio Business</h2>
-        </div>
+        <h2 className="mb-3 text-xl font-semibold">Velio Business</h2>
         <div className="relative overflow-hidden rounded-[1.2rem]">
           <img src={asset("/velio/business.jpg")} alt="" className="h-36 w-full object-cover" />
           <div className="absolute inset-0 bg-gradient-to-r from-[#4a3424]/80 via-[#4a3424]/35 to-transparent" />

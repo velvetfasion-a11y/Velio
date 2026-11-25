@@ -95,7 +95,7 @@ export function VerifyIdScreen() {
 
   return (
     <div className="px-5 pt-4 pb-8">
-      <ScreenHeader title="Verifiera dig" onBack={() => go("profile")} />
+      <ScreenHeader title="Verifiera dig" />
       <p className="mt-2 text-sm leading-relaxed text-[#6e6964]">
         För VELIO Business krävs BankID eller pass för manuell granskning.
       </p>

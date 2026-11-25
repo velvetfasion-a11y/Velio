@@ -1,6 +1,7 @@
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
-import { ArrowLeft, Star } from "lucide-react";
+import { useRef, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from "react";
+import { ArrowLeft, Pencil, Star } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { initialsOf, publicDisplayName } from "@/lib/velio/data";
 import { useVelio } from "@/lib/velio/store";
 
 export function Btn({
@@ -33,6 +34,77 @@ export function Avatar({ text, large = false }: { text: string; large?: boolean 
       )}
     >
       {text}
+    </div>
+  );
+}
+
+function readAvatarFile(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error);
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const max = 480;
+        const scale = Math.min(1, max / Math.max(img.width, img.height));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(img.width * scale));
+        canvas.height = Math.max(1, Math.round(img.height * scale));
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve(String(reader.result));
+          return;
+        }
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/jpeg", 0.82));
+      };
+      img.onerror = () => reject(new Error("Bilden kunde inte läsas"));
+      img.src = String(reader.result);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+export function ProfilePhoto({ large = false }: { large?: boolean }) {
+  const profile = useVelio((state) => state.profile);
+  const setAvatar = useVelio((state) => state.setAvatar);
+  const showToast = useVelio((state) => state.showToast);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const initials = initialsOf(publicDisplayName(profile.name) || "V") || "V";
+
+  return (
+    <div className="relative shrink-0">
+      <button
+        type="button"
+        aria-label="Byt bild"
+        onClick={() => inputRef.current?.click()}
+        className={cn(
+          "grid place-items-center overflow-hidden rounded-full bg-[#f3ece3] font-serif text-ink",
+          large ? "size-[6.6rem] text-3xl ring-[3px] ring-white" : "size-14 text-lg",
+        )}
+      >
+        {profile.avatar ? <img src={profile.avatar} alt="" className="h-full w-full object-cover" /> : initials}
+      </button>
+      <span className="pointer-events-none absolute right-0 bottom-0 grid size-7 place-items-center rounded-full bg-white shadow">
+        <Pencil className="size-3.5" />
+      </span>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (!file) return;
+          void readAvatarFile(file)
+            .then((avatar) => {
+              setAvatar(avatar);
+              showToast("Bilden är uppdaterad");
+            })
+            .catch(() => showToast("Bilden kunde inte läsas"));
+        }}
+      />
     </div>
   );
 }
@@ -80,10 +152,10 @@ export function BackButton({ onClick, label = "Tillbaka" }: { onClick: () => voi
   );
 }
 
-export function ScreenHeader({ title, onBack }: { title: string; onBack: () => void }) {
+export function ScreenHeader({ title, onBack }: { title: string; onBack?: () => void }) {
   return (
     <div className="mb-5 flex items-center gap-2">
-      <BackButton onClick={onBack} />
+      {onBack ? <BackButton onClick={onBack} /> : null}
       <h2 className="font-display text-xl font-semibold tracking-tight">{title}</h2>
     </div>
   );

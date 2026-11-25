@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { ArrowLeft, ArrowLeftRight, Briefcase, Calendar, Check, ChevronLeft, ChevronRight, Clock, Coffee, MapPin, MessageCircle, SlidersHorizontal } from "lucide-react";
+import { ArrowLeftRight, Briefcase, Calendar, Check, ChevronLeft, ChevronRight, Clock, Coffee, MapPin, MessageCircle, SlidersHorizontal } from "lucide-react";
 import { greetingName } from "@/lib/velio/data";
 import { useVelio } from "@/lib/velio/store";
 import { AppHeader } from "@/components/velio/header";
+import { ProfilePhoto } from "@/components/velio/ui";
 import { cn } from "@/lib/cn";
 import { asset } from "@/lib/velio/asset";
 
@@ -150,7 +151,7 @@ export function BusinessHome() {
       <AppHeader />
       <div className="px-4">
       <div className="mt-1 flex items-center gap-3">
-        <img src={asset("/velio/profile.jpg")} alt="" className="size-14 shrink-0 rounded-full object-cover object-[center_20%]" />
+        <ProfilePhoto />
         <div className="min-w-0 flex-1">
           <h1 className="font-serif text-[1.65rem] leading-none">{first ? `Hej ${first}` : "Hej"}</h1>
           <p className="mt-1 text-sm text-[#5c564f]">Arbetsläge · VELIO Business</p>
@@ -281,12 +282,9 @@ function OffersPage({
 
   return (
     <div className="bg-[#f7f2eb] pb-6">
-      <AppHeader />
+      <AppHeader onBack={onBack} />
       <div className="px-4">
       <div className="mt-1 flex items-start gap-2">
-        <button type="button" aria-label="Tillbaka" onClick={onBack} className="grid size-9 shrink-0 place-items-center">
-          <ArrowLeft className="size-5" />
-        </button>
         <div className="min-w-0 flex-1">
           <h1 className="font-serif text-4xl leading-none">Se uppdrag</h1>
           <p className="mt-1 text-sm text-[#5c564f]">Nya jobb från kunder som matchar din profil.</p>
@@ -377,12 +375,9 @@ function HoursEditor(props: {
 
   return (
     <div className="bg-cream pb-6">
-      <AppHeader />
+      <AppHeader onBack={props.onBack} />
       <div className="px-4">
-      <button type="button" aria-label="Tillbaka" onClick={props.onBack} className="mt-1 grid size-9 place-items-center">
-        <ArrowLeft className="size-5" />
-      </button>
-      <h1 className="font-serif text-4xl leading-none">Jobbtider</h1>
+      <h1 className="mt-2 font-serif text-4xl leading-none">Jobbtider</h1>
       <p className="mt-2 text-sm text-[#5c564f]">Välj vilka dagar och tider du är tillgänglig för uppdrag.</p>
 
       <div className="mt-4 flex items-center justify-between rounded-full border border-[#efeae4] bg-white/80 px-2 py-2">

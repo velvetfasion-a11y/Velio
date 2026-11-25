@@ -15,19 +15,18 @@ import {
   LogOut,
   Mail,
   MapPin,
-  Pencil,
   Settings,
   Shield,
   ShieldCheck,
   TrendingUp,
   User,
 } from "lucide-react";
-import { initialsOf, kr, publicDisplayName, serviceById } from "@/lib/velio/data";
+import { kr, publicDisplayName, serviceById } from "@/lib/velio/data";
 import { HistoryCard } from "@/components/velio/history";
 import { VerifyIdScreen } from "@/components/velio/verify-id";
 import { ownBusiness, useVelio, type Booking } from "@/lib/velio/store";
 import { cn } from "@/lib/cn";
-import { Avatar, Btn, Field, ScreenHeader } from "@/components/velio/ui";
+import { Btn, Field, ProfilePhoto, ScreenHeader } from "@/components/velio/ui";
 import { asset } from "@/lib/velio/asset";
 
 const faqs = [
@@ -93,44 +92,10 @@ export function ProfileScreens() {
   const [exp, setExp] = useState("");
   const [legal, setLegal] = useState<"privacy" | "terms" | null>(null);
 
-  if (screen === "edit") {
-    return (
-      <div className="px-5 pt-4">
-        <ScreenHeader title="Redigera profil" onBack={() => go("profile")} />
-        <div className="mb-5 flex flex-col items-center">
-          <Avatar text={initialsOf(profile.name)} large />
-          <button type="button" onClick={() => showToast("Bildbyte finns inte i demon")} className="mt-3 text-sm font-semibold">
-            Byt bild
-          </button>
-        </div>
-        <Field label="Namn" value={profile.name} onChange={(event) => setProfile({ ...profile, name: event.target.value })} />
-        <Field label="Telefon" value={profile.phone} onChange={(event) => setProfile({ ...profile, phone: event.target.value })} />
-        <Field
-          label="E-post"
-          type="email"
-          value={profile.email}
-          onChange={(event) => setProfile({ ...profile, email: event.target.value })}
-        />
-        <Btn
-          onClick={() => {
-            void (async () => {
-              const ok = await saveProfile(profile);
-              if (!ok) return;
-              showToast("Profil sparad");
-              go("profile");
-            })();
-          }}
-        >
-          Spara ändringar
-        </Btn>
-      </div>
-    );
-  }
-
   if (screen === "payments") {
     return (
       <div className="px-5 pt-4">
-        <ScreenHeader title="Betalningsmetoder" onBack={() => go("profile")} />
+        <ScreenHeader title="Betalningsmetoder" />
         <div className="mb-4 space-y-2">
           <div className="rounded-2xl border border-line p-4">
             <div className="font-semibold">Apple Pay</div>
@@ -170,7 +135,7 @@ export function ProfileScreens() {
   if (screen === "bookings") {
     return (
       <div className="px-5 pt-4">
-        <ScreenHeader title="Bokningshistorik" onBack={() => go("profile")} />
+        <ScreenHeader title="Bokningshistorik" />
         <BookingRows items={bookings} onOpen={openReceipt} />
       </div>
     );
@@ -186,7 +151,7 @@ export function ProfileScreens() {
     };
     return (
       <div className="px-4 pt-4">
-        <ScreenHeader title="Mina uppdrag" onBack={() => go("profile")} />
+        <ScreenHeader title="Mina uppdrag" />
         {mine.length ? (
           <div className="space-y-3">
             {mine.map((job) => {
@@ -234,7 +199,7 @@ export function ProfileScreens() {
     ];
     return (
       <div className="px-4 pt-4">
-        <ScreenHeader title="Velio Business" onBack={() => go("profile")} />
+        <ScreenHeader title="Velio Business" />
         <div className="relative overflow-hidden rounded-[1.35rem]">
           <img src={asset("/velio/business.jpg")} alt="" className="h-52 w-full object-cover" />
           <div className="absolute inset-0 bg-gradient-to-r from-black/55 via-black/25 to-transparent" />
@@ -312,15 +277,39 @@ export function ProfileScreens() {
   if (screen === "settings") {
     return (
       <div className="px-5 pt-4">
-        <ScreenHeader title="Inställningar" onBack={() => (legal ? setLegal(null) : go("profile"))} />
+        <ScreenHeader title="Inställningar" />
         {legal ? (
-          <p className="text-sm leading-relaxed text-muted">
+          <div>
+            <button type="button" onClick={() => setLegal(null)} className="mb-3 text-sm font-semibold">
+              Tillbaka
+            </button>
+            <p className="text-sm leading-relaxed text-muted">
             {legal === "privacy"
               ? "VELIO lagrar namn, bokningar och chatt endast i den här webbläsaren under demon. Ingen riktig betalning eller identifiering sker. Rensa webbplatsdata om du vill ta bort det."
               : "Tjänsten i den här vyn är en prototyp. Priser är exempel. Ett uppdrag blir bindande först när både du och utföraren bekräftat i den skarpa tjänsten."}
-          </p>
+            </p>
+          </div>
         ) : (
           <div>
+            <Field label="Namn" value={profile.name} onChange={(event) => setProfile({ ...profile, name: event.target.value })} />
+            <Field label="Telefon" value={profile.phone} onChange={(event) => setProfile({ ...profile, phone: event.target.value })} />
+            <Field
+              label="E-post"
+              type="email"
+              value={profile.email}
+              onChange={(event) => setProfile({ ...profile, email: event.target.value })}
+            />
+            <Btn
+              onClick={() => {
+                void (async () => {
+                  const ok = await saveProfile(profile);
+                  if (!ok) return;
+                  showToast("Profil sparad");
+                })();
+              }}
+            >
+              Spara namn och kontakt
+            </Btn>
             <button
               type="button"
               role="switch"
@@ -360,7 +349,7 @@ export function ProfileScreens() {
   if (screen === "help") {
     return (
       <div className="px-5 pt-4">
-        <ScreenHeader title="Hjälp och support" onBack={() => go("profile")} />
+        <ScreenHeader title="Hjälp och support" />
         <div className="mb-5 divide-y divide-line rounded-2xl border border-line px-4">
           {faqs.map((faq, index) => (
             <button key={faq.q} type="button" onClick={() => setOpenFaq(openFaq === index ? null : index)} className="w-full py-3 text-left">
@@ -420,7 +409,7 @@ export function ProfileScreens() {
     { icon: MapPin, label: "Adresser", onClick: () => showToast("Lägg till en adress under Redigera profil snart") },
   ];
   const rows = [
-    { icon: User, label: "Redigera profil", onClick: () => go("edit") },
+    { icon: User, label: "Redigera profil", onClick: () => go("settings") },
     { icon: CreditCard, label: "Betalningsmetoder", onClick: () => go("payments") },
     { icon: Clock, label: "Bokningshistorik", onClick: () => go("bookings") },
     { icon: Briefcase, label: "VELIO Business", note: own ? "Din profil är publicerad. Öppna den här." : "Erbjud dina tjänster, få uppdrag och tjäna pengar.", onClick: () => go("business") },
@@ -438,7 +427,6 @@ export function ProfileScreens() {
           idVerified={idVerified}
           idMethod={idMethod}
           onMode={setAccountMode}
-          onEdit={() => go("edit")}
         />
       ) : (
       <section className="relative overflow-hidden rounded-[1.4rem] border border-[#efeae4] bg-white/80 px-4 py-4">
@@ -446,7 +434,7 @@ export function ProfileScreens() {
           <path d="M70 0c-30 50 40 70-10 130-30 36 40 90 120 90V0H70Z" fill="currentColor" />
         </svg>
         <div className="relative flex items-center gap-4">
-          <span className="grid size-[4.5rem] shrink-0 place-items-center rounded-full bg-[#f3ece3] font-serif text-2xl">{initialsOf(publicDisplayName(profile.name) || "V")}</span>
+          <ProfilePhoto large />
           <div>
             <h2 className="font-serif text-[1.7rem] leading-none font-medium">{publicDisplayName(profile.name) || "Din profil"}</h2>
             <p className="mt-2 flex items-center gap-1 text-sm font-medium text-[#3d8f4a]">
@@ -545,14 +533,12 @@ function ModeSwitch({
   idVerified,
   idMethod,
   onMode,
-  onEdit,
 }: {
   name: string;
   mode: "customer" | "business";
   idVerified: boolean;
   idMethod: string | null;
   onMode: (mode: "customer" | "business") => void;
-  onEdit: () => void;
 }) {
   const go = useVelio((state) => state.go);
   const accountId = useVelio((state) => state.accountId);
@@ -579,12 +565,7 @@ function ModeSwitch({
     <div>
       <h2 className="font-serif text-[2.35rem] leading-none font-medium">Min profil</h2>
       <div className="mt-5 flex items-center gap-4">
-        <div className="relative shrink-0">
-          <img src={asset("/velio/profile.jpg")} alt="" className="size-[6.6rem] rounded-full object-cover object-[center_20%] ring-[3px] ring-white" />
-          <button type="button" aria-label="Redigera bild" onClick={onEdit} className="absolute right-0 bottom-0 grid size-8 place-items-center rounded-full bg-white shadow">
-            <Pencil className="size-3.5" />
-          </button>
-        </div>
+        <ProfilePhoto large />
         <div className="min-w-0">
           <h3 className="font-serif text-[1.85rem] leading-tight">{name}</h3>
           <p className="mt-1 text-sm">Medlem sedan nov 2026</p>

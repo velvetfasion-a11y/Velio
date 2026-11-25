@@ -143,7 +143,7 @@ export type Booking = {
   holdKr?: number;
 };
 
-export type Listing = { serviceId: ServiceId; desc: string; price: number };
+export type Listing = { serviceId: ServiceId; desc: string; price: number; experience?: string };
 
 export type BusinessForm = {
   serviceId: ServiceId | "";
@@ -166,7 +166,7 @@ export type BusinessForm = {
   terms: boolean;
 };
 
-export type Profile = { name: string; phone: string; email: string };
+export type Profile = { name: string; phone: string; email: string; avatar?: string };
 
 export type PostedJob = {
   id: string;
@@ -197,6 +197,8 @@ function listingToProvider(input: {
   desc: string;
   price: number;
   area?: string;
+  experience?: string;
+  photo?: string;
 }): Provider {
   return {
     id: input.id,
@@ -209,10 +211,12 @@ function listingToProvider(input: {
     price: input.price,
     area: input.area || "Stockholm",
     about: input.desc,
-    quote: "Ny profil på VELIO",
-    reviewer: "—",
-    reviewAgo: "nyligen",
+    quote: "",
+    reviewer: "",
+    reviewAgo: "",
     slots: ["morning", "afternoon", "evening"],
+    experience: input.experience || undefined,
+    photo: input.photo,
   };
 }
 
@@ -296,6 +300,7 @@ type VelioState = {
   markNotificationRead: (id: string) => void;
   openBookingFromNotification: (bookingId: string) => void;
   setProfile: (profile: Profile) => void;
+  setAvatar: (avatar: string) => void;
   addCard: (card: PayCard) => void;
   addToCart: () => void;
   removeFromCart: (id: string) => void;
@@ -629,6 +634,7 @@ export const useVelio = create<VelioState>()(
             name: publicDisplayName(account.name),
             phone: account.phone || get().profile.phone,
             email: account.email,
+            avatar: get().profile.avatar,
           },
         });
       },
@@ -653,6 +659,7 @@ export const useVelio = create<VelioState>()(
             name: publicDisplayName(me.account.name) || publicDisplayName(get().profile.name),
             phone: me.account.phone,
             email: me.account.email,
+            avatar: get().profile.avatar,
           },
           accountMode,
           idVerified: Boolean(me.account.idVerified) || Boolean(own) || get().idVerified,
@@ -665,7 +672,12 @@ export const useVelio = create<VelioState>()(
           chats: mapped.chats,
           peers: mapped.peers,
           listing: own
-            ? { serviceId: own.serviceId, desc: own.about, price: own.price }
+            ? {
+                serviceId: own.serviceId,
+                desc: own.about,
+                price: own.price,
+                experience: own.experience ?? get().listing?.experience,
+              }
             : get().listing,
           ...(wasLoggedIn
             ? {}
@@ -716,7 +728,22 @@ export const useVelio = create<VelioState>()(
       },
       saveProfile: async (nextProfile) => {
         const profile = nextProfile ?? get().profile;
-        if (nextProfile) set({ profile: nextProfile });
+        set({ profile: { ...profile, avatar: profile.avatar ?? get().profile.avatar } });
+        const { isStaticHost, localUpdateAccount } = await import("@/lib/velio/local-auth");
+        const syncDirectoryName = () => {
+          const own = ownBusiness({ accountId: get().accountId, directory: get().directory, loggedIn: true });
+          if (!own) return;
+          const directory = get().directory.map((item) =>
+            item.id === own.id ? { ...item, name: profile.name || item.name, initials: initialsOf(profile.name || item.name) || item.initials } : item,
+          );
+          syncDirectory(directory);
+          set({ directory });
+        };
+        if (typeof window !== "undefined" && isStaticHost()) {
+          localUpdateAccount({ name: profile.name, email: profile.email, phone: profile.phone });
+          syncDirectoryName();
+          return true;
+        }
         const saved = await updateProfileRemote({
           name: profile.name,
           email: profile.email,
@@ -724,17 +751,19 @@ export const useVelio = create<VelioState>()(
           accountMode: get().accountMode,
         });
         if (!saved) {
-          get().showToast("Kunde inte spara profilen");
-          return false;
+          syncDirectoryName();
+          return true;
         }
         set({
           profile: {
             name: saved.name,
             email: saved.email,
             phone: saved.phone,
+            avatar: get().profile.avatar,
           },
           accountMode: saved.accountMode,
         });
+        syncDirectoryName();
         return true;
       },
       refreshSync: async () => {
@@ -758,6 +787,7 @@ export const useVelio = create<VelioState>()(
             name: publicDisplayName(me.account.name),
             phone: me.account.phone || get().profile.phone,
             email: me.account.email,
+            avatar: get().profile.avatar,
           },
           accountMode: me.account.accountMode,
           idVerified: Boolean(me.account.idVerified),
@@ -858,7 +888,15 @@ export const useVelio = create<VelioState>()(
         });
       },
       setProfile: (profile) => {
-        set({ profile });
+        set({ profile: { ...profile, avatar: profile.avatar ?? get().profile.avatar } });
+      },
+      setAvatar: (avatar) => {
+        set({ profile: { ...get().profile, avatar } });
+        const own = ownBusiness({ accountId: get().accountId, directory: get().directory, loggedIn: get().loggedIn });
+        if (!own) return;
+        const directory = get().directory.map((item) => (item.id === own.id ? { ...item, photo: avatar } : item));
+        syncDirectory(directory);
+        set({ directory });
       },
       addCard: (card) => set({ cards: [...get().cards, card] }),
       addToCart: () => {
@@ -1209,20 +1247,26 @@ export const useVelio = create<VelioState>()(
       },
       finishOnboard: (listing) => {
         if (!get().idVerified) {
-          set({ listing, sheet: null, screen: "verify-id" });
+          set({ listing });
+          get().go("verify-id");
           get().showToast("Verifiera dig med BankID eller pass först");
           return;
         }
         const profile = get().profile;
         const id = get().accountId ? `biz-${get().accountId}` : `biz-${uid()}`;
+        const previous = get().directory.find((item) => item.id === id);
         const published = listingToProvider({
           id,
           name: profile.name || "Mitt företag",
           serviceId: listing.serviceId,
           desc: listing.desc,
           price: listing.price,
-          area: "Stockholm",
+          area: previous?.area || "Stockholm",
+          experience: listing.experience,
+          photo: profile.avatar || previous?.photo,
         });
+        published.rating = previous?.rating ?? published.rating;
+        published.reviews = previous?.reviews ?? published.reviews;
         const directory = [...get().directory.filter((item) => item.id !== id), published];
         syncDirectory(directory);
         set({
@@ -1249,7 +1293,7 @@ export const useVelio = create<VelioState>()(
         const own = ownBusiness({ accountId: get().accountId, directory: get().directory, loggedIn: true });
         const ownsListing = Boolean(own);
         if (accountMode === "business" && !get().idVerified && !ownsListing) {
-          set({ screen: "verify-id" });
+          get().go("verify-id");
           get().showToast("BankID eller pass krävs för VELIO Business");
           return;
         }
@@ -1259,7 +1303,12 @@ export const useVelio = create<VelioState>()(
             ? {
                 idVerified: true,
                 providerId: own.id,
-                listing: get().listing ?? { serviceId: own.serviceId, desc: own.about, price: own.price },
+                listing: get().listing ?? {
+                  serviceId: own.serviceId,
+                  desc: own.about,
+                  price: own.price,
+                  experience: own.experience,
+                },
               }
             : {}),
         });

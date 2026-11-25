@@ -34,7 +34,18 @@ export type Provider = {
   tags?: string[];
   photo?: string;
   place?: string;
+  experience?: string;
 };
+
+/** Public “Om” text: the description the person wrote, without a leading account name. */
+export function providerDescription(provider: { name: string; about: string }) {
+  const raw = provider.about.trim();
+  const name = provider.name.trim();
+  if (!raw) return "";
+  if (name && raw === name) return "";
+  if (name && raw.startsWith(`${name}\n`)) return raw.slice(name.length).trim();
+  return raw;
+}
 
 export const areaLayout: Record<string, { x: number; y: number }> = {
   Kungsholmen: { x: 20, y: 44 },

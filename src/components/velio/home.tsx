@@ -35,7 +35,7 @@ import {
 } from "lucide-react";
 import { greetingName, providerById, ratingLabel, serviceById, services, type ServiceIcon, type ServiceId } from "@/lib/velio/data";
 import { useVelio } from "@/lib/velio/store";
-import { AppHeader } from "@/components/velio/header";
+import { AppHeader, PlaceLink } from "@/components/velio/header";
 import { cn } from "@/lib/cn";
 import { BottomSheet, Btn } from "@/components/velio/ui";
 import { asset } from "@/lib/velio/asset";
@@ -562,12 +562,15 @@ function JobSheet() {
       <div className="relative px-4 pt-4">
         <img src={asset("/velio/post-hero.jpg")} alt="" className="pointer-events-none absolute top-0 right-0 h-36 w-[58%] object-cover" />
         <div className="pointer-events-none absolute top-0 right-0 h-36 w-[58%] bg-gradient-to-l from-transparent to-[#f7f2eb]" />
-        <div className="relative flex items-center">
+        <div className="relative">
+          <PlaceLink />
+          <div className="mt-1 flex items-center">
           <button type="button" aria-label="Tillbaka" onClick={closeSheet} className="grid size-9 place-items-center">
             <ArrowLeft className="size-5" />
           </button>
           <p className="flex-1 text-center font-serif text-[1.7rem] tracking-[0.28em]">VELIO</p>
           <span className="size-9" />
+          </div>
         </div>
         <h1 className="relative mt-4 max-w-[16rem] font-serif text-4xl leading-none">Lägg upp ett uppdrag</h1>
         <p className="relative mt-2 max-w-[16rem] text-sm leading-snug">Beskriv vad du behöver hjälp med så matchar vi dig med tillgängliga tjänsteutövare.</p>

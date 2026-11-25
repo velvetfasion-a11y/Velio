@@ -56,6 +56,17 @@ export function getLocalSessionAccount(): LocalAccount | null {
   return readAccounts().find((a) => a.id === id) ?? null;
 }
 
+export function localUpdateAccount(patch: Partial<Pick<LocalAccount, "name" | "email" | "phone">>): LocalAccount | null {
+  const account = getLocalSessionAccount();
+  if (!account) return null;
+  const accounts = readAccounts();
+  const next: LocalAccount = { ...account, ...patch };
+  const idx = accounts.findIndex((item) => item.id === account.id);
+  if (idx >= 0) accounts[idx] = next;
+  writeAccounts(accounts);
+  return next;
+}
+
 export function localSetAccountMode(accountMode: "customer" | "business"): LocalAccount | null {
   const account = getLocalSessionAccount();
   if (!account) return null;

@@ -2,17 +2,13 @@ import { ArrowLeft, Bell } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useVelio } from "@/lib/velio/store";
 
-export function AppHeader({ tone = "cream" }: { tone?: "cream" | "glass" }) {
-  const go = useVelio((state) => state.go);
-  const goBack = useVelio((state) => state.goBack);
+export function PlaceLink({ tone = "cream" }: { tone?: "cream" | "glass" }) {
   const setSheet = useVelio((state) => state.setSheet);
   const allowLocation = useVelio((state) => state.allowLocation);
   const locationOn = useVelio((state) => state.locationOn);
   const locationBusy = useVelio((state) => state.locationBusy);
   const userLocation = useVelio((state) => state.userLocation);
-  const unread = useVelio((state) => state.appNotifications.some((item) => !item.read));
   const glass = tone === "glass";
-
   const placeLabel = locationBusy
     ? "Hämtar…"
     : locationOn
@@ -31,12 +27,49 @@ export function AppHeader({ tone = "cream" }: { tone?: "cream" | "glass" }) {
   };
 
   return (
+    <button
+      type="button"
+      aria-label={placeLabel}
+      onClick={onPlaceClick}
+      className={cn(
+        "block max-w-[12rem] truncate text-left text-[10px] leading-none font-medium tracking-wide",
+        glass ? "text-paper/80" : "text-muted",
+        locationOn && (glass ? "text-[#b7e6c2]" : "text-[#2f7a3c]"),
+      )}
+    >
+      {placeLabel}
+    </button>
+  );
+}
+
+export function AppHeader({ tone = "cream", onBack }: { tone?: "cream" | "glass"; onBack?: () => void }) {
+  const go = useVelio((state) => state.go);
+  const goBack = useVelio((state) => state.goBack);
+  const closeSheet = useVelio((state) => state.closeSheet);
+  const sheet = useVelio((state) => state.sheet);
+  const unread = useVelio((state) => state.appNotifications.some((item) => !item.read));
+  const glass = tone === "glass";
+
+  const back = () => {
+    if (onBack) {
+      onBack();
+      return;
+    }
+    if (sheet) {
+      closeSheet();
+      return;
+    }
+    goBack();
+  };
+
+  return (
     <div className="px-4 pt-3 pb-1">
-      <div className="grid grid-cols-[2.25rem_1fr_2.25rem] items-center">
+      <PlaceLink tone={tone} />
+      <div className="mt-1 grid grid-cols-[2.25rem_1fr_2.25rem] items-center">
         <button
           type="button"
           aria-label="Tillbaka"
-          onClick={goBack}
+          onClick={back}
           className={cn(
             "grid size-9 place-items-center justify-self-start",
             glass ? "text-paper" : "text-ink",
@@ -69,19 +102,6 @@ export function AppHeader({ tone = "cream" }: { tone?: "cream" | "glass" }) {
           {unread ? <span className="absolute top-1 right-1 size-1.5 rounded-full bg-gold" /> : null}
         </button>
       </div>
-
-      <button
-        type="button"
-        aria-label={placeLabel}
-        onClick={onPlaceClick}
-        className={cn(
-          "mt-0.5 max-w-[9.5rem] truncate text-left text-[10px] leading-none font-medium tracking-wide",
-          glass ? "text-paper/80" : "text-muted",
-          locationOn && (glass ? "text-[#b7e6c2]" : "text-[#2f7a3c]"),
-        )}
-      >
-        {placeLabel}
-      </button>
     </div>
   );
 }
