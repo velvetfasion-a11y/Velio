@@ -23,6 +23,7 @@ import {
   Zap,
 } from "lucide-react";
 import { areaLayout, kr, services, type ServiceId } from "@/lib/velio/data";
+import { saveWeekTemplate } from "@/lib/velio/schedule";
 import { useVelio, type BusinessForm } from "@/lib/velio/store";
 import { AppHeader } from "@/components/velio/header";
 import { cn } from "@/lib/cn";
@@ -181,6 +182,7 @@ export function OnboardSheet() {
     if (!terms) return showToast("Godkänn villkoren för att publicera");
     if (amount <= 0) return showToast("Ange ett pris");
     const primary = serviceIds[0] ?? "rep";
+    saveWeekTemplate(days, from, to);
     finishOnboard({
       serviceId: primary,
       serviceIds,

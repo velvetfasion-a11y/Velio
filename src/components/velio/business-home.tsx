@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowLeftRight, Briefcase, Calendar, Check, ChevronLeft, ChevronRight, Clock, Coffee, MapPin, MessageCircle, SlidersHorizontal } from "lucide-react";
 import { greetingName } from "@/lib/velio/data";
+import { hoursOn, loadSchedule, sameLocalDay, saveSchedule, weekDates, withDateHours, type DayHours, type WorkSchedule } from "@/lib/velio/schedule";
 import { useVelio } from "@/lib/velio/store";
 import { AppHeader } from "@/components/velio/header";
 import { ProfilePhoto } from "@/components/velio/ui";
@@ -22,43 +23,33 @@ type Offer = {
 const seedOffers: Offer[] = [];
 
 const dayLabels = ["Mån", "Tis", "Ons", "Tor", "Fre", "Lör", "Sön"];
-const monthLabels = ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "aug", "sep", "okt", "nov", "dec"];
 const hourOptions = Array.from({ length: 16 }, (_, index) => `${String(index + 6).padStart(2, "0")}:00`);
 
-type DayHours = { on: boolean; from: string; to: string };
-
-function mondayOf(offset: number) {
-  const now = new Date();
-  const weekday = now.getDay();
-  const monday = new Date(now);
-  monday.setHours(12, 0, 0, 0);
-  monday.setDate(now.getDate() + (weekday === 0 ? -6 : 1 - weekday) + offset * 7);
-  return monday;
+function weekdayIndex(date: Date) {
+  return (date.getDay() + 6) % 7;
 }
 
-function weekKey(date: Date) {
-  return date.toISOString().slice(0, 10);
+function monthName(date: Date) {
+  return date.toLocaleDateString("sv-SE", { month: "short" }).replace(".", "");
 }
 
-function defaultDays(): DayHours[] {
-  return dayLabels.map((_, index) => ({ on: index < 5, from: "08:00", to: "17:00" }));
+function writtenDay(date: Date) {
+  const label = date.toLocaleDateString("sv-SE", { weekday: "long", day: "numeric", month: "long" });
+  return label.replace(".", "");
 }
 
-function weekDays(offset: number) {
-  const monday = mondayOf(offset);
-  return dayLabels.map((label, index) => {
-    const date = new Date(monday);
-    date.setDate(monday.getDate() + index);
-    return { label, num: date.getDate(), month: monthLabels[date.getMonth()], date };
-  });
-}
-
-function rangeLabel(offset: number) {
-  const days = weekDays(offset);
+function rangeLabel(now: Date, offset: number) {
+  const days = weekDates(now, offset);
   const first = days[0];
   const last = days[6];
-  if (first.month === last.month) return `${first.num} – ${last.num} ${last.month}`;
-  return `${first.num} ${first.month} – ${last.num} ${last.month}`;
+  if (first.getMonth() === last.getMonth()) return `${first.getDate()}–${last.getDate()} ${monthName(last)}`;
+  return `${first.getDate()} ${monthName(first)}–${last.getDate()} ${monthName(last)}`;
+}
+
+function todayCopy(now: Date, hours: DayHours) {
+  const written = writtenDay(now);
+  if (!hours.on) return `Ledig idag, ${written}`;
+  return `Idag, ${written} · ${hours.from}–${hours.to}`;
 }
 
 export function BusinessHome() {
@@ -74,15 +65,35 @@ export function BusinessHome() {
   const [offersOpen, setOffersOpen] = useState(false);
   const [offers, setOffers] = useState<Offer[]>(seedOffers);
   const [skipped, setSkipped] = useState<string[]>([]);
-  const [weeks, setWeeks] = useState<Record<string, DayHours[]>>({});
+  const [schedule, setSchedule] = useState<WorkSchedule>({ days: [0, 1, 2, 3, 4], from: "08:00", to: "17:00", dates: {} });
+  const [now, setNow] = useState<Date | null>(null);
   const [breakOn, setBreakOn] = useState(true);
   const [breakFrom, setBreakFrom] = useState("12:00");
   const [breakTo, setBreakTo] = useState("13:00");
+  useEffect(() => {
+    setSchedule(loadSchedule());
+    const tick = () => setNow(new Date());
+    tick();
+    const id = window.setInterval(tick, 30_000);
+    const onShow = () => {
+      if (document.visibilityState === "visible") tick();
+    };
+    document.addEventListener("visibilitychange", onShow);
+    window.addEventListener("focus", tick);
+    return () => {
+      window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onShow);
+      window.removeEventListener("focus", tick);
+    };
+  }, []);
+  const updateSchedule = (next: WorkSchedule) => {
+    setSchedule(next);
+    saveSchedule(next);
+  };
   const openJobs = posted.filter((job) => !skipped.includes(job.id) && job.ownerId !== accountId);
   const first = greetingName(profile.name);
-  const current = weeks[weekKey(mondayOf(0))] ?? defaultDays();
-  const todayIndex = (new Date().getDay() + 6) % 7;
-  const todayHours = current[todayIndex];
+  const todayHours = now ? hoursOn(schedule, now) : null;
+  const thisWeek = now ? weekDates(now, 0) : [];
 
   const newCount = offers.filter((offer) => offer.status === "new").length + openJobs.length;
 
@@ -126,11 +137,12 @@ export function BusinessHome() {
     );
   }
 
-  if (editing) {
+  if (editing && now) {
     return (
       <HoursEditor
-        weeks={weeks}
-        setWeeks={setWeeks}
+        now={now}
+        schedule={schedule}
+        setSchedule={updateSchedule}
         breakOn={breakOn}
         breakFrom={breakFrom}
         breakTo={breakTo}
@@ -188,16 +200,15 @@ export function BusinessHome() {
             <span className={cn("absolute top-0.5 size-6 rounded-full bg-white", open ? "right-0.5" : "left-0.5")} />
           </button>
         </div>
-        <div className="mt-3 flex items-center gap-3 border-t border-[#f0ebe6] pt-3 text-sm">
+        <div className="mt-3 border-t border-[#f0ebe6] pt-3 text-sm">
           <span className={cn("inline-flex items-center gap-1.5 rounded-full px-3 py-1", open ? "bg-[#e7f3e4] text-[#2f7a3a]" : "bg-[#f3ece3] text-muted")}>
             <span className={cn("size-2 rounded-full", open ? "bg-[#2f7a3a]" : "bg-muted")} />
             {open ? "Aktiv för arbete" : "Inte tillgänglig"}
           </span>
-          <span className="h-5 w-px bg-[#e6dfd6]" />
-          <span className="flex items-center gap-1.5 text-[#5c564f]">
-            <Calendar className="size-4" />
-            {todayHours?.on ? `Idag ${todayHours.from}–${todayHours.to}` : "Ledig idag"}
-          </span>
+          <p className="mt-2 flex items-start gap-1.5 text-[#5c564f]">
+            <Calendar className="mt-0.5 size-4 shrink-0" />
+            <span>{now && todayHours ? todayCopy(now, todayHours) : "Hämtar dagens datum"}</span>
+          </p>
         </div>
       </div>
 
@@ -242,17 +253,30 @@ export function BusinessHome() {
         <button type="button" onClick={() => setEditing(true)} className="flex w-full items-center gap-2 px-1 pb-3 text-left">
           <Calendar className="size-4" />
           <span className="font-semibold">Jobb tider</span>
-          <span className="ml-auto text-sm text-[#5c564f]">Denna vecka</span>
+          <span className="ml-auto text-sm text-[#5c564f]">{now ? rangeLabel(now, 0) : "Denna vecka"}</span>
           <ChevronRight className="size-4 text-muted" />
         </button>
         <div className="grid grid-cols-7 gap-1">
-          {weekDays(0).map((day, index) => (
-            <button key={day.label} type="button" onClick={() => setEditing(true)} className={cn("rounded-xl py-2 text-center", current[index]?.on ? "bg-[#6e5636] text-white" : "bg-[#d9cfc3] text-[#6b645c]")}>
-              <p className="text-[10px]">{day.label}</p>
-              <p className="text-sm font-semibold leading-none">{day.num}</p>
-              <p className="mt-0.5 text-[9px] leading-tight">{current[index]?.on ? `${current[index].from.slice(0, 2)}–${current[index].to.slice(0, 2)}` : "–"}</p>
-            </button>
-          ))}
+          {thisWeek.map((date) => {
+            const hours = hoursOn(schedule, date);
+            const isToday = now ? sameLocalDay(date, now) : false;
+            return (
+              <button
+                key={date.toDateString()}
+                type="button"
+                onClick={() => now && setEditing(true)}
+                className={cn(
+                  "rounded-xl py-2 text-center",
+                  hours.on ? "bg-[#6e5636] text-white" : "bg-[#d9cfc3] text-[#6b645c]",
+                  isToday && "ring-2 ring-[#2f7a3a] ring-offset-1",
+                )}
+              >
+                <p className="text-[10px]">{isToday ? "Idag" : dayLabels[weekdayIndex(date)]}</p>
+                <p className="text-sm font-semibold leading-none">{date.getDate()}</p>
+                <p className="mt-0.5 text-[9px] leading-tight">{hours.on ? `${hours.from.slice(0, 2)}–${hours.to.slice(0, 2)}` : "–"}</p>
+              </button>
+            );
+          })}
         </div>
       </section>
       </div>
@@ -347,8 +371,9 @@ function OffersPage({
 }
 
 function HoursEditor(props: {
-  weeks: Record<string, DayHours[]>;
-  setWeeks: (weeks: Record<string, DayHours[]>) => void;
+  now: Date;
+  schedule: WorkSchedule;
+  setSchedule: (schedule: WorkSchedule) => void;
   breakOn: boolean;
   breakFrom: string;
   breakTo: string;
@@ -358,19 +383,15 @@ function HoursEditor(props: {
   onBack: () => void;
   onSave: () => void;
 }) {
-  const showToast = useVelio((state) => state.showToast);
   const [offset, setOffset] = useState(0);
   const [openDay, setOpenDay] = useState<number | null>(null);
   const [breakOpen, setBreakOpen] = useState(false);
-  const monday = mondayOf(offset);
-  const key = weekKey(monday);
-  const days = props.weeks[key] ?? defaultDays();
-  const dates = weekDays(offset);
-  const title = offset === 0 ? "Denna vecka" : offset === 1 ? "Nästa vecka" : offset === -1 ? "Förra veckan" : rangeLabel(offset);
+  const dates = weekDates(props.now, offset);
+  const title = offset === 0 ? "Denna vecka" : offset === 1 ? "Nästa vecka" : offset === -1 ? "Förra veckan" : rangeLabel(props.now, offset);
 
-  const update = (index: number, patch: Partial<DayHours>) => {
-    const next = days.map((day, dayIndex) => (dayIndex === index ? { ...day, ...patch } : day));
-    props.setWeeks({ ...props.weeks, [key]: next });
+  const update = (date: Date, patch: Partial<DayHours>) => {
+    const current = hoursOn(props.schedule, date);
+    props.setSchedule(withDateHours(props.schedule, date, { ...current, ...patch }));
   };
 
   return (
@@ -388,7 +409,7 @@ function HoursEditor(props: {
           <p className="flex items-center justify-center gap-2 font-semibold">
             <Calendar className="size-4" /> {title}
           </p>
-          <p className="text-sm text-[#5c564f]">{rangeLabel(offset)}</p>
+          <p className="text-sm text-[#5c564f]">{rangeLabel(props.now, offset)}</p>
         </div>
         <button type="button" aria-label="Nästa vecka" onClick={() => setOffset(offset + 1)} className="grid size-8 place-items-center">
           <ChevronRight className="size-4" />
@@ -397,20 +418,21 @@ function HoursEditor(props: {
 
       <div className="mt-3 space-y-2">
         {dates.map((date, index) => {
-          const day = days[index];
+          const day = hoursOn(props.schedule, date);
+          const isToday = sameLocalDay(date, props.now);
           return (
-            <div key={date.label} className="rounded-2xl border border-[#efeae4] bg-white/80 px-3 py-3">
+            <div key={date.toDateString()} className={cn("rounded-2xl border bg-white/80 px-3 py-3", isToday ? "border-[#2f7a3a]" : "border-[#efeae4]")}>
               <div className="flex items-center gap-3">
-                <div className="w-14">
-                  <p className="font-semibold">{date.label}</p>
+                <div className="w-16">
+                  <p className="font-semibold">{isToday ? "Idag" : dayLabels[weekdayIndex(date)]}</p>
                   <p className="text-xs text-[#5c564f]">
-                    {date.num} {date.month}
+                    {date.getDate()} {monthName(date)}
                   </p>
                 </div>
                 <button
                   type="button"
                   aria-pressed={day.on}
-                  onClick={() => update(index, { on: !day.on })}
+                  onClick={() => update(date, { on: !day.on })}
                   className={cn("relative h-7 w-12 shrink-0 rounded-full", day.on ? "bg-[#8a6a3d]" : "bg-[#e6dfd6]")}
                 >
                   <span className={cn("absolute top-0.5 size-6 rounded-full bg-white", day.on ? "right-0.5" : "left-0.5")} />
@@ -426,9 +448,9 @@ function HoursEditor(props: {
               </div>
               {day.on && openDay === index ? (
                 <div className="mt-3 flex items-center gap-2">
-                  <HourSelect value={day.from} onChange={(from) => update(index, { from })} />
+                  <HourSelect value={day.from} onChange={(from) => update(date, { from })} />
                   <span>–</span>
-                  <HourSelect value={day.to} onChange={(to) => update(index, { to })} />
+                  <HourSelect value={day.to} onChange={(to) => update(date, { to })} />
                 </div>
               ) : null}
             </div>
