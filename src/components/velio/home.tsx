@@ -30,7 +30,7 @@ import {
   Zap,
   type LucideIcon,
 } from "lucide-react";
-import { greetingName, providerById, providerTradeNames, ratingLabel, serviceById, services, type ServiceIcon, type ServiceId } from "@/lib/velio/data";
+import { coordsForArea, distanceKm, greetingName, providerById, providerTradeNames, ratingLabel, serviceById, services, type ServiceIcon, type ServiceId } from "@/lib/velio/data";
 import { useVelio } from "@/lib/velio/store";
 import { AppHeader, PlaceLink } from "@/components/velio/header";
 import { cn } from "@/lib/cn";
@@ -106,6 +106,9 @@ export function Home() {
   const go = useVelio((state) => state.go);
   const profile = useVelio((state) => state.profile);
   const directory = useVelio((state) => state.directory);
+  const addresses = useVelio((state) => state.addresses);
+  const activeAddressId = useVelio((state) => state.activeAddressId);
+  const userLocation = useVelio((state) => state.userLocation);
   const favorites = useVelio((state) => state.favorites);
   const toggleFavorite = useVelio((state) => state.toggleFavorite);
   const firstName = greetingName(profile.name);
@@ -113,15 +116,29 @@ export function Home() {
   const query = search.trim().toLowerCase();
   const cards = popular.filter((item) => !query || item.label.toLowerCase().includes(query));
   const extra = services.filter((service) => !popular.some((item) => item.id === service.id));
-  const people = directory.filter(
-    (person) =>
-      !query ||
-      person.name.toLowerCase().includes(query) ||
-      person.area.toLowerCase().includes(query) ||
-      serviceById(person.serviceId)?.name.toLowerCase().includes(query) ||
-      person.serviceIds?.some((id) => serviceById(id)?.name.toLowerCase().includes(query)) ||
-      person.otherTrade?.toLowerCase().includes(query),
-  );
+  const activeAddress = addresses.find((item) => item.id === activeAddressId) ?? null;
+  const origin =
+    activeAddress?.lat != null && activeAddress.lng != null
+      ? { lat: activeAddress.lat, lng: activeAddress.lng }
+      : userLocation
+        ? { lat: userLocation.lat, lng: userLocation.lng }
+        : null;
+  const people = directory
+    .filter(
+      (person) =>
+        !query ||
+        person.name.toLowerCase().includes(query) ||
+        person.area.toLowerCase().includes(query) ||
+        serviceById(person.serviceId)?.name.toLowerCase().includes(query) ||
+        person.serviceIds?.some((id) => serviceById(id)?.name.toLowerCase().includes(query)) ||
+        person.otherTrade?.toLowerCase().includes(query),
+    )
+    .sort((a, b) => {
+      if (!origin) return 0;
+      const left = distanceKm(origin, coordsForArea(a.place || a.area));
+      const right = distanceKm(origin, coordsForArea(b.place || b.area));
+      return left - right;
+    });
 
   return (
     <div className="bg-cream">
@@ -221,7 +238,10 @@ export function Home() {
 
       <section className="px-4 pt-4 pb-2">
         <div className="mb-3 flex items-end justify-between">
-          <h2 className="ios-section min-w-0 text-[1.2rem]">Tjänsteutövare nära dig</h2>
+          <div className="min-w-0">
+            <h2 className="ios-section text-[1.2rem]">Tjänsteutövare nära dig</h2>
+            {activeAddress ? <p className="text-xs text-muted">{activeAddress.label} · {activeAddress.line.split(",")[0]}</p> : null}
+          </div>
           <button type="button" onClick={() => go("profile")} className="shrink-0 text-sm text-muted">
             Bli utförare →
           </button>
@@ -585,6 +605,13 @@ function whenSummary(mode: WhenMode, start: Date | null, end: Date | null, timeW
   return "";
 }
 
+function currentJobAddress(): AddressHit | null {
+  const state = useVelio.getState();
+  const active = state.addresses.find((item) => item.id === state.activeAddressId);
+  if (!active) return null;
+  return { id: active.id, label: active.line, detail: active.label, lat: active.lat, lng: active.lng };
+}
+
 function JobSheet() {
   const closeSheet = useVelio((state) => state.closeSheet);
   const showToast = useVelio((state) => state.showToast);
@@ -596,8 +623,8 @@ function JobSheet() {
   const [endDate, setEndDate] = useState<Date | null>(null);
   const [timeWindow, setTimeWindow] = useState<TimeWindow>("");
   const [clock, setClock] = useState("");
-  const [addressQuery, setAddressQuery] = useState("");
-  const [pickedAddress, setPickedAddress] = useState<AddressHit | null>(null);
+  const [addressQuery, setAddressQuery] = useState(() => currentJobAddress()?.label ?? "");
+  const [pickedAddress, setPickedAddress] = useState<AddressHit | null>(() => currentJobAddress());
   const [addressHits, setAddressHits] = useState<AddressHit[]>([]);
   const [addressBusy, setAddressBusy] = useState(false);
   const [placeError, setPlaceError] = useState("");

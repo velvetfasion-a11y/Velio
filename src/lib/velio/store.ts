@@ -207,6 +207,8 @@ export type SavedAddress = {
   label: string;
   line: string;
   primary?: boolean;
+  lat?: number;
+  lng?: number;
 };
 
 export type PostedJob = {
@@ -457,7 +459,10 @@ type VelioState = {
   setProfile: (profile: Profile) => void;
   setAvatar: (avatar: string) => void;
   toggleFavorite: (providerId: string) => void;
-  addAddress: (input: { label: string; line: string }) => boolean;
+  activeAddressId: string | null;
+  addAddress: (input: { label: string; line: string; lat?: number; lng?: number }) => boolean;
+  updateAddress: (id: string, input: { label: string; line: string; lat?: number; lng?: number }) => boolean;
+  selectAddress: (id: string) => void;
   removeAddress: (id: string) => void;
   makePrimaryAddress: (id: string) => void;
   addCard: (card: PayCard) => void;
@@ -626,6 +631,7 @@ export const useVelio = create<VelioState>()(
       },
       favorites: [],
       addresses: [],
+      activeAddressId: null,
       cards: [],
       cart: seedCart,
       chats: {},
@@ -1054,6 +1060,7 @@ export const useVelio = create<VelioState>()(
           profile: { name: "", phone: "", email: "" },
           favorites: [],
           addresses: [],
+          activeAddressId: null,
         });
       },
       allowLocation: async () => {
@@ -1177,7 +1184,7 @@ export const useVelio = create<VelioState>()(
         set({ favorites: saved ? current.filter((id) => id !== providerId) : [providerId, ...current] });
         get().showToast(saved ? "Borttagen från favoriter" : "Sparad i favoriter");
       },
-      addAddress: ({ label, line }) => {
+      addAddress: ({ label, line, lat, lng }) => {
         const nextLine = line.trim();
         const nextLabel = label.trim() || "Hem";
         if (nextLine.length < 3) return false;
@@ -1186,23 +1193,67 @@ export const useVelio = create<VelioState>()(
           get().showToast("Adressen finns redan");
           return false;
         }
+        const id = uid();
+        const item = { id, label: nextLabel, line: nextLine, primary: addresses.length === 0, lat, lng };
         set({
-          addresses: [
-            ...addresses,
-            { id: uid(), label: nextLabel, line: nextLine, primary: addresses.length === 0 },
-          ],
+          addresses: [...addresses, item],
+          activeAddressId: get().activeAddressId ?? id,
+          ...(lat != null && lng != null && !get().activeAddressId
+            ? { locationOn: true, userLocation: { lat, lng, label: nextLine, accuracy: null } }
+            : {}),
         });
         get().showToast("Adressen är sparad");
         return true;
       },
+      updateAddress: (id, { label, line, lat, lng }) => {
+        const nextLine = line.trim();
+        const nextLabel = label.trim() || "Hem";
+        if (nextLine.length < 3) return false;
+        const addresses = get().addresses.map((item) =>
+          item.id === id ? { ...item, label: nextLabel, line: nextLine, lat, lng } : item,
+        );
+        const active = get().activeAddressId === id;
+        set({
+          addresses,
+          ...(active && lat != null && lng != null
+            ? { locationOn: true, userLocation: { lat, lng, label: nextLine, accuracy: null } }
+            : {}),
+        });
+        get().showToast("Adressen är uppdaterad");
+        return true;
+      },
+      selectAddress: (id) => {
+        const item = get().addresses.find((address) => address.id === id);
+        if (!item) return;
+        set({
+          activeAddressId: id,
+          sheet: null,
+          ...(item.lat != null && item.lng != null
+            ? { locationOn: true, userLocation: { lat: item.lat, lng: item.lng, label: item.line, accuracy: null }, locationError: null }
+            : {}),
+        });
+        get().showToast(`${item.label} är vald`);
+      },
       removeAddress: (id) => {
         const addresses = get().addresses.filter((item) => item.id !== id);
         if (addresses.length && !addresses.some((item) => item.primary)) addresses[0] = { ...addresses[0], primary: true };
-        set({ addresses });
+        const activeGone = get().activeAddressId === id;
+        const nextActive = activeGone ? addresses.find((item) => item.primary)?.id ?? addresses[0]?.id ?? null : get().activeAddressId;
+        const chosen = addresses.find((item) => item.id === nextActive);
+        set({
+          addresses,
+          activeAddressId: nextActive,
+          ...(activeGone
+            ? chosen?.lat != null && chosen.lng != null
+              ? { userLocation: { lat: chosen.lat, lng: chosen.lng, label: chosen.line, accuracy: null }, locationOn: true }
+              : { userLocation: null, locationOn: false }
+            : {}),
+        });
         get().showToast("Adressen är borttagen");
       },
       makePrimaryAddress: (id) => {
         set({ addresses: get().addresses.map((item) => ({ ...item, primary: item.id === id })) });
+        get().showToast("Standardadress sparad");
       },
       addCard: (card) => set({ cards: [...get().cards, card] }),
       addToCart: () => {
@@ -1783,6 +1834,7 @@ export const useVelio = create<VelioState>()(
         profile: state.profile,
         favorites: state.favorites,
         addresses: state.addresses,
+        activeAddressId: state.activeAddressId,
         cards: state.cards,
         accountMode: state.accountMode,
         idVerified: state.idVerified,
@@ -1838,6 +1890,7 @@ export const useVelio = create<VelioState>()(
           posted: saved.posted ?? [],
           favorites: Array.isArray(saved.favorites) ? saved.favorites.filter((id) => typeof id === "string") : [],
           addresses: Array.isArray(saved.addresses) ? saved.addresses.filter(isSavedAddress) : [],
+          activeAddressId: typeof saved.activeAddressId === "string" ? saved.activeAddressId : null,
           directory,
           cart: [],
           notifications: saved.notifications === true && notificationsAllowed,

@@ -2205,54 +2205,60 @@ export function TrackSheet() {
 export function LocationSheet() {
   const closeSheet = useVelio((state) => state.closeSheet);
   const allowLocation = useVelio((state) => state.allowLocation);
-  const clearLocation = useVelio((state) => state.clearLocation);
-  const locationOn = useVelio((state) => state.locationOn);
   const locationBusy = useVelio((state) => state.locationBusy);
   const locationError = useVelio((state) => state.locationError);
-  const userLocation = useVelio((state) => state.userLocation);
-  const accountMode = useVelio((state) => state.accountMode);
-  const idVerified = useVelio((state) => state.idVerified);
+  const addresses = useVelio((state) => state.addresses);
+  const activeAddressId = useVelio((state) => state.activeAddressId);
+  const selectAddress = useVelio((state) => state.selectAddress);
   const go = useVelio((state) => state.go);
-  const openWorkInfo = () => {
-    if (accountMode === "business" && idVerified) {
-      useVelio.setState({ onboardFocus: "place", sheet: "onboard" });
-      return;
-    }
-    if (accountMode === "business") {
-      closeSheet();
-      go("verify-id");
-      return;
-    }
-    closeSheet();
-    go("profile");
-  };
   return (
-    <BottomSheet title="Dela plats" onClose={closeSheet}>
-      <p className="mb-4 text-sm leading-relaxed text-muted">
-        Dela din plats för att hitta jobb i ditt område. Eller lägg in önskad plats genom att uppdatera din arbetsinformation.
-      </p>
-      {locationBusy ? <p className="mb-3 text-sm font-medium">Hämtar din plats… Tillåt plats om telefonen frågar.</p> : null}
+    <BottomSheet title="Adress" onClose={closeSheet}>
+      <p className="mb-3 text-sm leading-relaxed text-muted">Välj vart uppdraget ska utgå ifrån. Den aktiva adressen används för utförare nära dig.</p>
       {locationError ? <p className="mb-3 text-sm leading-relaxed text-red-800">{locationError}</p> : null}
-      {locationOn && userLocation ? (
-        <div className="mb-4 rounded-2xl bg-soft px-4 py-3">
-          <div className="flex items-center gap-2 text-sm font-semibold text-ok">
-            <span className="size-2 rounded-full bg-ok" />
-            Din plats är på
-          </div>
-          <p className="mt-1 font-semibold">{userLocation.label}</p>
-        </div>
-      ) : null}
-      <Btn disabled={locationBusy} onClick={() => void allowLocation()}>
-        {locationBusy ? "Hämtar din plats…" : locationOn ? "Uppdatera min plats" : "Dela plats"}
+      <div className="space-y-2">
+        {addresses.map((item) => {
+          const active = item.id === activeAddressId;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => selectAddress(item.id)}
+              className={cn("flex w-full items-start gap-3 rounded-2xl border px-3 py-3 text-left", active ? "border-brown bg-sand" : "border-line bg-paper")}
+            >
+              <MapPin className="mt-0.5 size-4 shrink-0 text-brown" />
+              <span className="min-w-0 flex-1">
+                <span className="block font-semibold">
+                  {item.label}
+                  {item.primary ? <span className="ml-2 text-xs font-medium text-muted">Standard</span> : null}
+                </span>
+                <span className="block text-sm text-muted">{item.line}</span>
+              </span>
+              {active ? <Check className="size-4 text-brown" /> : null}
+            </button>
+          );
+        })}
+      </div>
+      <Btn
+        className="mt-3"
+        disabled={locationBusy}
+        onClick={() => {
+          void allowLocation().then(() => {
+            if (useVelio.getState().locationOn) useVelio.setState({ activeAddressId: null });
+          });
+        }}
+      >
+        {locationBusy ? "Hämtar din plats…" : "Använd min plats"}
       </Btn>
-      <Btn variant="secondary" className="mt-2" onClick={openWorkInfo}>
-        Uppdatera arbetsinformation
+      <Btn
+        variant="secondary"
+        className="mt-2"
+        onClick={() => {
+          closeSheet();
+          go("addresses");
+        }}
+      >
+        Hantera adresser
       </Btn>
-      {locationOn ? (
-        <button type="button" onClick={clearLocation} className="mt-3 w-full py-2 text-sm font-semibold text-muted">
-          Sluta dela plats
-        </button>
-      ) : null}
     </BottomSheet>
   );
 }

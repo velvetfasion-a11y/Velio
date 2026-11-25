@@ -7,12 +7,18 @@ export function PlaceLink({ tone = "cream" }: { tone?: "cream" | "glass" }) {
   const locationOn = useVelio((state) => state.locationOn);
   const locationBusy = useVelio((state) => state.locationBusy);
   const userLocation = useVelio((state) => state.userLocation);
+  const addresses = useVelio((state) => state.addresses);
+  const activeAddressId = useVelio((state) => state.activeAddressId);
   const glass = tone === "glass";
+  const active = addresses.find((item) => item.id === activeAddressId);
+  const street = active?.line.split(",")[0]?.trim();
   const placeLabel = locationBusy
     ? "Hämtar…"
-    : locationOn
-      ? userLocation?.label || "Plats delad"
-      : "Dela plats";
+    : active
+      ? `${active.label} · ${street || active.line}`
+      : locationOn
+        ? userLocation?.label || "Plats delad"
+        : "Välj adress";
 
   const onPlaceClick = () => {
     setSheet("location");
@@ -24,7 +30,7 @@ export function PlaceLink({ tone = "cream" }: { tone?: "cream" | "glass" }) {
       aria-label={placeLabel}
       onClick={onPlaceClick}
       className={cn(
-        "inline-flex max-w-[12rem] truncate rounded-full px-2.5 py-1 text-left text-[11px] leading-none font-medium tracking-wide",
+        "inline-flex max-w-[16rem] truncate rounded-full px-2.5 py-1 text-left text-[11px] leading-none font-medium tracking-wide",
         glass ? "glass-dark text-paper" : "text-muted",
         locationOn && (glass ? "text-[#d7f5df]" : "text-ok"),
       )}

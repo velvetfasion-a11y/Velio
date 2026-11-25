@@ -100,6 +100,16 @@ export function coordsForArea(area: string | null | undefined) {
   return areaCoords[area] ?? areaCoords.Stockholm;
 }
 
+export function distanceKm(from: { lat: number; lng: number }, to: { lat: number; lng: number }) {
+  const rad = Math.PI / 180;
+  const dLat = (to.lat - from.lat) * rad;
+  const dLng = (to.lng - from.lng) * rad;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(from.lat * rad) * Math.cos(to.lat * rad) * Math.sin(dLng / 2) ** 2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 
 export const whenOptions = ["Så snart som möjligt", "Idag", "Imorgon", "Välj tid i chatten"] as const;
 

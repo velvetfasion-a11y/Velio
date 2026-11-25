@@ -29,6 +29,8 @@ import { ownBusiness, useVelio, type Booking, type SavedAddress } from "@/lib/ve
 import { cn } from "@/lib/cn";
 import { Btn, Field, ProfilePhoto, ScreenHeader, SecurePayNote } from "@/components/velio/ui";
 import { asset } from "@/lib/velio/asset";
+import type { AddressHit } from "@/lib/velio/geo";
+import { AddressSearch } from "@/components/velio/address-search";
 
 const faqs: { q: string; a: string; settings?: boolean }[] = [
   {
@@ -145,60 +147,101 @@ export function BookingRows({ items, onOpen }: { items: Booking[]; onOpen: (id: 
 
 function AddressScreen({
   addresses,
+  activeId,
   onAdd,
+  onUpdate,
   onRemove,
   onPrimary,
+  onSelect,
 }: {
   addresses: SavedAddress[];
-  onAdd: (input: { label: string; line: string }) => boolean;
+  activeId: string | null;
+  onAdd: (input: { label: string; line: string; lat?: number; lng?: number }) => boolean;
+  onUpdate: (id: string, input: { label: string; line: string; lat?: number; lng?: number }) => boolean;
   onRemove: (id: string) => void;
   onPrimary: (id: string) => void;
+  onSelect: (id: string) => void;
 }) {
   const [label, setLabel] = useState("Hem");
-  const [line, setLine] = useState("");
+  const [picked, setPicked] = useState<AddressHit | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
   const showToast = useVelio((state) => state.showToast);
+  const names = ["Hem", "Jobb", "Annan"];
+  const save = () => {
+    if (!picked) {
+      showToast("Välj en adress i listan, eller använd din plats");
+      return;
+    }
+    const input = { label, line: picked.label, lat: picked.lat, lng: picked.lng };
+    const ok = editing ? onUpdate(editing, input) : onAdd(input);
+    if (!ok) return;
+    setPicked(null);
+    setEditing(null);
+    setLabel("Hem");
+  };
   return (
-    <div className="px-4 pt-4">
+    <div className="px-4 pt-4 pb-6">
       <ScreenHeader title="Adresser" />
-      <div className="rounded-[1.3rem] border border-line bg-paper/80 backdrop-blur-xl p-4">
-        <p className="text-sm text-muted">Spara hem, jobb eller en annan plats. Den används när du bokar.</p>
-        <label className="mt-3 block text-sm font-medium">Namn</label>
-        <input value={label} onChange={(event) => setLabel(event.target.value)} placeholder="Hem" className="mt-1 h-11 w-full rounded-full border border-line px-4 text-sm outline-none" />
-        <label className="mt-3 block text-sm font-medium">Adress</label>
-        <input value={line} onChange={(event) => setLine(event.target.value)} placeholder="Gata, postnummer och ort" className="mt-1 h-11 w-full rounded-full border border-line px-4 text-sm outline-none" />
-        <button
-          type="button"
-          onClick={() => {
-            if (line.trim().length < 3) {
-              showToast("Skriv gata, postnummer och ort");
-              return;
-            }
-            if (onAdd({ label, line })) {
-              setLine("");
-            }
-          }}
-          className="mt-3 h-11 rounded-full bg-brown px-5 text-sm font-semibold text-white"
-        >
-          Spara
+      <div className="rounded-[1.3rem] border border-line bg-paper/80 p-4 backdrop-blur-xl">
+        <p className="text-sm text-muted">Spara hem, jobb eller en annan plats. Den valda adressen används för uppdrag nära dig.</p>
+        <p className="mt-3 text-sm font-medium">Namn</p>
+        <div className="mt-2 flex gap-2">
+          {names.map((name) => (
+            <button
+              key={name}
+              type="button"
+              aria-pressed={label === name}
+              onClick={() => setLabel(name)}
+              className={cn("h-9 rounded-full px-3 text-sm font-semibold", label === name ? "bg-brown text-paper" : "border border-line")}
+            >
+              {name}
+            </button>
+          ))}
+        </div>
+        <p className="mt-3 text-sm font-medium">Adress</p>
+        <div className="mt-2">
+          <AddressSearch picked={picked} onPick={setPicked} onClear={() => setPicked(null)} />
+        </div>
+        <button type="button" onClick={save} className="mt-3 h-11 rounded-full bg-brown px-5 text-sm font-semibold text-white">
+          {editing ? "Spara ändring" : "Spara"}
         </button>
       </div>
       {addresses.length ? (
         <div className="mt-4 space-y-3">
           {addresses.map((item) => (
-            <article key={item.id} className="rounded-[1.3rem] border border-line bg-paper/80 backdrop-blur-xl p-4">
+            <article key={item.id} className="rounded-[1.3rem] border border-line bg-paper/80 p-4 backdrop-blur-xl">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="font-semibold">{item.label}</p>
                   <p className="mt-1 text-sm text-muted">{item.line}</p>
                 </div>
-                {item.primary ? <span className="shrink-0 rounded-full bg-ok/15 px-2 py-0.5 text-[11px] text-ok">Standard</span> : null}
+                <span className="flex shrink-0 gap-1">
+                  {item.id === activeId ? <span className="rounded-full bg-brown px-2 py-0.5 text-[11px] text-paper">Aktiv</span> : null}
+                  {item.primary ? <span className="rounded-full bg-ok/15 px-2 py-0.5 text-[11px] text-ok">Standard</span> : null}
+                </span>
               </div>
-              <div className="mt-3 flex gap-2">
+              <div className="mt-3 flex flex-wrap gap-2">
+                {item.id === activeId ? null : (
+                  <button type="button" onClick={() => onSelect(item.id)} className="h-9 rounded-full bg-brown px-3 text-sm font-semibold text-paper">
+                    Använd
+                  </button>
+                )}
                 {item.primary ? null : (
                   <button type="button" onClick={() => onPrimary(item.id)} className="h-9 rounded-full border border-line px-3 text-sm font-semibold">
                     Gör till standard
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditing(item.id);
+                    setLabel(item.label);
+                    setPicked({ id: item.id, label: item.line, detail: item.label, lat: item.lat, lng: item.lng });
+                  }}
+                  className="h-9 rounded-full border border-line px-3 text-sm font-semibold"
+                >
+                  Redigera
+                </button>
                 <button type="button" onClick={() => onRemove(item.id)} className="h-9 rounded-full border border-line px-3 text-sm font-semibold">
                   Ta bort
                 </button>
@@ -231,6 +274,9 @@ export function ProfileScreens() {
   const openProvider = useVelio((state) => state.openProvider);
   const toggleFavorite = useVelio((state) => state.toggleFavorite);
   const addAddress = useVelio((state) => state.addAddress);
+  const updateAddress = useVelio((state) => state.updateAddress);
+  const selectAddress = useVelio((state) => state.selectAddress);
+  const activeAddressId = useVelio((state) => state.activeAddressId);
   const removeAddress = useVelio((state) => state.removeAddress);
   const makePrimaryAddress = useVelio((state) => state.makePrimaryAddress);
   const openReceipt = useVelio((state) => state.openReceipt);
@@ -362,7 +408,17 @@ export function ProfileScreens() {
   }
 
   if (screen === "addresses") {
-    return <AddressScreen addresses={addresses} onAdd={addAddress} onRemove={removeAddress} onPrimary={makePrimaryAddress} />;
+    return (
+      <AddressScreen
+        addresses={addresses}
+        activeId={activeAddressId}
+        onAdd={addAddress}
+        onUpdate={updateAddress}
+        onRemove={removeAddress}
+        onPrimary={makePrimaryAddress}
+        onSelect={selectAddress}
+      />
+    );
   }
 
   if (screen === "posted") {

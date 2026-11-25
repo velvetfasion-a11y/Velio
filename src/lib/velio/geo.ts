@@ -2,6 +2,8 @@ export type AddressHit = {
   id: string;
   label: string;
   detail: string;
+  lat?: number;
+  lng?: number;
 };
 
 const SWEDEN_BBOX = "10.5,55.2,24.2,69.1";
@@ -47,15 +49,23 @@ export async function searchAddresses(query: string, signal?: AbortSignal): Prom
     url.searchParams.set("lon", "18.07");
     const response = await fetch(url.toString(), { signal });
     if (response.ok) {
-      const data = (await response.json()) as { features?: { properties?: PhotonProps }[] };
+      const data = (await response.json()) as {
+        features?: { geometry?: { coordinates?: number[] }; properties?: PhotonProps }[];
+      };
       const hits = (data.features ?? [])
         .map((feature) => {
           const formatted = feature.properties ? formatPhoton(feature.properties) : null;
           if (!formatted) return null;
+          const [lng, lat] = feature.geometry?.coordinates ?? [];
           const id = String(feature.properties?.osm_id ?? formatted.label);
-          return { id, ...formatted };
+          const hit: AddressHit = { id, ...formatted };
+          if (typeof lat === "number" && typeof lng === "number") {
+            hit.lat = lat;
+            hit.lng = lng;
+          }
+          return hit;
         })
-        .filter((hit): hit is AddressHit => Boolean(hit));
+        .filter((hit): hit is AddressHit => hit !== null);
       const unique = hits.filter((hit, index) => hits.findIndex((other) => other.label === hit.label) === index);
       if (unique.length) return unique.slice(0, 6);
     }
@@ -74,15 +84,22 @@ export async function searchAddresses(query: string, signal?: AbortSignal): Prom
     headers: { Accept: "application/json" },
   });
   if (!response.ok) return [];
-  const rows = (await response.json()) as { place_id?: number; display_name?: string }[];
+  const rows = (await response.json()) as { place_id?: number; display_name?: string; lat?: string; lon?: string }[];
   return rows
     .map((row) => {
       const parts = (row.display_name ?? "").split(",").map((part) => part.trim()).filter(Boolean);
       if (!parts.length) return null;
       const label = parts.slice(0, 3).join(", ");
-      return { id: String(row.place_id ?? label), label, detail: "Sverige" };
+      const lat = Number(row.lat);
+      const lng = Number(row.lon);
+      const hit: AddressHit = { id: String(row.place_id ?? label), label, detail: "Sverige" };
+      if (Number.isFinite(lat) && Number.isFinite(lng)) {
+        hit.lat = lat;
+        hit.lng = lng;
+      }
+      return hit;
     })
-    .filter((hit): hit is AddressHit => Boolean(hit));
+    .filter((hit): hit is AddressHit => hit !== null);
 }
 
 export type UserLocation = {

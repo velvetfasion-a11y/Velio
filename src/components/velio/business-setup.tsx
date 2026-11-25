@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, MapPin, Shield } from "lucide-react";
+import { Building2, Check, IdCard, MapPin, Shield, ShieldCheck, UserRound, type LucideIcon } from "lucide-react";
 import { services, type ServiceId } from "@/lib/velio/data";
 import { formatOrg, lookupCompany, orgDigits, type CompanyRecord } from "@/lib/velio/company";
 import { formatPerson, personDigits, validatePersonnummer } from "@/lib/velio/personnummer";
@@ -65,6 +65,45 @@ type Seller = "company" | "private" | null;
 function stepsFor(seller: Seller): Step[] {
   const middle: Step[] = seller === "private" ? ["person"] : ["company"];
   return ["identity", "org", ...middle, "trades", "price", "area", "photo", "work", "preview"];
+}
+
+function ChoiceCard({
+  icon: Icon,
+  title,
+  subtitle,
+  selected,
+  onClick,
+}: {
+  icon: LucideIcon;
+  title: string;
+  subtitle: string;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      onClick={onClick}
+      className={cn(
+        "relative flex aspect-square flex-col justify-between rounded-[1.3rem] border-2 bg-paper p-3 text-left",
+        selected ? "border-brown ring-2 ring-brown ring-offset-2 ring-offset-cream" : "border-line",
+      )}
+    >
+      {selected ? (
+        <span className="absolute top-2 right-2 grid size-6 place-items-center rounded-full bg-brown text-paper">
+          <Check className="size-3.5" />
+        </span>
+      ) : null}
+      <span className={cn("grid size-10 place-items-center rounded-2xl", selected ? "bg-brown text-paper" : "bg-sand text-brown")}>
+        <Icon className="size-5" strokeWidth={1.7} />
+      </span>
+      <span>
+        <span className="block text-[15px] leading-tight font-semibold">{title}</span>
+        <span className="mt-1 block text-xs leading-tight text-muted">{subtitle}</span>
+      </span>
+    </button>
+  );
 }
 
 function readPhoto(file: File) {
@@ -296,40 +335,18 @@ export function BusinessSetup() {
         <p className="mt-2 text-sm leading-relaxed text-muted">{subtitle}</p>
         <div className="mt-6">
           {step === "identity" ? (
-            <div className="space-y-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setIdentityVia("bankid");
-                  setStep("org");
-                }}
-                className="w-full rounded-[1.3rem] bg-[#F7C948] px-4 py-4 text-left"
-              >
-                <span className="block text-base font-semibold text-[#1a1a1a]">BankID</span>
-                <span className="mt-1 block text-sm text-[#1a1a1a]/80">Rekommenderas. Inte kopplat här, så profilen blir Demo.</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setStep("doc")}
-                className="w-full rounded-[1.3rem] border border-line bg-paper px-4 py-4 text-left"
-              >
-                <span className="block text-base font-semibold">ID-handling</span>
-                <span className="mt-1 block text-sm text-muted">Pass, nationellt id-kort eller körkort. Platshållare.</span>
-              </button>
+            <div className="grid grid-cols-2 gap-3">
+              <ChoiceCard icon={ShieldCheck} title="BankID" subtitle="Rekommenderas" selected={identityVia === "bankid"} onClick={() => setIdentityVia("bankid")} />
+              <ChoiceCard icon={IdCard} title="ID-handling" subtitle="Pass eller kort" selected={identityVia === "document"} onClick={() => setIdentityVia("document")} />
             </div>
           ) : null}
 
           {step === "org" ? (
-            <div className="space-y-3">
-              <button
-                type="button"
-                aria-pressed={seller === "company"}
-                onClick={() => setSeller("company")}
-                className={cn("w-full rounded-[1.3rem] border px-4 py-4 text-left", seller === "company" ? "border-brown bg-brown text-paper" : "border-line bg-paper")}
-              >
-                <span className="block text-base font-semibold">Företag</span>
-                <span className={cn("mt-1 block text-sm", seller === "company" ? "text-paper/80" : "text-muted")}>Jag har organisationsnummer</span>
-              </button>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <ChoiceCard icon={Building2} title="Företag" subtitle="Organisationsnummer" selected={seller === "company"} onClick={() => setSeller("company")} />
+                <ChoiceCard icon={UserRound} title="Privatperson" subtitle="Inget företag" selected={seller === "private"} onClick={() => setSeller("private")} />
+              </div>
               {seller === "company" ? (
                 <label className="block">
                   <span className="mb-2 block text-sm font-medium text-muted">Organisationsnummer</span>
@@ -342,14 +359,6 @@ export function BusinessSetup() {
                   />
                 </label>
               ) : null}
-              <button
-                type="button"
-                onClick={openPrivate}
-                className="w-full rounded-[1.3rem] border border-line bg-paper px-4 py-4 text-left"
-              >
-                <span className="block text-base font-semibold">Jag har inget företag / Privatperson</span>
-                <span className="mt-1 block text-sm text-muted">Personnummer i stället. Företag och F-skatt hoppas över.</span>
-              </button>
             </div>
           ) : null}
 
@@ -594,12 +603,21 @@ export function BusinessSetup() {
         </div>
       </div>
       <div className="px-5 pt-2 pb-4">
-        {step === "identity" || (step === "org" && seller !== "company") ? null : (
+        {(step === "identity" && !identityVia) || (step === "org" && !seller) ? null : (
           <button
             type="button"
             disabled={lookupBusy}
             onClick={() => {
-              if (step === "org") void loadCompany();
+              if (step === "identity") {
+                if (identityVia === "document") setStep("doc");
+                else setStep("org");
+                return;
+              }
+              if (step === "org") {
+                if (seller === "private") openPrivate();
+                else void loadCompany();
+                return;
+              }
               else if (step === "person") {
                 const check = validatePersonnummer(pn);
                 if (!check.ok) return showToast(check.message);
@@ -617,7 +635,7 @@ export function BusinessSetup() {
             }}
             className="h-14 w-full rounded-full bg-brown text-base font-semibold text-paper disabled:opacity-50"
           >
-            {lookupBusy ? "Slår upp…" : step === "org" ? "Hämta företag" : step === "work" && photos.length === 0 ? "Hoppa över" : step === "preview" ? "Publicera som Demo" : "Nästa"}
+            {lookupBusy ? "Slår upp…" : step === "org" && seller === "company" ? "Hämta företag" : step === "work" && photos.length === 0 ? "Hoppa över" : step === "preview" ? "Publicera som Demo" : "Nästa"}
           </button>
         )}
       </div>
