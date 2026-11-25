@@ -30,7 +30,7 @@ function timeLabel(iso: string) {
 }
 
 export function NotificationsScreen() {
-  const go = useVelio((state) => state.go);
+  const goBack = useVelio((state) => state.goBack);
   const notes = useVelio((state) => state.appNotifications);
   const markNotificationRead = useVelio((state) => state.markNotificationRead);
   const openBookingFromNotification = useVelio((state) => state.openBookingFromNotification);
@@ -40,7 +40,7 @@ export function NotificationsScreen() {
   return (
     <div className="bg-cream">
       <div className="flex items-center gap-2 px-4 py-3">
-        <button type="button" aria-label="Tillbaka" onClick={() => go("home")} className="grid size-10 place-items-center">
+        <button type="button" aria-label="Tillbaka" onClick={goBack} className="grid size-10 place-items-center">
           <ArrowLeft className="size-5" />
         </button>
         <h1 className="flex-1 text-center font-serif text-[1.7rem] leading-none font-medium tracking-[0.08em]">Notiser</h1>

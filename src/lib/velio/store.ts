@@ -209,6 +209,7 @@ function syncDirectory(directory: Provider[]) {
 
 type VelioState = {
   screen: Screen;
+  navStack: Screen[];
   sheet: Sheet;
   loggedIn: boolean;
   loginIntro: boolean;
@@ -245,7 +246,8 @@ type VelioState = {
   posted: PostedJob[];
   activeBookingId: string | null;
   toast: string | null;
-  go: (screen: Screen) => void;
+  go: (screen: Screen, opts?: { replace?: boolean }) => void;
+  goBack: () => void;
   openService: (serviceId: ServiceId) => void;
   openProvider: (providerId: string) => void;
   openThread: (peerKey: string, opts?: { accountId?: string }) => void;
@@ -404,6 +406,7 @@ export const useVelio = create<VelioState>()(
   persist(
     (set, get) => ({
       screen: "home",
+      navStack: [],
       sheet: null,
       loggedIn: false,
       loginIntro: false,
@@ -444,23 +447,49 @@ export const useVelio = create<VelioState>()(
       posted: [],
       activeBookingId: null,
       toast: null,
-      go: (screen) =>
+      go: (screen, opts) => {
+        const current = get().screen;
+        const tabRoot = screen === "home" || screen === "inbox" || screen === "profile";
+        const replace = Boolean(opts?.replace) || tabRoot;
+        const navStack =
+          replace || screen === current
+            ? []
+            : [...get().navStack.filter((item) => item !== screen), current].slice(-16);
         set({
           screen,
+          navStack,
           // Always leave chat/provider sheets when switching tabs so Meddelanden shows the list.
           sheet: null,
           mapMode: screen === "service" ? get().mapMode : false,
-        }),
-      openService: (serviceId) =>
+        });
+      },
+      goBack: () => {
+        const stack = [...get().navStack];
+        const prev = stack.pop() ?? "home";
+        set({
+          screen: prev,
+          navStack: stack,
+          sheet: null,
+          mapMode: false,
+        });
+      },
+      openService: (serviceId) => {
+        const current = get().screen;
+        const navStack =
+          current === "service"
+            ? get().navStack
+            : [...get().navStack.filter((item) => item !== "service"), current].slice(-16);
         set({
           serviceId,
           screen: "service",
+          navStack,
           sheet: null,
           mapMode: false,
           area: null,
           sort: "best",
           time: "anytime",
-        }),
+        });
+      },
       openProvider: (providerId) => set({ providerId, sheet: "provider" }),
       openThread: (peerKey, opts) => {
         const marketplace = providerById(peerKey);
