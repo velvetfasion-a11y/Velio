@@ -265,6 +265,7 @@ export async function ensureAccount(user: User) {
   const profileRef = doc(db(), "profiles", uid);
   await runTransaction(db(), async (tx) => {
     const userSnap = await tx.get(userRef);
+    const profileSnap = await tx.get(profileRef);
     if (!userSnap.exists()) {
       const payload: Record<string, unknown> = {
         uid,
@@ -276,7 +277,6 @@ export async function ensureAccount(user: User) {
       if (email) payload.email = email;
       tx.set(userRef, payload);
     }
-    const profileSnap = await tx.get(profileRef);
     if (!profileSnap.exists()) {
       tx.set(profileRef, {
         uid,

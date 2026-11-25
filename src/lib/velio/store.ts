@@ -846,11 +846,20 @@ export const useVelio = create<VelioState>()(
                       avatar: get().profile.avatar,
                     },
                   });
-                } catch {
+                } catch (error) {
+                  const { authErrorSv, signOutFirebase } = await import("@/lib/firebase/auth");
+                  const { stopCloudSession } = await import("@/lib/firebase/cloud");
+                  stopCloudSession();
+                  try {
+                    await signOutFirebase();
+                  } catch {
+                    /* Already signed out. */
+                  }
                   set({
                     authReady: true,
-                    authError: "Kunde inte öppna kontot just nu.",
-                    loggedIn: Boolean(user),
+                    authError: authErrorSv(error),
+                    loggedIn: false,
+                    accountId: null,
                   });
                 } finally {
                   if (first) {
@@ -1077,6 +1086,7 @@ export const useVelio = create<VelioState>()(
         setProviders([]);
         set({
           loggedIn: false,
+          authError: null,
           screen: "home",
           sheet: null,
           accountId: null,
@@ -1138,6 +1148,7 @@ export const useVelio = create<VelioState>()(
         })();
         set({
           loggedIn: false,
+          authError: null,
           screen: "home",
           sheet: null,
           accountId: null,
