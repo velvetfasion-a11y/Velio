@@ -71,8 +71,10 @@ export function ProviderSheet() {
   const loggedIn = useVelio((state) => state.loggedIn);
   const go = useVelio((state) => state.go);
   const setAccountMode = useVelio((state) => state.setAccountMode);
-  const [saved, setSaved] = useState(false);
+  const favorites = useVelio((state) => state.favorites);
+  const toggleFavorite = useVelio((state) => state.toggleFavorite);
   const provider = providerById(providerId);
+  const saved = provider ? favorites.includes(provider.id) : false;
   if (!provider) return null;
   const own = ownBusiness({ accountId, directory, loggedIn });
   const mine = own?.id === provider.id;
@@ -104,7 +106,7 @@ export function ProviderSheet() {
             <button
               type="button"
               aria-label={saved ? `Ta bort ${provider.name}` : `Spara ${provider.name}`}
-              onClick={() => setSaved((value) => !value)}
+              onClick={() => provider && toggleFavorite(provider.id)}
               className="grid size-10 place-items-center rounded-full border border-paper/50"
             >
               <Heart className={saved ? "size-5 fill-paper" : "size-5"} />
@@ -1803,8 +1805,12 @@ export function BookSheet() {
   const providerId = useVelio((state) => state.providerId);
   const closeSheet = useVelio((state) => state.closeSheet);
   const confirmBook = useVelio((state) => state.confirmBook);
+  const addresses = useVelio((state) => state.addresses);
+  const go = useVelio((state) => state.go);
   const provider = providerById(providerId);
   const [when, setWhen] = useState<(typeof whenOptions)[number]>(whenOptions[0]);
+  const primary = addresses.find((item) => item.primary) ?? addresses[0];
+  const [placeId, setPlaceId] = useState(primary?.id ?? "");
   if (!provider) return null;
   const service = serviceById(provider.serviceId);
   const first = provider.name.split(" ")[0];
@@ -1847,9 +1853,33 @@ export function BookSheet() {
           </select>
           <ChevronDown className="pointer-events-none absolute top-1/2 right-4 size-4 -translate-y-1/2 text-[#8a847e]" />
         </div>
+        <p className="mt-4 mb-1.5 text-[15px] font-semibold">Adress</p>
+        {addresses.length ? (
+          <div className="space-y-2">
+            {addresses.map((item) => {
+              const active = (placeId || primary?.id) === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setPlaceId(item.id)}
+                  className={cn("block w-full rounded-[1.15rem] border px-4 py-3 text-left text-sm", active ? "border-[#8a6a3d] bg-[#f6f1ea]" : "border-[#e6e1db] bg-white")}
+                >
+                  <span className="font-semibold">{item.label}</span>
+                  <span className="mt-0.5 block text-[#5c564f]">{item.line}</span>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <button type="button" onClick={() => go("addresses")} className="h-11 w-full rounded-full border border-[#e6e1db] text-sm font-semibold">
+            Lägg till en adress
+          </button>
+        )}
         <button
           type="button"
-          onClick={() => confirmBook(when)}
+          onClick={() => confirmBook(when, addresses.find((item) => item.id === (placeId || primary?.id))?.line)}
           className="mt-3.5 h-12 w-full rounded-full bg-[#2a211c] text-[16px] font-semibold text-white"
         >
           Reservera

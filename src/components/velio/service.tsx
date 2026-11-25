@@ -97,6 +97,8 @@ export function ServiceScreen() {
   const directory = useVelio((state) => state.directory);
   const openThread = useVelio((state) => state.openThread);
   const go = useVelio((state) => state.go);
+  const favorites = useVelio((state) => state.favorites);
+  const toggleFavorite = useVelio((state) => state.toggleFavorite);
   const locationOn = useVelio((state) => state.locationOn);
   const userLocation = useVelio((state) => state.userLocation);
   const showToast = useVelio((state) => state.showToast);
@@ -104,7 +106,6 @@ export function ServiceScreen() {
   const [menu, setMenu] = useState<"time" | "place" | "tags" | null>(null);
   const [tag, setTag] = useState<string | null>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
-  const [saved, setSaved] = useState<Record<string, boolean>>({});
   const [quick, setQuick] = useState<"today" | "tomorrow" | null>(null);
   const [picked, setPicked] = useState<Date | null>(null);
   const [hour, setHour] = useState<string | null>(null);
@@ -401,10 +402,10 @@ export function ServiceScreen() {
                       </button>
                       <button
                         type="button"
-                        aria-label={saved[person.id] ? `Ta bort ${person.name}` : `Spara ${person.name}`}
-                        onClick={() => setSaved((current) => ({ ...current, [person.id]: !current[person.id] }))}
+                        aria-label={favorites.includes(person.id) ? `Ta bort ${person.name}` : `Spara ${person.name}`}
+                        onClick={() => toggleFavorite(person.id)}
                       >
-                        <Heart className={cn("size-5", saved[person.id] && "fill-ink")} />
+                        <Heart className={cn("size-5", favorites.includes(person.id) && "fill-ink")} />
                       </button>
                     </div>
                     <div className="mt-0.5 flex items-start justify-between gap-2">

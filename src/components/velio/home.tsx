@@ -108,9 +108,10 @@ export function Home() {
   const go = useVelio((state) => state.go);
   const profile = useVelio((state) => state.profile);
   const directory = useVelio((state) => state.directory);
+  const favorites = useVelio((state) => state.favorites);
+  const toggleFavorite = useVelio((state) => state.toggleFavorite);
   const firstName = greetingName(profile.name);
   const [showAll, setShowAll] = useState(false);
-  const [saved, setSaved] = useState<Record<string, boolean>>({});
   const query = search.trim().toLowerCase();
   const cards = popular.filter((item) => !query || item.label.toLowerCase().includes(query));
   const extra = services.filter((service) => !popular.some((item) => item.id === service.id));
@@ -245,8 +246,8 @@ export function Home() {
                 rating={provider.rating}
                 reviews={provider.reviews}
                 photo={provider.photo ?? ""}
-                saved={Boolean(saved[provider.id])}
-                onSave={() => setSaved((current) => ({ ...current, [provider.id]: !current[provider.id] }))}
+                saved={favorites.includes(provider.id)}
+                onSave={() => toggleFavorite(provider.id)}
                 onOpen={() => useVelio.getState().openProvider(provider.id)}
               />
             ))}

@@ -67,7 +67,9 @@ export type Screen =
   | "business"
   | "verify-id"
   | "settings"
-  | "help";
+  | "help"
+  | "favorites"
+  | "addresses";
 
 export type AppNotification = {
   id: string;
@@ -188,6 +190,13 @@ export type BusinessForm = {
 
 export type Profile = { name: string; phone: string; email: string; avatar?: string };
 
+export type SavedAddress = {
+  id: string;
+  label: string;
+  line: string;
+  primary?: boolean;
+};
+
 export type PostedJob = {
   id: string;
   serviceId: ServiceId;
@@ -291,6 +300,8 @@ const screens: Screen[] = [
   "verify-id",
   "settings",
   "help",
+  "favorites",
+  "addresses",
 ];
 
 const sheets: Exclude<Sheet, null>[] = [
@@ -312,6 +323,12 @@ const sheets: Exclude<Sheet, null>[] = [
   "pay",
   "rate",
 ];
+
+function isSavedAddress(value: unknown): value is SavedAddress {
+  if (!value || typeof value !== "object") return false;
+  const item = value as SavedAddress;
+  return typeof item.id === "string" && typeof item.label === "string" && typeof item.line === "string";
+}
 
 function isScreen(value: unknown): value is Screen {
   return typeof value === "string" && screens.includes(value as Screen);
@@ -355,6 +372,8 @@ type VelioState = {
   idVerified: boolean;
   idMethod: string | null;
   profile: Profile;
+  favorites: string[];
+  addresses: SavedAddress[];
   cards: PayCard[];
   cart: CartItem[];
   chats: Record<string, ChatMsg[]>;
@@ -404,6 +423,10 @@ type VelioState = {
   openBookingFromNotification: (bookingId: string) => void;
   setProfile: (profile: Profile) => void;
   setAvatar: (avatar: string) => void;
+  toggleFavorite: (providerId: string) => void;
+  addAddress: (input: { label: string; line: string }) => boolean;
+  removeAddress: (id: string) => void;
+  makePrimaryAddress: (id: string) => void;
   addCard: (card: PayCard) => void;
   addToCart: () => void;
   removeFromCart: (id: string) => void;
@@ -412,7 +435,7 @@ type VelioState = {
   sendChat: (text: string) => void;
   appendChat: (providerId: string, message: ChatMsg) => void;
   answerRebook: (providerId: string, messageId: string, status: "accepted" | "declined") => void;
-  confirmBook: (whenLabel: string) => void;
+  confirmBook: (whenLabel: string, location?: string) => void;
   openReceipt: (id: string) => void;
   rebook: (bookingId: string) => void;
   cancelActive: () => void;
@@ -565,6 +588,8 @@ export const useVelio = create<VelioState>()(
         phone: "",
         email: "",
       },
+      favorites: [],
+      addresses: [],
       cards: [],
       cart: seedCart,
       chats: {},
@@ -957,6 +982,7 @@ export const useVelio = create<VelioState>()(
           accountMode: "customer",
           providerId: null,
           sheet: null,
+          favorites: own ? get().favorites.filter((id) => id !== own.id) : get().favorites,
         });
         if (typeof window !== "undefined" && isStaticHost()) localSetAccountMode("customer");
         get().showToast("VELIO Business är borttaget");
@@ -990,6 +1016,8 @@ export const useVelio = create<VelioState>()(
           idVerified: false,
           idMethod: null,
           profile: { name: "", phone: "", email: "" },
+          favorites: [],
+          addresses: [],
         });
       },
       allowLocation: async () => {
@@ -1106,6 +1134,39 @@ export const useVelio = create<VelioState>()(
         const directory = get().directory.map((item) => (item.id === own.id ? { ...item, photo: avatar } : item));
         syncDirectory(directory);
         set({ directory });
+      },
+      toggleFavorite: (providerId) => {
+        const current = get().favorites;
+        const saved = current.includes(providerId);
+        set({ favorites: saved ? current.filter((id) => id !== providerId) : [providerId, ...current] });
+        get().showToast(saved ? "Borttagen från favoriter" : "Sparad i favoriter");
+      },
+      addAddress: ({ label, line }) => {
+        const nextLine = line.trim();
+        const nextLabel = label.trim() || "Hem";
+        if (nextLine.length < 3) return false;
+        const addresses = get().addresses;
+        if (addresses.some((item) => item.line.toLowerCase() === nextLine.toLowerCase())) {
+          get().showToast("Adressen finns redan");
+          return false;
+        }
+        set({
+          addresses: [
+            ...addresses,
+            { id: uid(), label: nextLabel, line: nextLine, primary: addresses.length === 0 },
+          ],
+        });
+        get().showToast("Adressen är sparad");
+        return true;
+      },
+      removeAddress: (id) => {
+        const addresses = get().addresses.filter((item) => item.id !== id);
+        if (addresses.length && !addresses.some((item) => item.primary)) addresses[0] = { ...addresses[0], primary: true };
+        set({ addresses });
+        get().showToast("Adressen är borttagen");
+      },
+      makePrimaryAddress: (id) => {
+        set({ addresses: get().addresses.map((item) => ({ ...item, primary: item.id === id })) });
       },
       addCard: (card) => set({ cards: [...get().cards, card] }),
       addToCart: () => {
@@ -1342,9 +1403,10 @@ export const useVelio = create<VelioState>()(
           get().showToast("Förfrågan skickad till kunden");
         })();
       },
-      confirmBook: (whenLabel) => {
+      confirmBook: (whenLabel, location) => {
         const provider = providerById(get().providerId);
         if (!provider) return;
+        const primary = get().addresses.find((item) => item.primary) ?? get().addresses[0];
         const booking: Booking = {
           id: uid(),
           serviceId: provider.serviceId,
@@ -1353,7 +1415,7 @@ export const useVelio = create<VelioState>()(
           cost: provider.price,
           holdKr: provider.price,
           tip: null,
-          location: get().userLocation?.label || provider.area,
+          location: location?.trim() || primary?.line || get().userLocation?.label || provider.area,
           rating: null,
           status: "requested",
         };
@@ -1588,6 +1650,8 @@ export const useVelio = create<VelioState>()(
         directory: state.directory,
         listing: state.listing,
         profile: state.profile,
+        favorites: state.favorites,
+        addresses: state.addresses,
         cards: state.cards,
         accountMode: state.accountMode,
         idVerified: state.idVerified,
@@ -1639,6 +1703,8 @@ export const useVelio = create<VelioState>()(
           appNotifications,
           bookings,
           posted: saved.posted ?? [],
+          favorites: Array.isArray(saved.favorites) ? saved.favorites.filter((id) => typeof id === "string") : [],
+          addresses: Array.isArray(saved.addresses) ? saved.addresses.filter(isSavedAddress) : [],
           directory,
           cart: [],
           notifications: saved.notifications === true && notificationsAllowed,

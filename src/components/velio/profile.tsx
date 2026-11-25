@@ -21,10 +21,10 @@ import {
   TrendingUp,
   User,
 } from "lucide-react";
-import { contactEmail, isSignInEmail, kr, publicDisplayName, serviceById } from "@/lib/velio/data";
+import { contactEmail, isSignInEmail, kr, providerTradeNames, publicDisplayName, serviceById } from "@/lib/velio/data";
 import { HistoryCard } from "@/components/velio/history";
 import { VerifyIdScreen } from "@/components/velio/verify-id";
-import { ownBusiness, useVelio, type Booking } from "@/lib/velio/store";
+import { ownBusiness, useVelio, type Booking, type SavedAddress } from "@/lib/velio/store";
 import { cn } from "@/lib/cn";
 import { Btn, Field, ProfilePhoto, ScreenHeader } from "@/components/velio/ui";
 import { asset } from "@/lib/velio/asset";
@@ -40,11 +40,15 @@ const faqs: { q: string; a: string; settings?: boolean }[] = [
     a: "Öppna Inställningar och välj Radera VELIO Business. Företagsprofilen och uppdrag du tar som utförare försvinner. Ditt kundkonto är kvar.",
     settings: true,
   },
-  {
-    q: "Hur ändrar jag namn eller e-post?",
-    a: "Öppna Inställningar. Skriv i fältet och tryck Spara till höger om just det fältet.",
-    settings: true,
-  },
+    {
+      q: "Hur ändrar jag namn eller e-post?",
+      a: "Öppna Inställningar. Skriv i fältet och tryck Spara till höger om just det fältet.",
+      settings: true,
+    },
+    {
+      q: "Var finns favoriter och adresser?",
+      a: "Öppna Profil. Under Snabbval finns Favoriter och Adresser. Tryck på hjärtat hos en utförare för att spara personen. Under Adresser skriver du namn och adress och trycker Spara.",
+    },
     {
       q: "Hur sätter jag på notifikationer?",
       a: "Öppna Inställningar och tryck på Notifikationer. Välj Sätt på notifikationer och tillåt aviseringar när telefonen frågar. Står det att det inte gick, kontakta support.",
@@ -84,6 +88,76 @@ export function BookingRows({ items, onOpen }: { items: Booking[]; onOpen: (id: 
   );
 }
 
+function AddressScreen({
+  addresses,
+  onAdd,
+  onRemove,
+  onPrimary,
+}: {
+  addresses: SavedAddress[];
+  onAdd: (input: { label: string; line: string }) => boolean;
+  onRemove: (id: string) => void;
+  onPrimary: (id: string) => void;
+}) {
+  const [label, setLabel] = useState("Hem");
+  const [line, setLine] = useState("");
+  const showToast = useVelio((state) => state.showToast);
+  return (
+    <div className="px-4 pt-4">
+      <ScreenHeader title="Adresser" />
+      <div className="rounded-[1.3rem] border border-[#efeae4] bg-white/80 p-4">
+        <p className="text-sm text-[#5c564f]">Spara hem, jobb eller en annan plats. Den används när du bokar.</p>
+        <label className="mt-3 block text-sm font-medium">Namn</label>
+        <input value={label} onChange={(event) => setLabel(event.target.value)} placeholder="Hem" className="mt-1 h-11 w-full rounded-full border border-[#e6dfd6] px-4 text-sm outline-none" />
+        <label className="mt-3 block text-sm font-medium">Adress</label>
+        <input value={line} onChange={(event) => setLine(event.target.value)} placeholder="Gata, postnummer och ort" className="mt-1 h-11 w-full rounded-full border border-[#e6dfd6] px-4 text-sm outline-none" />
+        <button
+          type="button"
+          onClick={() => {
+            if (line.trim().length < 3) {
+              showToast("Skriv gata, postnummer och ort");
+              return;
+            }
+            if (onAdd({ label, line })) {
+              setLine("");
+            }
+          }}
+          className="mt-3 h-11 rounded-full bg-[#2a211c] px-5 text-sm font-semibold text-white"
+        >
+          Spara
+        </button>
+      </div>
+      {addresses.length ? (
+        <div className="mt-4 space-y-3">
+          {addresses.map((item) => (
+            <article key={item.id} className="rounded-[1.3rem] border border-[#efeae4] bg-white/80 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-semibold">{item.label}</p>
+                  <p className="mt-1 text-sm text-[#5c564f]">{item.line}</p>
+                </div>
+                {item.primary ? <span className="shrink-0 rounded-full bg-[#e7f3e4] px-2 py-0.5 text-[11px] text-[#2f7a3a]">Standard</span> : null}
+              </div>
+              <div className="mt-3 flex gap-2">
+                {item.primary ? null : (
+                  <button type="button" onClick={() => onPrimary(item.id)} className="h-9 rounded-full border border-[#e6dfd6] px-3 text-sm font-semibold">
+                    Gör till standard
+                  </button>
+                )}
+                <button type="button" onClick={() => onRemove(item.id)} className="h-9 rounded-full border border-[#e6dfd6] px-3 text-sm font-semibold">
+                  Ta bort
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-4 text-sm text-muted">Ingen adress sparad ännu.</p>
+      )}
+    </div>
+  );
+}
+
 export function ProfileScreens() {
   const screen = useVelio((state) => state.screen);
   const go = useVelio((state) => state.go);
@@ -97,6 +171,13 @@ export function ProfileScreens() {
   const posted = useVelio((state) => state.posted);
   const accountId = useVelio((state) => state.accountId);
   const directory = useVelio((state) => state.directory);
+  const favorites = useVelio((state) => state.favorites);
+  const addresses = useVelio((state) => state.addresses);
+  const openProvider = useVelio((state) => state.openProvider);
+  const toggleFavorite = useVelio((state) => state.toggleFavorite);
+  const addAddress = useVelio((state) => state.addAddress);
+  const removeAddress = useVelio((state) => state.removeAddress);
+  const makePrimaryAddress = useVelio((state) => state.makePrimaryAddress);
   const openReceipt = useVelio((state) => state.openReceipt);
   const listing = useVelio((state) => state.listing);
   const accountMode = useVelio((state) => state.accountMode);
@@ -177,6 +258,52 @@ export function ProfileScreens() {
         <BookingRows items={bookings} onOpen={openReceipt} />
       </div>
     );
+  }
+
+  if (screen === "favorites") {
+    const people = favorites
+      .map((id) => directory.find((person) => person.id === id))
+      .filter((person): person is NonNullable<typeof person> => Boolean(person));
+    return (
+      <div className="px-4 pt-4">
+        <ScreenHeader title="Favoriter" />
+        {people.length ? (
+          <div className="space-y-3">
+            {people.map((person) => (
+              <article key={person.id} className="flex items-center gap-3 rounded-[1.3rem] border border-[#efeae4] bg-white/80 p-3">
+                <button type="button" onClick={() => openProvider(person.id)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+                  {person.photo ? (
+                    <img src={person.photo} alt="" className="size-14 shrink-0 rounded-2xl object-cover" />
+                  ) : (
+                    <span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-[#f3ece3] font-serif text-xl">{person.initials}</span>
+                  )}
+                  <span className="min-w-0">
+                    <span className="block truncate font-semibold">{person.name}</span>
+                    <span className="mt-0.5 block truncate text-sm text-[#5c564f]">{providerTradeNames(person).join(" · ") || serviceById(person.serviceId)?.name}</span>
+                    <span className="mt-0.5 block text-sm">fr. {kr(person.price)}</span>
+                  </span>
+                </button>
+                <button type="button" aria-label={`Ta bort ${person.name}`} onClick={() => toggleFavorite(person.id)} className="grid size-10 shrink-0 place-items-center">
+                  <Heart className="size-5 fill-ink" />
+                </button>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-[1.3rem] border border-[#efeae4] bg-white/80 px-4 py-8 text-center">
+            <p className="font-semibold">Inga favoriter ännu</p>
+            <p className="mt-1 text-sm text-muted">Öppna en utförare och tryck på hjärtat. Personen hamnar här.</p>
+            <button type="button" onClick={() => go("home")} className="mt-4 h-11 rounded-full bg-[#6e5636] px-5 text-sm font-semibold text-white">
+              Hitta utförare
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (screen === "addresses") {
+    return <AddressScreen addresses={addresses} onAdd={addAddress} onRemove={removeAddress} onPrimary={makePrimaryAddress} />;
   }
 
   if (screen === "posted") {
@@ -651,8 +778,8 @@ export function ProfileScreens() {
   const quick = [
     { icon: Calendar, label: "Bokningar", badge: bookings.length, onClick: () => go("bookings") },
     { icon: ClipboardList, label: "Mina uppdrag", badge: posted.filter((job) => !accountId || job.ownerId === accountId).length, onClick: () => go("posted") },
-    { icon: Heart, label: "Favoriter", onClick: () => showToast("Inga sparade favoriter ännu") },
-    { icon: MapPin, label: "Adresser", onClick: () => showToast("Lägg till en adress under Redigera profil snart") },
+    { icon: Heart, label: "Favoriter", badge: favorites.length, onClick: () => go("favorites") },
+    { icon: MapPin, label: "Adresser", badge: addresses.length, onClick: () => go("addresses") },
   ];
   const rows = [
     { icon: User, label: "Redigera profil", onClick: () => go("settings") },
