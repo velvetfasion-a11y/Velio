@@ -2099,22 +2099,45 @@ export function LocationSheet() {
 
 export function BankIdSheet() {
   const closeSheet = useVelio((state) => state.closeSheet);
-  const login = useVelio((state) => state.login);
+  const applyMe = useVelio((state) => state.applyMe);
+  const showToast = useVelio((state) => state.showToast);
   const [phase, setPhase] = useState<"wait" | "ready">("wait");
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setPhase("ready"), 900);
     return () => window.clearTimeout(timer);
   }, []);
 
+  const confirm = async () => {
+    if (busy || phase !== "ready") return;
+    setBusy(true);
+    try {
+      const { isStaticHost, localBankIdSignIn, localMePayload } = await import("@/lib/velio/local-auth");
+      if (isStaticHost()) {
+        applyMe(localMePayload(localBankIdSignIn()));
+      } else {
+        const { loginWithBankId } = await import("@/lib/velio/auth-api");
+        const me = await loginWithBankId();
+        if (!me.authenticated) throw new Error("BankID-inloggning misslyckades");
+        applyMe(me);
+      }
+      showToast("Inloggad med BankID");
+      closeSheet();
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "BankID misslyckades");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <BottomSheet title="BankID" onClose={closeSheet}>
-      <p className="mb-2 text-sm leading-relaxed text-muted">
-        {phase === "wait" ? "Öppnar BankID…" : "Godkänn inloggningen för Anna Karlsson."}
+      <p className="mb-4 text-sm leading-relaxed text-muted">
+        {phase === "wait" ? "Öppnar BankID…" : "Godkänn inloggningen i BankID-appen."}
       </p>
-      <p className="mb-4 text-xs text-muted">Demo. Ingen riktig identifiering görs.</p>
-      <Btn disabled={phase !== "ready"} onClick={login}>
-        Godkänn
+      <Btn disabled={phase !== "ready" || busy} onClick={() => void confirm()}>
+        {busy ? "Loggar in…" : "Godkänn"}
       </Btn>
       <Btn variant="secondary" className="mt-2" onClick={closeSheet}>
         Avbryt

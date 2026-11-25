@@ -182,6 +182,23 @@ export async function verifySmsOtp(input: {
   return fetchMe();
 }
 
+export async function loginWithBankId(input?: {
+  name?: string;
+  personalNumber?: string;
+}): Promise<MeResponse> {
+  const response = await fetch(apiPath("/api/auth/bankid/login"), {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input ?? {}),
+  });
+  if (!response.ok) {
+    const data = await json<{ message?: string }>(response);
+    throw new Error(data.message || "BankID-inloggning misslyckades");
+  }
+  return fetchMe();
+}
+
 export async function startBankIdVerification(personalNumber?: string) {
   const response = await fetch(apiPath("/api/auth/id/bankid/start"), {
     method: "POST",

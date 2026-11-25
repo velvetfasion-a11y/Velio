@@ -193,7 +193,7 @@ export async function createAccount(input: {
   const phone = input.phone.trim();
   if (name.length < 2) throw new Error("invalid_name");
   if (email && (email.length < 5 || !email.includes("@"))) throw new Error("invalid_email");
-  if (!email && input.provider !== "phone") throw new Error("invalid_email");
+  if (!email && input.provider !== "phone" && input.provider !== "bankid") throw new Error("invalid_email");
   if (phone.length < 6 && input.provider === "phone") throw new Error("invalid_phone");
 
   const wantsBusiness = input.accountMode === "business";
@@ -304,6 +304,38 @@ export async function loginOrCreateVerifiedPhone(input: {
     phone,
     accountMode: "customer",
     phoneVerified: true,
+  });
+  return { ...result, created: true };
+}
+
+export async function loginOrCreateBankId(input: {
+  name?: string;
+  personalNumber?: string;
+}): Promise<{ account: Account; token: string; created: boolean }> {
+  const personal = (input.personalNumber || "").replace(/\D/g, "");
+  if (personal && personal.length !== 10 && personal.length !== 12) {
+    throw new Error("invalid_personal_number");
+  }
+  const providerId = personal ? `pn-${personal}` : `bid-${randomUUID().slice(0, 10)}`;
+  const existing = personal ? await getAccountByProviderId(providerId) : null;
+  if (existing) {
+    await sql(
+      `update accounts set provider = 'bankid', id_verified = true, id_method = 'bankid',
+              name = coalesce(nullif($2,''), name)
+       where id = $1`,
+      [existing.id, input.name?.trim() || ""],
+    );
+    const result = await loginWithAccountId(existing.id);
+    return { ...result, created: false };
+  }
+  const result = await createAccount({
+    provider: "bankid",
+    name: input.name?.trim() || "BankID-användare",
+    email: "",
+    phone: "",
+    providerId,
+    idVerified: true,
+    idMethod: "bankid",
   });
   return { ...result, created: true };
 }

@@ -243,6 +243,45 @@ export async function localVerifySmsOtp(input: {
   return account;
 }
 
+export function localBankIdSignIn(input?: { name?: string; personalNumber?: string }): LocalAccount {
+  const personal = (input?.personalNumber || "").replace(/\D/g, "");
+  const name = input?.name?.trim() || "BankID-användare";
+  const providerId = personal ? `pn-${personal}` : `bid-${uid()}`;
+  const accounts = readAccounts();
+  let account = accounts.find((a) => a.provider === "bankid" && a.providerId === providerId);
+  if (!account && personal) {
+    account = accounts.find((a) => a.provider === "bankid" && a.providerId === `pn-${personal}`);
+  }
+  if (!account) {
+    account = {
+      id: uid(),
+      provider: "bankid",
+      name,
+      email: `${uid()}@bankid.velio.local`,
+      phone: "",
+      providerId,
+      accountMode: "customer",
+      emailVerified: false,
+      phoneVerified: false,
+      idVerified: true,
+      idMethod: "bankid",
+    };
+    accounts.push(account);
+  } else {
+    account = {
+      ...account,
+      name: name || account.name,
+      idVerified: true,
+      idMethod: "bankid",
+    };
+    const idx = accounts.findIndex((a) => a.id === account!.id);
+    accounts[idx] = account;
+  }
+  writeAccounts(accounts);
+  localStorage.setItem(SESSION_KEY, account.id);
+  return account;
+}
+
 export function localGoogleSignIn(email: string, name: string, providerId?: string): LocalAccount {
   const accounts = readAccounts();
   let account = accounts.find((a) => a.email === email.toLowerCase());

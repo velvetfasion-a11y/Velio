@@ -4,6 +4,7 @@ import { useVelio } from "@/lib/velio/store";
 import {
   fetchAuthCapabilities,
   fetchMe,
+  loginWithBankId,
   startEmailOtp,
   startSmsOtp,
   verifyEmailOtp,
@@ -11,6 +12,7 @@ import {
 } from "@/lib/velio/auth-api";
 import {
   isStaticHost,
+  localBankIdSignIn,
   localGoogleSignIn,
   localMePayload,
   localStartEmailOtp,
@@ -20,7 +22,7 @@ import {
 } from "@/lib/velio/local-auth";
 import { googleGisAvailable, signInWithGoogleGis } from "@/lib/velio/google-gis";
 
-type Step = "methods" | "email" | "email-code" | "phone" | "phone-code";
+type Step = "methods" | "bankid" | "bankid-confirm" | "email" | "email-code" | "phone" | "phone-code";
 
 export function LoginScreen() {
   const applyMe = useVelio((state) => state.applyMe);
@@ -37,6 +39,8 @@ export function LoginScreen() {
   const [hint, setHint] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const [caps, setCaps] = useState({ google: false, email: false, sms: false });
+  const [personalNumber, setPersonalNumber] = useState("");
+  const [bankPhase, setBankPhase] = useState<"wait" | "ready">("wait");
   const staticHost = typeof window !== "undefined" && isStaticHost();
 
   useEffect(() => {
@@ -57,6 +61,13 @@ export function LoginScreen() {
     }
   }, [staticHost]);
 
+  useEffect(() => {
+    if (step !== "bankid-confirm") return;
+    setBankPhase("wait");
+    const timer = window.setTimeout(() => setBankPhase("ready"), 900);
+    return () => window.clearTimeout(timer);
+  }, [step]);
+
   const back = () => {
     setLocalError(null);
     setHint(null);
@@ -64,7 +75,45 @@ export function LoginScreen() {
     setCode("");
     if (step === "email-code") setStep("email");
     else if (step === "phone-code") setStep("phone");
+    else if (step === "bankid-confirm") setStep("bankid");
     else setStep("methods");
+  };
+
+  const startBankId = () => {
+    setLocalError(null);
+    const digits = personalNumber.replace(/\D/g, "");
+    if (digits && digits.length !== 10 && digits.length !== 12) {
+      setLocalError("Ange personnummer som ÅÅÅÅMMDDXXXX.");
+      return;
+    }
+    setStep("bankid-confirm");
+  };
+
+  const confirmBankId = async () => {
+    if (busy || bankPhase !== "ready") return;
+    setBusy(true);
+    setLocalError(null);
+    setAuthError(null);
+    try {
+      if (staticHost) {
+        const account = localBankIdSignIn({
+          name: name.trim() || undefined,
+          personalNumber: personalNumber || undefined,
+        });
+        applyMe(localMePayload(account));
+        return;
+      }
+      const me = await loginWithBankId({
+        name: name.trim() || undefined,
+        personalNumber: personalNumber || undefined,
+      });
+      if (!me.authenticated) throw new Error("BankID-inloggning misslyckades");
+      applyMe(me);
+    } catch (error) {
+      setLocalError(error instanceof Error ? error.message : "BankID-inloggning misslyckades");
+    } finally {
+      setBusy(false);
+    }
   };
 
   const onGoogle = async () => {
@@ -232,16 +281,58 @@ export function LoginScreen() {
           <>
             <h1 className="mt-8 text-center font-serif text-[2.7rem] leading-none font-medium text-[#2a211c]">Logga in</h1>
             <p className="mx-auto mt-3 max-w-[17rem] text-center text-sm leading-snug text-[#6e6964]">
-              Google, e-post med engångskod eller mobil med SMS. Business kräver ID-verifiering.
+              BankID, Google, e-post med engångskod eller mobil med SMS.
             </p>
 
             <div className="mt-8 rounded-[1.7rem] border border-white/80 bg-white/45 p-3 shadow-[0_18px_50px_rgba(70,50,20,0.08)] backdrop-blur-xl">
               <div className="space-y-2.5">
+                <Method label="Fortsätt med BankID" onClick={() => setStep("bankid")} icon={<BankIdMark />} disabled={busy} />
                 <Method label="Fortsätt med Google" onClick={() => void onGoogle()} icon={<GoogleMark />} disabled={busy} />
                 <Method label="Fortsätt med e-post" onClick={() => setStep("email")} icon={<MailMark />} disabled={busy} />
                 <Method label="Fortsätt med mobilnummer" onClick={() => setStep("phone")} icon={<PhoneMark />} disabled={busy} />
               </div>
             </div>
+          </>
+        ) : null}
+
+        {step === "bankid" || step === "bankid-confirm" ? (
+          <>
+            <h1 className="mt-4 text-center font-serif text-[2.2rem] leading-none font-medium text-[#2a211c]">BankID</h1>
+            <p className="mx-auto mt-3 max-w-[18rem] text-center text-sm leading-snug text-[#6e6964]">
+              {step === "bankid"
+                ? "Identifiera dig säkert med BankID för att logga in."
+                : bankPhase === "wait"
+                  ? "Öppnar BankID…"
+                  : "Godkänn inloggningen i BankID-appen."}
+            </p>
+            {step === "bankid" ? (
+              <div className="mt-5 space-y-3">
+                <Field label="Namn (valfritt)" value={name} onChange={setName} placeholder="För- och efternamn" />
+                <Field
+                  label="Personnummer (valfritt)"
+                  value={personalNumber}
+                  onChange={setPersonalNumber}
+                  placeholder="ÅÅÅÅMMDDXXXX"
+                />
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={startBankId}
+                  className="mt-2 h-12 w-full rounded-full bg-[#F7C948] text-[15px] font-semibold text-[#1a1a1a] disabled:opacity-60"
+                >
+                  Starta BankID
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                disabled={busy || bankPhase !== "ready"}
+                onClick={() => void confirmBankId()}
+                className="mt-5 h-12 w-full rounded-full bg-[#F7C948] text-[15px] font-semibold text-[#1a1a1a] disabled:opacity-60"
+              >
+                {busy ? "Loggar in…" : bankPhase === "wait" ? "Öppnar BankID…" : "Godkänn och logga in"}
+              </button>
+            )}
           </>
         ) : null}
 
@@ -377,6 +468,21 @@ function Method({
       <span className="grid size-6 shrink-0 place-items-center">{icon}</span>
       <span className="-ml-6 flex-1 text-center">{label}</span>
     </button>
+  );
+}
+
+function BankIdMark() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-6" aria-hidden="true">
+      <rect x="2" y="2" width="20" height="20" rx="6" fill="#F7C948" />
+      <path
+        d="M8 12.2c1.2-2.4 2.2-3.6 4-3.6 1.6 0 2.4 1 2.4 2.3 0 2.6-6.2 1.2-6.2 4.2 0 1 .8 1.7 2 1.7 1.5 0 2.6-1 3.6-2.6"
+        fill="none"
+        stroke="#1a1a1a"
+        strokeWidth="1.7"
+        strokeLinecap="round"
+      />
+    </svg>
   );
 }
 
