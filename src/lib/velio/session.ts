@@ -330,7 +330,7 @@ export async function loginOrCreateBankId(input: {
   }
   const result = await createAccount({
     provider: "bankid",
-    name: input.name?.trim() || "BankID-användare",
+    name: input.name?.trim() || "Användare",
     email: "",
     phone: "",
     providerId,

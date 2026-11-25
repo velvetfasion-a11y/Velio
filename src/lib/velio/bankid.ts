@@ -86,7 +86,7 @@ export async function bankIdCollect(orderRef: string): Promise<BankIdCollect> {
   if (data.status === "complete") {
     const user = data.completionData?.user;
     const personalNumber = user?.personalNumber || "";
-    const name = user?.name || [user?.givenName, user?.surname].filter(Boolean).join(" ") || "BankID-användare";
+    const name = user?.name || [user?.givenName, user?.surname].filter(Boolean).join(" ") || "Användare";
     if (!personalNumber && !user?.name) {
       throw new Error("BankID returnerade ingen användaridentitet.");
     }

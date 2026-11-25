@@ -245,7 +245,7 @@ export async function localVerifySmsOtp(input: {
 
 export function localBankIdSignIn(input?: { name?: string; personalNumber?: string }): LocalAccount {
   const personal = (input?.personalNumber || "").replace(/\D/g, "");
-  const name = input?.name?.trim() || "BankID-användare";
+  const name = input?.name?.trim() || "Användare";
   const providerId = personal ? `pn-${personal}` : `bid-${uid()}`;
   const accounts = readAccounts();
   let account = accounts.find((a) => a.provider === "bankid" && a.providerId === providerId);

@@ -71,6 +71,11 @@
   }
 }
 
+/* Keep the -50% X centering after the animation ends (otherwise toast jumps right). */
+.toast-in {
+  animation: toast-drop 0.28s ease both;
+}
+
 @keyframes velio-klart {
   0% {
     opacity: 0;
@@ -101,10 +106,6 @@
 
 .sheet-in {
   animation: sheet-up 0.38s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.toast-in {
-  animation: toast-drop 0.28s ease;
 }
 
 @media (prefers-reduced-motion: reduce) {

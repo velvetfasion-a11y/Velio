@@ -144,7 +144,7 @@ export function Toast() {
     <div
       role="status"
       aria-live="polite"
-      className="toast-in pointer-events-none absolute top-4 left-1/2 z-50 rounded-xl bg-ink px-4 py-2.5 text-sm text-paper shadow-lg"
+      className="toast-in pointer-events-none absolute top-4 left-1/2 z-50 w-[min(22rem,calc(100%-2rem))] -translate-x-1/2 rounded-xl bg-ink px-4 py-2.5 text-center text-sm text-paper shadow-lg"
     >
       {toast}
     </div>
