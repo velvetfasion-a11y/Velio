@@ -205,7 +205,14 @@ export function ProviderSheet() {
           </div>
         ) : null}
 
-        {provider.orgNumber || provider.companyName || provider.fTax ? (
+        {provider.sellerKind === "private" ? (
+          <div className="mt-4 rounded-2xl border border-line bg-paper px-4 py-3 text-sm">
+            <p className="font-semibold">Privatperson</p>
+            <p className="mt-1 leading-relaxed text-muted">
+              Kunden kan behöva hantera skatt och RUT på ett annat sätt än mot ett företag. Texten är en platshållare, inte juridisk vägledning.
+            </p>
+          </div>
+        ) : provider.orgNumber || provider.companyName || provider.fTax ? (
           <div className="mt-4 rounded-2xl border border-line bg-paper px-4 py-3 text-sm">
             <p className="font-semibold">Företagsuppgifter</p>
             <p className="mt-1 text-muted">Angivet av utföraren. VELIO har inte kontrollerat bolaget.</p>

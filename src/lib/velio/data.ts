@@ -48,6 +48,8 @@ export type Provider = {
   companyName?: string;
   orgNumber?: string;
   fTax?: "yes" | "no" | "unsure";
+  /** Private people have no company block on the public profile. */
+  sellerKind?: "company" | "private";
   /** Shown instead of a verified badge. Not an identity check. */
   demo?: boolean;
 };

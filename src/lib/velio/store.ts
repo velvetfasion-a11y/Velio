@@ -167,6 +167,7 @@ export type Listing = {
   companyName?: string;
   orgNumber?: string;
   fTax?: "yes" | "no" | "unsure";
+  sellerKind?: "company" | "private";
   /** Published without a real identity check. */
   demo?: boolean;
 };
@@ -263,6 +264,7 @@ function listingToProvider(input: {
   companyName?: string;
   orgNumber?: string;
   fTax?: "yes" | "no" | "unsure";
+  sellerKind?: "company" | "private";
   demo?: boolean;
 }): Provider {
   return {
@@ -295,6 +297,7 @@ function listingToProvider(input: {
     companyName: input.companyName,
     orgNumber: input.orgNumber,
     fTax: input.fTax,
+    sellerKind: input.sellerKind,
     demo: input.demo,
   };
 }
@@ -398,6 +401,9 @@ type VelioState = {
   connectPayoutBank: (bank: { clearing: string; account: string }) => void;
   requestPayout: (amount: number, speed: PayoutSpeed) => string | { id: string; amount: number; fee: number; net: number; speed: PayoutSpeed };
   publishDemoBusiness: (listing: Listing) => void;
+  /** In memory only. A completed BankID collect can set this. Never persisted. */
+  bankIdPersonalNumber: string | null;
+  rememberBankIdNumber: (value: string | null) => void;
   profile: Profile;
   favorites: string[];
   addresses: SavedAddress[];
@@ -612,6 +618,7 @@ export const useVelio = create<VelioState>()(
       idMethod: null,
       kycPending: null,
       wallet: emptyWallet(),
+      bankIdPersonalNumber: null,
       profile: {
         name: "",
         phone: "",
@@ -1717,6 +1724,7 @@ export const useVelio = create<VelioState>()(
           companyName: listing.companyName,
           orgNumber: listing.orgNumber,
           fTax: listing.fTax,
+          sellerKind: listing.sellerKind,
           demo: true,
         });
         const directory = [...get().directory.filter((item) => item.id !== id), published];
@@ -1736,6 +1744,9 @@ export const useVelio = create<VelioState>()(
           if (staticHost()) setMode("business");
         });
         get().showToast("Profilen är publicerad som Demo. Den är inte verifierad.");
+      },
+      rememberBankIdNumber: (value) => {
+        set({ bankIdPersonalNumber: value });
       },
       addPosted: (job) => {
         const local: PostedJob = {

@@ -268,6 +268,7 @@ export async function completeBankIdVerification(challengeId: string, activateBu
     error?: string;
     hintCode?: string;
     verified?: boolean;
+    personalNumber?: string;
   }>(response);
   if (data.status === "pending") return { status: "pending" as const, hintCode: data.hintCode, message: data.message };
   if (!response.ok || data.status === "failed") {
@@ -276,7 +277,7 @@ export async function completeBankIdVerification(challengeId: string, activateBu
   if (!data.account || data.verified === false) {
     throw new Error(data.message || "Identiteten är inte verifierad");
   }
-  return { status: "complete" as const, account: data.account };
+  return { status: "complete" as const, account: data.account, personalNumber: data.personalNumber };
 }
 
 export async function submitPassportVerification(input: {

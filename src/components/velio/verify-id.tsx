@@ -52,6 +52,7 @@ export function VerifyIdScreen() {
         return;
       }
       applyAccountFlags(result.account);
+      if (result.personalNumber) useVelio.getState().rememberBankIdNumber(result.personalNumber);
       showToast("BankID klart — identiteten är verifierad");
       go("business");
     } catch (err) {

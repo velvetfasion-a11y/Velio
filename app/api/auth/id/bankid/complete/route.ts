@@ -107,7 +107,14 @@ export async function POST(request: Request) {
 
   const headers = new Headers({ ...noStore, "content-type": "application/json" });
   headers.append("set-cookie", `${COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
-  return new Response(JSON.stringify({ status: "complete", account: accountPublic(updated), verified: true }), {
+  return new Response(
+    JSON.stringify({
+      status: "complete",
+      account: accountPublic(updated),
+      verified: true,
+      personalNumber: collected.personalNumber || undefined,
+    }),
+    {
     status: 200,
     headers,
   });
