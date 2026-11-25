@@ -37,6 +37,18 @@ function mapSyncedMessages(
   return resolveTakeRequestStatuses(messages.map(chatDtoToMsg));
 }
 
+/** Profile this browser published. Pages keeps the directory locally, so a single listing belongs to the signed-in owner even if the account id drifted. */
+export function ownBusiness(state: {
+  accountId: string | null;
+  directory: Provider[];
+  loggedIn: boolean;
+}): Provider | undefined {
+  const exact = state.accountId ? state.directory.find((item) => item.id === `biz-${state.accountId}`) : undefined;
+  if (exact) return exact;
+  if (!state.loggedIn || state.directory.length === 0) return undefined;
+  return state.directory[state.directory.length - 1];
+}
+
 export type Screen =
   | "home"
   | "search"
@@ -622,8 +634,7 @@ export const useVelio = create<VelioState>()(
       },
       applyMe: (me) => {
         const wasLoggedIn = get().loggedIn;
-        const ownId = me.account.id ? `biz-${me.account.id}` : "";
-        const own = ownId ? get().directory.find((item) => item.id === ownId) : undefined;
+        const own = ownBusiness({ accountId: me.account.id, directory: get().directory, loggedIn: true });
         const accountMode =
           own || get().accountMode === "business" || me.account.accountMode === "business"
             ? "business"
@@ -1235,13 +1246,23 @@ export const useVelio = create<VelioState>()(
         set({ businessForm });
       },
       setAccountMode: (accountMode) => {
-        const ownsListing = Boolean(get().accountId && get().directory.some((item) => item.id === `biz-${get().accountId}`));
+        const own = ownBusiness({ accountId: get().accountId, directory: get().directory, loggedIn: true });
+        const ownsListing = Boolean(own);
         if (accountMode === "business" && !get().idVerified && !ownsListing) {
           set({ screen: "verify-id" });
           get().showToast("BankID eller pass krävs för VELIO Business");
           return;
         }
-        set({ accountMode, ...(accountMode === "business" && ownsListing ? { idVerified: true } : {}) });
+        set({
+          accountMode,
+          ...(accountMode === "business" && own
+            ? {
+                idVerified: true,
+                providerId: own.id,
+                listing: get().listing ?? { serviceId: own.serviceId, desc: own.about, price: own.price },
+              }
+            : {}),
+        });
         void import("@/lib/velio/local-auth").then(({ isStaticHost, localSetAccountMode }) => {
           if (isStaticHost()) localSetAccountMode(accountMode);
         });

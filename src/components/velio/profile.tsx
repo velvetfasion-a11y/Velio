@@ -25,7 +25,7 @@ import {
 import { initialsOf, kr, publicDisplayName, serviceById } from "@/lib/velio/data";
 import { HistoryCard } from "@/components/velio/history";
 import { VerifyIdScreen } from "@/components/velio/verify-id";
-import { useVelio, type Booking } from "@/lib/velio/store";
+import { ownBusiness, useVelio, type Booking } from "@/lib/velio/store";
 import { cn } from "@/lib/cn";
 import { Avatar, Btn, Field, ScreenHeader } from "@/components/velio/ui";
 import { asset } from "@/lib/velio/asset";
@@ -222,7 +222,7 @@ export function ProfileScreens() {
   }
 
   if (screen === "business") {
-    const own = accountId ? directory.find((item) => item.id === `biz-${accountId}`) : undefined;
+    const own = ownBusiness({ accountId, directory, loggedIn: true });
     const activeListing = listing ?? (own ? { serviceId: own.serviceId, desc: own.about, price: own.price } : null);
     const listed = activeListing ? serviceById(activeListing.serviceId) : null;
     const verifyLabel =
@@ -246,7 +246,7 @@ export function ProfileScreens() {
             </p>
           </div>
         </div>
-        {!idVerified ? (
+        {!idVerified && !own ? (
           <div className="mt-5 rounded-[1.2rem] border border-[#efeae4] bg-[#fbf8f4] p-4">
             <p className="text-sm leading-relaxed text-[#5c564f]">
               Business kräver identifiering. Verifiera dig med BankID eller pass innan du lägger upp jobb.
@@ -279,7 +279,6 @@ export function ProfileScreens() {
             <button
               type="button"
               onClick={() => {
-                const own = useVelio.getState().directory.find((item) => item.id === `biz-${useVelio.getState().accountId}`);
                 if (own) useVelio.getState().openProvider(own.id);
               }}
               className="mt-3 h-11 w-full rounded-full bg-[#6e5636] text-sm font-semibold text-white"
@@ -410,6 +409,7 @@ export function ProfileScreens() {
     );
   }
 
+  const own = ownBusiness({ accountId, directory, loggedIn });
   const email = profile.email;
   const verifyLabel = idVerified ? "ID verifierat" : "Konto aktivt";
   const roleLabel = accountMode === "business" ? "Utförare" : "Kund";
@@ -423,7 +423,7 @@ export function ProfileScreens() {
     { icon: User, label: "Redigera profil", onClick: () => go("edit") },
     { icon: CreditCard, label: "Betalningsmetoder", onClick: () => go("payments") },
     { icon: Clock, label: "Bokningshistorik", onClick: () => go("bookings") },
-    { icon: Briefcase, label: "VELIO Business", note: "Erbjud dina tjänster, få uppdrag och tjäna pengar.", onClick: () => go("business") },
+    { icon: Briefcase, label: "VELIO Business", note: own ? "Din profil är publicerad. Öppna den här." : "Erbjud dina tjänster, få uppdrag och tjäna pengar.", onClick: () => go("business") },
     { icon: Settings, label: "Inställningar", onClick: () => go("settings") },
     { icon: HelpCircle, label: "Hjälp och support", onClick: () => go("help") },
     { icon: LogOut, label: "Logga ut", onClick: logout },
@@ -431,7 +431,7 @@ export function ProfileScreens() {
 
   return (
     <div className="bg-cream px-4 pt-4 pb-4">
-      {listing ? (
+      {listing || own ? (
         <ModeSwitch
           name={profile.name}
           mode={accountMode}
@@ -557,7 +557,7 @@ function ModeSwitch({
   const go = useVelio((state) => state.go);
   const accountId = useVelio((state) => state.accountId);
   const directory = useVelio((state) => state.directory);
-  const ownsListing = Boolean(accountId && directory.some((item) => item.id === `biz-${accountId}`));
+  const ownsListing = Boolean(ownBusiness({ accountId, directory, loggedIn: true }));
   const pick = (next: "customer" | "business") => {
     if (next === "business" && !idVerified && !ownsListing) {
       go("verify-id");

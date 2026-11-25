@@ -9,7 +9,7 @@ import {
   whenOptions,
   type SortKey,
 } from "@/lib/velio/data";
-import { useVelio, bookingStatusLabel, type Booking, type ChatMsg } from "@/lib/velio/store";
+import { ownBusiness, useVelio, bookingStatusLabel, type Booking, type ChatMsg } from "@/lib/velio/store";
 import { cn } from "@/lib/cn";
 import { AppHeader } from "@/components/velio/header";
 import { CityMap } from "@/components/velio/osm-map";
@@ -75,12 +75,15 @@ export function ProviderSheet() {
   const setSheet = useVelio((state) => state.setSheet);
   const openChat = useVelio((state) => state.openChat);
   const accountId = useVelio((state) => state.accountId);
+  const directory = useVelio((state) => state.directory);
+  const loggedIn = useVelio((state) => state.loggedIn);
   const go = useVelio((state) => state.go);
   const setAccountMode = useVelio((state) => state.setAccountMode);
   const [saved, setSaved] = useState(false);
   const provider = providerById(providerId);
   if (!provider) return null;
-  const mine = Boolean(accountId && provider.id === `biz-${accountId}`);
+  const own = ownBusiness({ accountId, directory, loggedIn });
+  const mine = own?.id === provider.id;
   const service = serviceById(provider.serviceId);
   const available = provider.etaMin <= 20;
   const tags = provider.tags ?? [];
