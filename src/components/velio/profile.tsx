@@ -32,7 +32,7 @@ import { asset } from "@/lib/velio/asset";
 const faqs: { q: string; a: string; settings?: boolean }[] = [
   {
     q: "Hur raderar jag mitt konto?",
-    a: "Öppna Profil och sedan Inställningar. Längst ner väljer du Radera konto och bekräftar. Namn, kontaktuppgifter och VELIO Business tas bort från den här enheten, och du loggas ut.",
+    a: "Öppna Profil och sedan Inställningar. Välj Radera konto. Skriv RADERA med stora bokstäver och bekräfta med Radera konto. Namn, kontaktuppgifter och VELIO Business tas bort från den här enheten, och du loggas ut.",
     settings: true,
   },
   {
@@ -119,11 +119,15 @@ export function ProfileScreens() {
   const [exp, setExp] = useState("");
   const [legal, setLegal] = useState<"privacy" | "terms" | null>(null);
   const [confirm, setConfirm] = useState<"business" | "account" | null>(null);
+  const [deleteWord, setDeleteWord] = useState("");
   const [noticeAsk, setNoticeAsk] = useState(false);
   const [noticeFailed, setNoticeFailed] = useState(false);
   const [noticeBusy, setNoticeBusy] = useState(false);
   useEffect(() => {
-    if (screen !== "settings") setConfirm(null);
+    if (screen !== "settings") {
+      setConfirm(null);
+      setDeleteWord("");
+    }
   }, [screen]);
 
   if (screen === "payments") {
@@ -484,24 +488,47 @@ export function ProfileScreens() {
               <h2 className="mb-2 px-1 text-xs font-semibold tracking-wide text-[#8a8178]">KONTO</h2>
               {confirm ? (
                 <div className="rounded-[1.4rem] border border-[#efeae4] bg-white px-4 py-4">
-                  <h3 className="font-serif text-[1.45rem] leading-none">{confirm === "business" ? "Ta bort VELIO Business?" : "Radera kontot?"}</h3>
+                  <h3 className="font-serif text-[1.45rem] leading-none">{confirm === "business" ? "Ta bort VELIO Business?" : "Radera konto"}</h3>
                   <p className="mt-2 text-sm leading-relaxed text-[#5c564f]">
                     {confirm === "business"
                       ? "Företagsprofilen tas bort. Du är kvar som kund och kan logga in som vanligt."
-                      : "Namn, kontaktuppgifter och VELIO Business tas bort från den här enheten. Du loggas ut."}
+                      : "Namn, kontaktuppgifter och VELIO Business tas bort från den här enheten. Du loggas ut. Skriv RADERA med stora bokstäver för att bekräfta."}
                   </p>
+                  {confirm === "account" ? (
+                    <label className="mt-3 block">
+                      <span className="mb-1.5 block text-xs font-medium text-[#8a8178]">Skriv RADERA</span>
+                      <input
+                        value={deleteWord}
+                        onChange={(event) => setDeleteWord(event.target.value)}
+                        autoCapitalize="characters"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        placeholder="RADERA"
+                        className="h-11 w-full rounded-full border border-[#e6dfd6] px-4 text-sm tracking-wide outline-none"
+                      />
+                    </label>
+                  ) : null}
                   <div className="mt-4 flex gap-2">
-                    <button type="button" onClick={() => setConfirm(null)} className="h-11 flex-1 rounded-full border border-[#e6dfd6] text-sm font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setConfirm(null);
+                        setDeleteWord("");
+                      }}
+                      className="h-11 flex-1 rounded-full border border-[#e6dfd6] text-sm font-semibold"
+                    >
                       Avbryt
                     </button>
                     <button
                       type="button"
+                      disabled={confirm === "account" && deleteWord !== "RADERA"}
                       onClick={() => {
                         if (confirm === "business") removeBusiness();
-                        else deleteAccount();
+                        else if (deleteWord === "RADERA") deleteAccount();
                         setConfirm(null);
+                        setDeleteWord("");
                       }}
-                      className="h-11 flex-1 rounded-full bg-[#8a3d2a] text-sm font-semibold text-white"
+                      className="h-11 flex-1 rounded-full bg-[#8a3d2a] text-sm font-semibold text-white disabled:bg-[#f3eee8] disabled:text-[#b7afa6]"
                     >
                       {confirm === "business" ? "Ta bort" : "Radera konto"}
                     </button>
@@ -520,7 +547,14 @@ export function ProfileScreens() {
                       </span>
                     </button>
                   ) : null}
-                  <button type="button" onClick={() => setConfirm("account")} className="flex w-full items-center border-t border-[#f0ebe6] px-4 py-3.5 text-left">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeleteWord("");
+                      setConfirm("account");
+                    }}
+                    className="flex w-full items-center border-t border-[#f0ebe6] px-4 py-3.5 text-left"
+                  >
                     <span className="min-w-0 flex-1">
                       <span className="block text-[15px] text-[#8a3d2a]">Radera konto</span>
                       <span className="mt-0.5 block text-xs text-[#8a8178]">Allt på den här enheten tas bort och du loggas ut.</span>
