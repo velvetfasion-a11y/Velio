@@ -56,6 +56,17 @@ export function getLocalSessionAccount(): LocalAccount | null {
   return readAccounts().find((a) => a.id === id) ?? null;
 }
 
+export function localSetAccountMode(accountMode: "customer" | "business"): LocalAccount | null {
+  const account = getLocalSessionAccount();
+  if (!account) return null;
+  const accounts = readAccounts();
+  const next: LocalAccount = { ...account, accountMode };
+  const idx = accounts.findIndex((item) => item.id === account.id);
+  if (idx >= 0) accounts[idx] = next;
+  writeAccounts(accounts);
+  return next;
+}
+
 export function clearLocalSession() {
   localStorage.removeItem(SESSION_KEY);
 }

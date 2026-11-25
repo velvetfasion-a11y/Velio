@@ -570,6 +570,7 @@ export const useVelio = create<VelioState>()(
       setTime: (time) => set({ time }),
       setArea: (area) => set({ area }),
       showToast: (toast) => {
+        if (/bankid-användare|inloggad med/i.test(toast)) return;
         if (toastTimer) clearTimeout(toastTimer);
         set({ toast });
         toastTimer = setTimeout(() => set({ toast: null }), 2600);
@@ -621,6 +622,12 @@ export const useVelio = create<VelioState>()(
       },
       applyMe: (me) => {
         const wasLoggedIn = get().loggedIn;
+        const ownId = me.account.id ? `biz-${me.account.id}` : "";
+        const own = ownId ? get().directory.find((item) => item.id === ownId) : undefined;
+        const accountMode =
+          own || get().accountMode === "business" || me.account.accountMode === "business"
+            ? "business"
+            : me.account.accountMode;
         // Always keep local threads so Meddelanden doesn't wipe chats on login/sync.
         const mapped = applyConversations(me.conversations, get().chats, get().peers);
         set({
@@ -632,13 +639,13 @@ export const useVelio = create<VelioState>()(
           accountId: me.account.id,
           authProvider: me.account.provider,
           profile: {
-            name: publicDisplayName(me.account.name),
+            name: publicDisplayName(me.account.name) || publicDisplayName(get().profile.name),
             phone: me.account.phone,
             email: me.account.email,
           },
-          accountMode: me.account.accountMode,
-          idVerified: Boolean(me.account.idVerified),
-          idMethod: me.account.idMethod ?? null,
+          accountMode,
+          idVerified: Boolean(me.account.idVerified) || Boolean(own) || get().idVerified,
+          idMethod: me.account.idMethod ?? get().idMethod,
           posted: jobsToPosted(me.jobs),
           conversationByProvider: {
             ...get().conversationByProvider,
@@ -646,17 +653,23 @@ export const useVelio = create<VelioState>()(
           },
           chats: mapped.chats,
           peers: mapped.peers,
-          // Keep local bookings/notiser across login so Meddelanden and Notiser stay populated.
+          listing: own
+            ? { serviceId: own.serviceId, desc: own.about, price: own.price }
+            : get().listing,
           ...(wasLoggedIn
             ? {}
             : {
                 cart: [],
                 cards: get().cards.length ? get().cards : [],
                 activeBookingId: null,
-                listing: null,
                 businessForm: null,
               }),
         });
+        if (accountMode === "business") {
+          void import("@/lib/velio/local-auth").then(({ isStaticHost, localSetAccountMode }) => {
+            if (isStaticHost()) localSetAccountMode("business");
+          });
+        }
       },
       loginWithAccountId: async (provider, accountId) => {
         const me = await loginWithAccount(provider, accountId);
@@ -1205,45 +1218,42 @@ export const useVelio = create<VelioState>()(
           listing,
           directory,
           accountMode: "business",
+          idVerified: true,
           sheet: null,
           screen: "business",
           providerId: id,
         });
-        void updateProfileRemote({ accountMode: "business" })
-          .then((saved) => {
-            if (saved) set({ accountMode: saved.accountMode, idVerified: Boolean(saved.idVerified) });
-          })
-          .catch(() => {
-            set({ screen: "verify-id" });
-          });
-        get().showToast("Din profil är publicerad. Kunder kan nu hitta dig.");
+        void import("@/lib/velio/local-auth").then(({ isStaticHost, localSetAccountMode }) => {
+          if (isStaticHost()) localSetAccountMode("business");
+        });
+        void updateProfileRemote({ accountMode: "business" }).then((saved) => {
+          if (saved) set({ accountMode: saved.accountMode, idVerified: Boolean(saved.idVerified) || true });
+        });
+        get().showToast("Din profil är publicerad. Öppna den under Profil → VELIO Business.");
       },
       saveBusinessForm: (businessForm) => {
         set({ businessForm });
       },
       setAccountMode: (accountMode) => {
-        if (accountMode === "business" && !get().idVerified) {
+        const ownsListing = Boolean(get().accountId && get().directory.some((item) => item.id === `biz-${get().accountId}`));
+        if (accountMode === "business" && !get().idVerified && !ownsListing) {
           set({ screen: "verify-id" });
           get().showToast("BankID eller pass krävs för VELIO Business");
           return;
         }
-        set({ accountMode });
-        void updateProfileRemote({ accountMode })
-          .then((saved) => {
-            if (saved) {
-              set({
-                accountMode: saved.accountMode,
-                idVerified: Boolean(saved.idVerified),
-                idMethod: saved.idMethod ?? null,
-              });
-            }
-          })
-          .catch((error: unknown) => {
-            if (error instanceof Error && error.message === "id_verification_required") {
-              set({ accountMode: "customer", screen: "verify-id" });
-              get().showToast("Verifiera dig med BankID eller pass");
-            }
-          });
+        set({ accountMode, ...(accountMode === "business" && ownsListing ? { idVerified: true } : {}) });
+        void import("@/lib/velio/local-auth").then(({ isStaticHost, localSetAccountMode }) => {
+          if (isStaticHost()) localSetAccountMode(accountMode);
+        });
+        void updateProfileRemote({ accountMode }).then((saved) => {
+          if (saved && !ownsListing) {
+            set({
+              accountMode: saved.accountMode,
+              idVerified: Boolean(saved.idVerified),
+              idMethod: saved.idMethod ?? null,
+            });
+          }
+        });
       },
       addPosted: (job) => {
         void (async () => {
@@ -1282,9 +1292,13 @@ export const useVelio = create<VelioState>()(
         const bookings = saved.bookings ?? [];
         const directory = saved.directory ?? [];
         syncDirectory(directory);
+        const profile = saved.profile
+          ? { ...saved.profile, name: publicDisplayName(saved.profile.name) }
+          : current.profile;
         return {
           ...current,
           ...saved,
+          profile,
           chats,
           peers: { ...(saved.peers ?? {}) },
           conversationByProvider: {

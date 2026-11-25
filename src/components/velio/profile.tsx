@@ -74,6 +74,7 @@ export function ProfileScreens() {
   const bookings = useVelio((state) => state.bookings);
   const posted = useVelio((state) => state.posted);
   const accountId = useVelio((state) => state.accountId);
+  const directory = useVelio((state) => state.directory);
   const openReceipt = useVelio((state) => state.openReceipt);
   const listing = useVelio((state) => state.listing);
   const accountMode = useVelio((state) => state.accountMode);
@@ -221,7 +222,9 @@ export function ProfileScreens() {
   }
 
   if (screen === "business") {
-    const listed = listing ? serviceById(listing.serviceId) : null;
+    const own = accountId ? directory.find((item) => item.id === `biz-${accountId}`) : undefined;
+    const activeListing = listing ?? (own ? { serviceId: own.serviceId, desc: own.about, price: own.price } : null);
+    const listed = activeListing ? serviceById(activeListing.serviceId) : null;
     const verifyLabel =
       idMethod === "passport" ? "Verifierad\nmed pass" : "Verifierad\nmed BankID";
     const points = [
@@ -268,18 +271,40 @@ export function ProfileScreens() {
             );
           })}
         </div>
-        {listing && listed ? (
-          <p className="mt-4 text-center text-sm text-muted">
-            {listed.name} väntar på granskning · fr. {kr(listing.price)}
-          </p>
+        {activeListing && listed ? (
+          <div className="mt-5 rounded-[1.2rem] border border-[#efeae4] bg-white p-4">
+            <p className="text-xs tracking-wide text-[#9a7b45]">PUBLICERAD</p>
+            <p className="mt-1 font-semibold">{own?.name || listed.name}</p>
+            <p className="mt-1 text-sm text-muted">fr. {kr(activeListing.price)} · syns på hemsidan</p>
+            <button
+              type="button"
+              onClick={() => {
+                const own = useVelio.getState().directory.find((item) => item.id === `biz-${useVelio.getState().accountId}`);
+                if (own) useVelio.getState().openProvider(own.id);
+              }}
+              className="mt-3 h-11 w-full rounded-full bg-[#6e5636] text-sm font-semibold text-white"
+            >
+              Öppna min profil
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAccountMode("business");
+                go("home");
+              }}
+              className="mt-2 h-11 w-full rounded-full border border-[#e6dfd6] text-sm font-semibold"
+            >
+              Gå till arbetsläget
+            </button>
+          </div>
         ) : null}
         <button
           type="button"
-          onClick={() => (idVerified ? setSheet("onboard") : go("verify-id"))}
+          onClick={() => (idVerified || own ? setSheet("onboard") : go("verify-id"))}
           className="mt-6 flex h-14 w-full items-center justify-center gap-3 rounded-full bg-[#1c1917] text-base font-semibold text-white"
         >
           <Briefcase className="size-5" strokeWidth={1.6} />
-          {!idVerified ? "Verifiera för att fortsätta" : listing ? "Uppdatera jobb" : "Lägg upp ditt jobb"}
+          {!idVerified && !own ? "Verifiera för att fortsätta" : activeListing ? "Uppdatera jobb" : "Lägg upp ditt jobb"}
         </button>
       </div>
     );
@@ -530,12 +555,19 @@ function ModeSwitch({
   onEdit: () => void;
 }) {
   const go = useVelio((state) => state.go);
+  const accountId = useVelio((state) => state.accountId);
+  const directory = useVelio((state) => state.directory);
+  const ownsListing = Boolean(accountId && directory.some((item) => item.id === `biz-${accountId}`));
   const pick = (next: "customer" | "business") => {
-    if (next === "business" && !idVerified) {
+    if (next === "business" && !idVerified && !ownsListing) {
       go("verify-id");
       return;
     }
     onMode(next);
+    if (next === "business" && ownsListing) {
+      go("business");
+      return;
+    }
     go("home");
   };
   const badge = idVerified
@@ -578,7 +610,7 @@ function ModeSwitch({
             active={mode === "business"}
             icon={Briefcase}
             title="VELIO Business"
-            text={idVerified ? "Erbjud tjänster och ta emot uppdrag" : "Kräver BankID eller pass"}
+            text={idVerified || ownsListing ? "Erbjud tjänster och ta emot uppdrag" : "Kräver BankID eller pass"}
             onClick={() => pick("business")}
           />
         </div>

@@ -74,9 +74,13 @@ export function ProviderSheet() {
   const closeSheet = useVelio((state) => state.closeSheet);
   const setSheet = useVelio((state) => state.setSheet);
   const openChat = useVelio((state) => state.openChat);
+  const accountId = useVelio((state) => state.accountId);
+  const go = useVelio((state) => state.go);
+  const setAccountMode = useVelio((state) => state.setAccountMode);
   const [saved, setSaved] = useState(false);
   const provider = providerById(providerId);
   if (!provider) return null;
+  const mine = Boolean(accountId && provider.id === `biz-${accountId}`);
   const service = serviceById(provider.serviceId);
   const available = provider.etaMin <= 20;
   const tags = provider.tags ?? [];
@@ -167,13 +171,29 @@ export function ProviderSheet() {
           </div>
         ) : null}
 
-        <button type="button" onClick={() => setSheet("book")} className="mt-5 w-full rounded-full bg-bronze py-3.5 text-base font-semibold text-paper">
-          Boka nu →
-        </button>
+        {mine ? (
+          <button
+            type="button"
+            onClick={() => {
+              setAccountMode("business");
+              closeSheet();
+              go("business");
+            }}
+            className="mt-5 w-full rounded-full bg-bronze py-3.5 text-base font-semibold text-paper"
+          >
+            Öppna min businessprofil
+          </button>
+        ) : (
+          <button type="button" onClick={() => setSheet("book")} className="mt-5 w-full rounded-full bg-bronze py-3.5 text-base font-semibold text-paper">
+            Boka nu →
+          </button>
+        )}
+        {!mine ? (
         <button type="button" onClick={openChat} className="mt-3 flex w-full items-center justify-center gap-2 rounded-full border border-ink/15 py-3.5 text-base font-semibold">
           <MessageCircle className="size-5" />
           Skicka meddelande
         </button>
+        ) : null}
 
         <div className="mt-4 rounded-2xl bg-sand/70 p-4">
           <span className="inline-flex gap-0.5">

@@ -141,12 +141,14 @@ export function Toast() {
   const toast = useVelio((state) => state.toast);
   if (!toast) return null;
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      className="toast-in pointer-events-none absolute top-4 left-1/2 z-50 w-[min(22rem,calc(100%-2rem))] -translate-x-1/2 rounded-xl bg-ink px-4 py-2.5 text-center text-sm text-paper shadow-lg"
-    >
-      {toast}
+    <div className="pointer-events-none absolute inset-x-0 top-3 z-50 flex justify-center px-6">
+      <div
+        role="status"
+        aria-live="polite"
+        className="max-w-full rounded-xl bg-ink px-4 py-2.5 text-center text-sm text-paper shadow-lg"
+      >
+        {toast}
+      </div>
     </div>
   );
 }
