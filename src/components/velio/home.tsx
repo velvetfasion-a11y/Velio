@@ -379,6 +379,7 @@ function ProviderHits({ query, onOpen }: { query: string; onOpen: (id: string) =
 export function InboxScreen() {
   const chats = useVelio((state) => state.chats);
   const peers = useVelio((state) => state.peers);
+  const bookings = useVelio((state) => state.bookings);
   const openThread = useVelio((state) => state.openThread);
   const closeSheet = useVelio((state) => state.closeSheet);
 
@@ -387,20 +388,27 @@ export function InboxScreen() {
     closeSheet();
   }, [closeSheet]);
 
+  // Include booked providers even if a thread was never seeded (e.g. older sessions).
+  const bookingPeerIds = bookings
+    .filter((item) => item.status === "accepted" || item.status === "enroute" || item.status === "scheduled" || item.status === "requested")
+    .map((item) => item.providerId);
+
   const threadIds = Array.from(
-    new Set([...Object.keys(chats), ...Object.keys(peers)].filter((id) => (chats[id]?.length ?? 0) > 0 || peers[id])),
-  ).filter((id) => (chats[id]?.length ?? 0) > 0);
+    new Set([...Object.keys(chats), ...Object.keys(peers), ...bookingPeerIds].filter(Boolean)),
+  ).filter((id) => (chats[id]?.length ?? 0) > 0 || bookingPeerIds.includes(id));
 
   const threads = threadIds
     .map((providerId) => {
       const messages = chats[providerId] ?? [];
       const last = messages[messages.length - 1];
-      return { providerId, messages, last };
+      const booking = bookings.find((item) => item.providerId === providerId);
+      return { providerId, messages, last, booking };
     })
     .sort((a, b) => {
       const aTime = a.last?.time || "";
       const bTime = b.last?.time || "";
-      return bTime.localeCompare(aTime);
+      if (aTime || bTime) return bTime.localeCompare(aTime);
+      return (b.booking?.whenLabel || "").localeCompare(a.booking?.whenLabel || "");
     });
 
   return (
@@ -410,7 +418,7 @@ export function InboxScreen() {
         <h1 className="mb-5 font-serif text-[2.6rem] leading-none font-medium">Meddelanden</h1>
         {threads.length === 0 ? <p className="text-sm text-muted">Inga meddelanden ännu.</p> : null}
         <div className="space-y-3">
-          {threads.map(({ providerId, messages, last }) => {
+          {threads.map(({ providerId, messages, last, booking }) => {
             const provider = providerById(providerId);
             const peer = peers[providerId];
             const name = provider?.name ?? peer?.name ?? "Kontakt";
@@ -440,7 +448,11 @@ export function InboxScreen() {
                 ? "Bokningsförfrågan"
                 : last?.card
                   ? "Uppdatering i chatten"
-                  : "Öppna konversationen");
+                  : booking
+                    ? booking.status === "accepted"
+                      ? "Bokning accepterad — öppna chatten"
+                      : "Bokningsförfrågan"
+                    : "Öppna konversationen");
             return (
               <button
                 key={providerId}

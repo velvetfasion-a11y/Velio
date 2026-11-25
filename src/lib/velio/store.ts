@@ -407,6 +407,45 @@ function jobsToPosted(jobs: JobDto[]): PostedJob[] {
   }));
 }
 
+/** Local demo thread when the sync API is unavailable (e.g. GitHub Pages). */
+function localThreadSeed(providerId: string, booking?: Booking | null): ChatMsg[] {
+  const provider = providerById(providerId);
+  const service = provider ? serviceById(provider.serviceId) : null;
+  const when = booking?.whenLabel ?? "Så snart som möjligt";
+  const place = booking?.location ?? provider?.area ?? "Stockholm";
+  const price = booking?.cost ?? provider?.price ?? 0;
+  const first = provider?.name.split(" ")[0] ?? "Utföraren";
+  return [
+    {
+      id: uid(),
+      from: "system",
+      day: "Idag",
+      time: clock(),
+      text: "Bokning accepterad",
+      card: {
+        kind: "request",
+        service: service?.name ?? "Tjänst",
+        when,
+        place,
+        price,
+        status: "accepted",
+      },
+    },
+    {
+      id: uid(),
+      from: "them",
+      time: clock(),
+      text: `Hej! Jag har accepterat din bokning. Skriv här om du har frågor — jag svarar så snart jag kan.`,
+    },
+    {
+      id: uid(),
+      from: "system",
+      time: clock(),
+      text: `${first} är redo att chatta`,
+    },
+  ];
+}
+
 function applyConversations(
   conversations: ConversationDto[],
   chats: Record<string, ChatMsg[]>,
@@ -572,9 +611,26 @@ export const useVelio = create<VelioState>()(
         }),
       openProvider: (providerId) => set({ providerId, sheet: "provider" }),
       openThread: (peerKey, opts) => {
-        set({ providerId: peerKey, sheet: "chat", screen: get().screen === "inbox" ? "inbox" : get().screen });
+        const marketplace = providerById(peerKey);
+        const booking =
+          get().bookings.find((item) => item.providerId === peerKey && item.status !== "done" && item.status !== "declined") ??
+          get().bookings.find((item) => item.providerId === peerKey) ??
+          null;
+        // Always open the sheet locally first — Pages has no chat API.
+        if (!(get().chats[peerKey]?.length) && marketplace) {
+          set({
+            providerId: peerKey,
+            sheet: "chat",
+            screen: get().screen === "inbox" ? "inbox" : get().screen,
+            chats: {
+              ...get().chats,
+              [peerKey]: localThreadSeed(peerKey, booking),
+            },
+          });
+        } else {
+          set({ providerId: peerKey, sheet: "chat", screen: get().screen === "inbox" ? "inbox" : get().screen });
+        }
         void (async () => {
-          const marketplace = providerById(peerKey);
           const opened = await openConversation(
             opts?.accountId
               ? { accountId: opts.accountId }
@@ -583,7 +639,20 @@ export const useVelio = create<VelioState>()(
                 : { accountId: peerKey },
           );
           if (!opened) {
-            // Keep the local thread open even when sync API is unavailable.
+            // Static / offline: keep the local thread — never toast a failure for marketplace chats.
+            if (!(get().chats[peerKey]?.length)) {
+              const seed = marketplace
+                ? localThreadSeed(peerKey, booking)
+                : [
+                    {
+                      id: uid(),
+                      from: "them" as const,
+                      time: clock(),
+                      text: "Hej! Skriv ett meddelande så svarar jag här.",
+                    },
+                  ];
+              set({ chats: { ...get().chats, [peerKey]: seed } });
+            }
             return;
           }
           const threadKey = opened.threadKey || peerKey;
@@ -606,7 +675,7 @@ export const useVelio = create<VelioState>()(
             chats: {
               ...get().chats,
               // Don't replace a non-empty local thread with an empty remote result.
-              [threadKey]: messages.length ? mapSyncedMessages(messages) : existing,
+              [threadKey]: messages.length ? mapSyncedMessages(messages) : existing.length ? existing : localThreadSeed(threadKey, booking),
             },
           });
         })();
@@ -916,8 +985,12 @@ export const useVelio = create<VelioState>()(
           set({
             bookings: get().bookings.map((item) => (ids.has(item.id) && item.status === "requested" ? { ...item, status: "accepted" } : item)),
           });
+          const nextChats = { ...get().chats };
           for (const item of still) {
             const provider = providerById(item.providerId);
+            if (provider && !(nextChats[item.providerId]?.length)) {
+              nextChats[item.providerId] = localThreadSeed(item.providerId, item);
+            }
             get().pushNotification({
               kind: "booking_accepted",
               title: "Bokning accepterad",
@@ -925,7 +998,8 @@ export const useVelio = create<VelioState>()(
               bookingId: item.id,
             });
           }
-          get().showToast("Utförarna har accepterat. Se notiser för detaljer.");
+          set({ chats: nextChats });
+          get().showToast("Utförarna har accepterat. Se Meddelanden.");
         }, 2400);
       },
       openChat: () => {
@@ -939,6 +1013,12 @@ export const useVelio = create<VelioState>()(
         if (!providerId || !trimmed) return;
         void (async () => {
           let conversationId = get().conversationByProvider[providerId];
+          const threadKey = get().providerId || providerId;
+          const optimistic: ChatMsg = { id: uid(), from: "me", text: trimmed, time: clock() };
+          // Always keep the message locally so Meddelanden stays populated on Pages.
+          const prev = get().chats[threadKey] ?? [];
+          set({ chats: { ...get().chats, [threadKey]: [...prev, optimistic] } });
+
           if (!conversationId) {
             const marketplace = providerById(providerId);
             const peerMeta = get().peers[providerId];
@@ -948,20 +1028,20 @@ export const useVelio = create<VelioState>()(
                 : { accountId: peerMeta?.id || providerId },
             );
             if (!opened) {
-              get().showToast("Kunde inte skicka meddelandet");
+              // Offline / static host — local message already saved.
               return;
             }
             conversationId = opened.conversationId;
-            const threadKey = opened.threadKey || providerId;
+            const remoteKey = opened.threadKey || providerId;
             set({
-              providerId: threadKey,
+              providerId: remoteKey,
               conversationByProvider: {
                 ...get().conversationByProvider,
-                [threadKey]: conversationId,
+                [remoteKey]: conversationId,
               },
               peers: {
                 ...get().peers,
-                [threadKey]: {
+                [remoteKey]: {
                   id: opened.peer.id,
                   name: opened.peer.name,
                   providerId: opened.peer.providerId,
@@ -969,21 +1049,15 @@ export const useVelio = create<VelioState>()(
               },
             });
           }
-          const threadKey = get().providerId || providerId;
-          const optimistic: ChatMsg = { id: uid(), from: "me", text: trimmed, time: clock() };
-          const prev = get().chats[threadKey] ?? [];
-          set({ chats: { ...get().chats, [threadKey]: [...prev, optimistic] } });
           const { sendMessageRemote } = await import("@/lib/velio/auth-api");
           const saved = await sendMessageRemote(conversationId, trimmed);
-          if (!saved) {
-            get().showToast("Meddelandet synkades inte");
-            return;
-          }
-          const current = get().chats[threadKey] ?? [];
+          if (!saved) return;
+          const key = get().providerId || providerId;
+          const current = get().chats[key] ?? [];
           set({
             chats: {
               ...get().chats,
-              [threadKey]: current.map((message) =>
+              [key]: current.map((message) =>
                 message.id === optimistic.id ? chatDtoToMsg({ ...saved, from: "me" }) : message,
               ),
             },
@@ -1126,8 +1200,15 @@ export const useVelio = create<VelioState>()(
         window.setTimeout(() => {
           const current = get().bookings.find((item) => item.id === booking.id);
           if (!current || current.status !== "requested") return;
+          const accepted = { ...current, status: "accepted" as const };
           set({
-            bookings: get().bookings.map((item) => (item.id === booking.id ? { ...item, status: "accepted" } : item)),
+            bookings: get().bookings.map((item) => (item.id === booking.id ? accepted : item)),
+            chats: {
+              ...get().chats,
+              [provider.id]: get().chats[provider.id]?.length
+                ? get().chats[provider.id]
+                : localThreadSeed(provider.id, accepted),
+            },
           });
           get().pushNotification({
             kind: "booking_accepted",
@@ -1135,7 +1216,7 @@ export const useVelio = create<VelioState>()(
             body: `${first} har accepterat din bokning. Nu kan ni chatta.`,
             bookingId: booking.id,
           });
-          get().showToast(`${first} har accepterat. Se notiser eller Meddelanden.`);
+          get().showToast(`${first} har accepterat. Öppna Meddelanden för att chatta.`);
         }, 2400);
       },
       openReceipt: (id) => set({ receiptId: id, sheet: "receipt" }),
@@ -1252,7 +1333,7 @@ export const useVelio = create<VelioState>()(
       },
     }),
     {
-      name: "velio-v3",
+      name: "velio-v4",
       skipHydration: true,
       storage: createJSONStorage(() => (typeof window === "undefined" ? memoryStorage : localStorage)),
       partialize: (state) => ({
