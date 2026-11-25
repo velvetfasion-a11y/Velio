@@ -35,6 +35,14 @@ export type Provider = {
   photo?: string;
   place?: string;
   experience?: string;
+  title?: string;
+  serviceIds?: ServiceId[];
+  otherTrade?: string;
+  photos?: string[];
+  offers?: { name: string; hours: string; price: number }[];
+  includes?: string[];
+  extras?: { name: string; price: number }[];
+  areas?: string[];
 };
 
 /** Public “Om” text: the description the person wrote, without a leading account name. */
@@ -175,6 +183,19 @@ function openWeekdays(provider: Provider) {
   return days;
 }
 
+export function providerTradeNames(provider: Pick<Provider, "serviceId" | "serviceIds" | "otherTrade">) {
+  const ids = provider.serviceIds ?? [provider.serviceId];
+  const names: string[] = ids.map((id) => serviceById(id)?.name ?? "").filter((name) => name.length > 0);
+  if (provider.otherTrade?.trim()) names.push(provider.otherTrade.trim());
+  return names;
+}
+
+export function providerWorksIn(provider: Provider, area: string) {
+  const areas = provider.areas ?? [];
+  if (areas.includes("Överallt") || provider.place === "Överallt" || provider.place === "Hela Stockholm") return true;
+  return provider.area === area || provider.place === area || areas.includes(area);
+}
+
 export function filterProviders(options: {
   serviceId?: string | null;
   time: Slot | "anytime";
@@ -186,15 +207,26 @@ export function filterProviders(options: {
   const query = options.query?.trim().toLowerCase() ?? "";
   const source = options.list ?? providers;
   const list = source.filter((provider) => {
-    if (options.serviceId && provider.serviceId !== options.serviceId) return false;
+    if (options.serviceId) {
+      const ids = provider.serviceIds ?? [provider.serviceId];
+      if (!ids.includes(options.serviceId as ServiceId)) return false;
+    }
     if (options.time !== "anytime" && !provider.slots.includes(options.time)) return false;
-    if (options.area && provider.area !== options.area && provider.place !== "Hela Stockholm") return false;
+    if (options.area && !providerWorksIn(provider, options.area)) return false;
     if (!query) return true;
-    return (
-      provider.name.toLowerCase().includes(query) ||
-      provider.area.toLowerCase().includes(query) ||
-      serviceById(provider.serviceId)?.name.toLowerCase().includes(query) === true
-    );
+    const haystack = [
+      provider.name,
+      provider.area,
+      provider.place,
+      provider.title,
+      provider.otherTrade,
+      ...(provider.areas ?? []),
+      ...providerTradeNames(provider),
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    return haystack.includes(query);
   });
 
   return list.sort((a, b) => {

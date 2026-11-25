@@ -1,15 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Download, FileText, Star, Bell, ArrowLeft, Heart, BadgeCheck, Shield, Calendar, MessageCircle, Clock, ChevronDown, ChevronRight, MapPin, Camera, Wrench, Phone, Ellipsis, Plus, Navigation, ClipboardCheck, Car, Check, Coins, CreditCard, Mic, Send, Briefcase, Search, Pencil, Ban, ClipboardList, Headphones, X, type LucideIcon } from "lucide-react";
-import {
-  kr,
-  providerById,
-  providerDescription,
-  ratingLabel,
-  serviceById,
-  sortLabels,
-  whenOptions,
-  type SortKey,
-} from "@/lib/velio/data";
+import { kr, providerById, providerDescription, providerTradeNames, ratingLabel, serviceById, sortLabels, whenOptions, type SortKey } from "@/lib/velio/data";
 import { ownBusiness, useVelio, bookingStatusLabel, type Booking, type ChatMsg } from "@/lib/velio/store";
 import { cn } from "@/lib/cn";
 import { AppHeader, PlaceLink } from "@/components/velio/header";
@@ -129,8 +120,14 @@ export function ProviderSheet() {
               {provider.name}
               <BadgeCheck className="size-6 shrink-0 fill-gold text-paper" />
             </h2>
-            <p className="mt-2 text-sm text-muted">
-              {serviceLine[provider.serviceId] ?? service?.name} · {provider.place ?? provider.area}
+            {provider.title || provider.experience ? (
+              <p className="mt-2 text-sm font-medium">
+                {[provider.title, provider.experience].filter(Boolean).join(" · ")}
+              </p>
+            ) : null}
+            <p className="mt-1 text-sm text-muted">
+              {providerTradeNames(provider).join(" · ") || serviceLine[provider.serviceId] || service?.name}
+              {provider.place || provider.area ? ` · ${provider.place ?? provider.area}` : ""}
             </p>
           </div>
           <div className="flex shrink-0 items-start gap-3">
@@ -161,13 +158,35 @@ export function ProviderSheet() {
           ) : (
             <p className="mt-1 text-sm text-muted">Ingen beskrivning ännu.</p>
           )}
-          {provider.experience ? (
-            <p className="mt-3 text-left text-sm leading-relaxed">
-              <span className="font-semibold">Erfarenhet</span>
-              <span className="mt-0.5 block">{provider.experience}</span>
-            </p>
+          {provider.photos?.some((src) => src.startsWith("data:")) ? (
+            <div className="mt-3 flex gap-2 overflow-x-auto">
+              {provider.photos.filter((src) => src.startsWith("data:")).map((src) => (
+                <img key={src.slice(0, 48)} src={src} alt="" className="h-28 w-36 shrink-0 rounded-2xl object-cover" />
+              ))}
+            </div>
           ) : null}
         </div>
+
+        {provider.offers?.length ? (
+          <div className="mt-4 border-t border-line pt-4">
+            <h3 className="text-lg font-semibold">Tjänster</h3>
+            <div className="mt-2 space-y-2">
+              {provider.offers.slice(0, 10).map((offer) => (
+                <div key={`${offer.name}-${offer.price}`} className="flex items-baseline justify-between gap-3 text-sm">
+                  <span>
+                    <span className="font-medium">{offer.name}</span>
+                    {offer.hours ? <span className="text-muted"> · {offer.hours}</span> : null}
+                  </span>
+                  <span className="shrink-0">fr. {kr(offer.price)}</span>
+                </div>
+              ))}
+            </div>
+            {provider.includes?.length ? <p className="mt-2 text-sm text-muted">Ingår: {provider.includes.join(", ")}</p> : null}
+            {provider.extras?.length ? (
+              <p className="mt-1 text-sm text-muted">Tillval: {provider.extras.map((extra) => `${extra.name} + ${kr(extra.price)}`).join(", ")}</p>
+            ) : null}
+          </div>
+        ) : null}
 
         {tags.length ? (
           <div className="mt-4 flex flex-wrap gap-2">

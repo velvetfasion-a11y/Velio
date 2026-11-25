@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  Award,
   Briefcase,
   Building2,
   Calendar,
@@ -23,14 +22,13 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import { kr, services, type ServiceId } from "@/lib/velio/data";
+import { areaLayout, kr, services, type ServiceId } from "@/lib/velio/data";
 import { useVelio, type BusinessForm } from "@/lib/velio/store";
 import { AppHeader } from "@/components/velio/header";
 import { cn } from "@/lib/cn";
 import { asset } from "@/lib/velio/asset";
 
-const photoPool = [asset("/velio/stad.jpg"), asset("/velio/rep.jpg"), asset("/velio/ren.jpg"), asset("/velio/trad.jpg"), asset("/velio/garden.jpg"), asset("/velio/clean.jpg")];
-const levels = ["Välj erfarenhetsnivå", "Nybörjare", "1–3 år", "3–5 år", "5–10 år", "10+ år"];
+const levels = ["Nybörjare", "1–3 år", "3–5 år", "5–10 år", "10+ år"];
 const hours = Array.from({ length: 16 }, (_, index) => `${String(index + 6).padStart(2, "0")}:00`);
 const dayNames = ["Mån", "Tis", "Ons", "Tor", "Fre", "Lör", "Sön"];
 
@@ -43,139 +41,6 @@ const blurbs = [
 
 type Offer = { id: string; name: string; hours: string; price: number; on: boolean };
 
-const packs: Record<ServiceId, { offers: Offer[]; includes: string[]; extras: { name: string; price: number }[] }> = {
-  el: {
-    offers: [
-      { id: "felsok", name: "Felsökning", hours: "1 – 2 timmar", price: 890, on: true },
-      { id: "uttag", name: "Installation av uttag", hours: "1 – 3 timmar", price: 1290, on: true },
-      { id: "belysning", name: "Belysning & armaturer", hours: "2 – 4 timmar", price: 1490, on: true },
-    ],
-    includes: ["Auktoriserad elektriker", "Material enligt offert", "ROT-avdrag (vid behov)", "Säkerhetskontroll efter jobbet"],
-    extras: [
-      { name: "Jordfelsbrytare", price: 890 },
-      { name: "Dimmer", price: 450 },
-      { name: "Akut utryckning", price: 600 },
-    ],
-  },
-  stad: {
-    offers: [
-      { id: "hem", name: "Hemstädning", hours: "2 – 4 timmar", price: 640, on: true },
-      { id: "flytt", name: "Flyttstädning", hours: "4 – 8 timmar", price: 1490, on: true },
-      { id: "stor", name: "Storstädning", hours: "3 – 6 timmar", price: 990, on: true },
-    ],
-    includes: ["Städmaterial och utrustning", "Noggrann och pålitlig service", "RUT-avdrag (vid behov)", "Flexibla tider"],
-    extras: [
-      { name: "Fönsterputs", price: 300 },
-      { name: "Kylskåpsrengöring", price: 250 },
-      { name: "Ugnsrengöring", price: 250 },
-    ],
-  },
-  trad: {
-    offers: [
-      { id: "gras", name: "Gräsklippning", hours: "1 – 2 timmar", price: 490, on: true },
-      { id: "hack", name: "Häck & rabatt", hours: "2 – 4 timmar", price: 890, on: true },
-      { id: "sasong", name: "Säsongsskötsel", hours: "Halvdag", price: 1490, on: true },
-    ],
-    includes: ["Egen utrustning", "Bortforsling av trädgårdsavfall", "RUT-avdrag (vid behov)", "Återkommande skötsel"],
-    extras: [
-      { name: "Häckklippning", price: 450 },
-      { name: "Lövrensning", price: 350 },
-      { name: "Plantering", price: 600 },
-    ],
-  },
-  rep: {
-    offers: [
-      { id: "montera", name: "Montering", hours: "1 – 2 timmar", price: 690, on: true },
-      { id: "liten", name: "Mindre reparation", hours: "1 – 3 timmar", price: 890, on: true },
-      { id: "akut", name: "Akut åtgärd", hours: "1 timme", price: 1190, on: true },
-    ],
-    includes: ["Verktyg ingår", "Genomgång av felet", "ROT-avdrag (vid behov)", "Uppföljning vid behov"],
-    extras: [
-      { name: "Reservdelar", price: 400 },
-      { name: "Extra hantverkare", price: 650 },
-      { name: "Kvällsbesök", price: 300 },
-    ],
-  },
-  sak: {
-    offers: [
-      { id: "las", name: "Låsbyte", hours: "1 – 2 timmar", price: 1490, on: true },
-      { id: "larm", name: "Larm & sensorer", hours: "2 – 4 timmar", price: 2490, on: true },
-      { id: "kamera", name: "Kameror", hours: "Halvdag", price: 3290, on: true },
-    ],
-    includes: ["Licensierad tekniker", "Genomgång av systemet", "Material enligt offert", "Support efter installation"],
-    extras: [
-      { name: "Extra sensor", price: 490 },
-      { name: "Kodlås", price: 890 },
-      { name: "Serviceavtal", price: 199 },
-    ],
-  },
-  ren: {
-    offers: [
-      { id: "malning", name: "Målning", hours: "1 rum", price: 1890, on: true },
-      { id: "spackel", name: "Spackling & tapet", hours: "1 – 2 dagar", price: 2490, on: true },
-      { id: "mindre", name: "Mindre renovering", hours: "Efter offert", price: 890, on: true },
-    ],
-    includes: ["Skydd av golv och möbler", "Material enligt offert", "ROT-avdrag (vid behov)", "Städning efter jobbet"],
-    extras: [
-      { name: "Extra rum", price: 1400 },
-      { name: "Takmålning", price: 900 },
-      { name: "Färgprover", price: 250 },
-    ],
-  },
-  per: {
-    offers: [
-      { id: "dag", name: "Dagsbemanning", hours: "8 timmar", price: 3200, on: true },
-      { id: "kvall", name: "Kvällspass", hours: "4 timmar", price: 1800, on: true },
-      { id: "event", name: "Eventpersonal", hours: "Enligt schema", price: 450, on: true },
-    ],
-    includes: ["Kontrollerad personal", "Försäkring ingår", "Ersättare vid sjukdom", "Kort varsel när det går"],
-    extras: [
-      { name: "Extra person", price: 450 },
-      { name: "Helgdag", price: 300 },
-      { name: "Uniform", price: 150 },
-    ],
-  },
-  eko: {
-    offers: [
-      { id: "bok", name: "Löpande bokföring", hours: "Per månad", price: 1490, on: true },
-      { id: "dekl", name: "Deklaration", hours: "Engång", price: 2490, on: true },
-      { id: "rad", name: "Ekonomirådgivning", hours: "1 timme", price: 990, on: true },
-    ],
-    includes: ["Auktoriserad redovisning", "Digital inlämning", "Månadsavstämning", "Säker hantering av underlag"],
-    extras: [
-      { name: "Momsredovisning", price: 490 },
-      { name: "Löner", price: 790 },
-      { name: "Extra möte", price: 690 },
-    ],
-  },
-  ank: {
-    offers: [
-      { id: "forbered", name: "Förbered hemmet", hours: "2 – 3 timmar", price: 890, on: true },
-      { id: "inkop", name: "Inköp & påfyllning", hours: "1 – 2 timmar", price: 490, on: true },
-      { id: "valkomst", name: "Välkomststäd", hours: "2 timmar", price: 790, on: true },
-    ],
-    includes: ["Incheckning av hemmet", "Påfyllning av basvaror", "Rapport med bilder", "Flexibel ankomsttid"],
-    extras: [
-      { name: "Blommor", price: 250 },
-      { name: "Matkasse", price: 400 },
-      { name: "Extra sängkläder", price: 150 },
-    ],
-  },
-  til: {
-    offers: [
-      { id: "vecka", name: "Veckotillsyn", hours: "30 – 45 min", price: 390, on: true },
-      { id: "resa", name: "Tillsyn under resa", hours: "Per besök", price: 450, on: true },
-      { id: "vaxter", name: "Växter & post", hours: "20 – 30 min", price: 290, on: true },
-    ],
-    includes: ["Rond med checklista", "Bilder efter besöket", "Larm och lås kontrolleras", "Avvikelse rapporteras direkt"],
-    extras: [
-      { name: "Extra besök", price: 250 },
-      { name: "Vattning", price: 100 },
-      { name: "Posthämtning", price: 80 },
-    ],
-  },
-};
-
 export function OnboardSheet() {
   const closeSheet = useVelio((state) => state.closeSheet);
   const finishOnboard = useVelio((state) => state.finishOnboard);
@@ -183,28 +48,42 @@ export function OnboardSheet() {
   const showToast = useVelio((state) => state.showToast);
   const saved = useRef(useVelio.getState().businessForm).current;
   const listing = useRef(useVelio.getState().listing).current;
-  const bankIdName = useRef(useVelio.getState().profile.name).current || "Anna Karlsson";
-  const savedTitle = saved?.title || bankIdName;
-  const savedDesc = saved?.desc || listing?.desc.split("\n").slice(1).join("\n") || "";
+  const savedTitle = saved?.title || listing?.title || "";
+  const savedDesc = saved?.desc || (listing?.desc ?? "");
+  const tradesOf = (source: { serviceIds?: ServiceId[]; serviceId?: ServiceId | "" } | null | undefined) => {
+    if (!source) return null;
+    if (source.serviceIds) return source.serviceIds;
+    if (source.serviceId) return [source.serviceId];
+    return null;
+  };
+  const initialServices = tradesOf(saved) ?? tradesOf(listing) ?? [];
   const [step, setStep] = useState(1);
-  const [serviceId, setServiceId] = useState<ServiceId | "">(saved?.serviceId || listing?.serviceId || "");
+  const [serviceIds, setServiceIds] = useState<ServiceId[]>(initialServices);
+  const [otherOn, setOtherOn] = useState(Boolean(saved?.otherTrade || listing?.otherTrade));
+  const [otherTrade, setOtherTrade] = useState(saved?.otherTrade || listing?.otherTrade || "");
   const [title, setTitle] = useState(savedTitle);
-  const [desc, setDesc] = useState(savedDesc);
-  const [level, setLevel] = useState(saved?.level || levels[0]);
+  const [desc, setDesc] = useState(savedDesc.startsWith("\n") ? savedDesc.trim() : savedDesc);
+  const [level, setLevel] = useState(saved?.level || listing?.experience || "");
   const [certs, setCerts] = useState<string[]>(saved?.certs ?? []);
   const [certDraft, setCertDraft] = useState("");
   const [certOpen, setCertOpen] = useState(false);
-  const [photos, setPhotos] = useState(saved?.photos ?? photoPool.slice(0, 3));
-  const [offers, setOffers] = useState<Offer[]>(saved?.offers ?? []);
+  const [photos, setPhotos] = useState<string[]>((saved?.photos ?? listing?.photos ?? []).filter((src) => src.startsWith("data:")));
+  const [offers, setOffers] = useState<Offer[]>(
+    saved?.offers?.length
+      ? saved.offers
+      : (listing?.offers ?? []).map((offer) => ({ ...offer, id: crypto.randomUUID(), on: true })),
+  );
   const [editing, setEditing] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [draftOffer, setDraftOffer] = useState({ name: "", hours: "", price: "" });
-  const [includes, setIncludes] = useState<{ text: string; on: boolean }[]>(saved?.includes ?? []);
-  const [extras, setExtras] = useState<{ name: string; price: number }[]>(saved?.extras ?? []);
+  const [includes, setIncludes] = useState<string[]>(saved?.includes ?? listing?.includes ?? []);
+  const [includeDraft, setIncludeDraft] = useState("");
+  const [extras, setExtras] = useState<{ name: string; price: number }[]>(saved?.extras ?? listing?.extras ?? []);
   const [extraOpen, setExtraOpen] = useState(false);
   const [extraName, setExtraName] = useState("");
   const [extraPrice, setExtraPrice] = useState("");
-  const [areaMode, setAreaMode] = useState<"radius" | "areas" | "city">(saved?.areaMode ?? "radius");
+  const [areaMode, setAreaMode] = useState<"radius" | "areas" | "city">(saved?.areaMode ?? (listing?.areas?.includes("Överallt") ? "city" : "areas"));
+  const [areas, setAreas] = useState<string[]>(saved?.areas ?? listing?.areas ?? []);
   const [km, setKm] = useState(saved?.km ?? 20);
   const [days, setDays] = useState(saved?.days ?? [0, 1, 2, 3, 4]);
   const [from, setFrom] = useState(saved?.from ?? "08:00");
@@ -215,23 +94,51 @@ export function OnboardSheet() {
   const [notice, setNotice] = useState(saved?.notice ?? "Snarast");
   const [payout, setPayout] = useState(saved?.payout ?? true);
   const [terms, setTerms] = useState(saved?.terms ?? true);
-  const keepOffers = useRef(Boolean(saved?.offers.length));
 
-  useEffect(() => {
-    if (!serviceId) return;
-    if (keepOffers.current) {
-      keepOffers.current = false;
+  const toggleService = (id: ServiceId) => {
+    setServiceIds((current) => {
+      if (current.includes(id)) return current.filter((item) => item !== id);
+      if (current.length >= 3) {
+        showToast("Du kan välja högst tre yrken");
+        return current;
+      }
+      return [...current, id];
+    });
+  };
+
+  const toggleArea = (name: string) => {
+    const districts = Object.keys(areaLayout);
+    if (name !== "Överallt" && !districts.includes(name)) {
+      setAreas((current) => current.filter((item) => item !== name));
       return;
     }
-    const pack = packs[serviceId];
-    setOffers(pack.offers.map((offer) => ({ ...offer })));
-    setIncludes(pack.includes.map((text) => ({ text, on: true })));
-    setExtras(pack.extras.map((extra) => ({ ...extra })));
-  }, [serviceId]);
+    setAreas((current) => {
+      if (name === "Överallt") {
+        if (current.includes("Överallt")) return current.filter((item) => item !== "Överallt");
+        return ["Överallt", ...current.filter((item) => !districts.includes(item))];
+      }
+      const withoutAll = current.filter((item) => item !== "Överallt");
+      return withoutAll.includes(name) ? withoutAll.filter((item) => item !== name) : [...withoutAll, name];
+    });
+    setAreaMode(name === "Överallt" ? "city" : "areas");
+  };
+
+  const addPhotos = async (files: FileList | null) => {
+    if (!files?.length) return;
+    const room = 6 - photos.length;
+    if (room <= 0) return showToast("Du kan lägga till högst sex bilder");
+    const next: string[] = [];
+    for (const file of [...files].slice(0, room)) {
+      next.push(await readWorkPhoto(file));
+    }
+    setPhotos([...photos, ...next]);
+  };
 
   useEffect(() => {
     const form: BusinessForm = {
-      serviceId,
+      serviceId: serviceIds[0] ?? "",
+      serviceIds,
+      otherTrade: otherOn ? otherTrade.trim() : "",
       title,
       desc,
       level,
@@ -241,6 +148,7 @@ export function OnboardSheet() {
       includes,
       extras,
       areaMode,
+      areas,
       km,
       days,
       from,
@@ -251,29 +159,41 @@ export function OnboardSheet() {
       terms,
     };
     saveBusinessForm(form);
-  }, [serviceId, title, desc, level, certs, photos, offers, includes, extras, areaMode, km, days, from, to, offs, notice, payout, terms, saveBusinessForm]);
+  }, [serviceIds, otherOn, otherTrade, title, desc, level, certs, photos, offers, includes, extras, areaMode, areas, km, days, from, to, offs, notice, payout, terms, saveBusinessForm]);
 
   const next = () => {
     if (step === 1) {
-      if (!serviceId) return showToast("Välj en yrkesroll");
+      if (!serviceIds.length && !(otherOn && otherTrade.trim().length > 1)) return showToast("Välj minst ett yrke");
       if (title.trim().length < 3) return showToast("Skriv en titel");
+      if (!level) return showToast("Välj hur många års erfarenhet du har");
       if (desc.trim().length < 12) return showToast("Beskriv dig lite mer");
     }
-    if (step === 2 && !offers.some((offer) => offer.on)) return showToast("Välj minst en tjänst");
+    if (step === 2 && !offers.some((offer) => offer.on)) return showToast("Lägg till minst en tjänst");
+    if (step === 3 && !areas.length) return showToast("Välj minst ett område");
     if (step === 3 && days.length === 0) return showToast("Välj minst en arbetsdag");
     setStep(step + 1);
   };
 
   const publish = () => {
-    if (!serviceId) return;
-    const amount = offers.find((offer) => offer.on)?.price || 0;
+    const active = offers.filter((offer) => offer.on);
+    const amount = active[0]?.price || 0;
+    if (!serviceIds.length && !(otherOn && otherTrade.trim())) return showToast("Välj minst ett yrke");
     if (!terms) return showToast("Godkänn villkoren för att publicera");
     if (amount <= 0) return showToast("Ange ett pris");
+    const primary = serviceIds[0] ?? "rep";
     finishOnboard({
-      serviceId,
+      serviceId: primary,
+      serviceIds,
+      otherTrade: otherOn ? otherTrade.trim() : "",
+      title: title.trim(),
       desc: desc.trim(),
       price: amount,
-      experience: level.startsWith("Välj") ? "" : level,
+      experience: level,
+      photos,
+      offers: active.slice(0, 10).map(({ name, hours, price }) => ({ name, hours, price })),
+      includes,
+      extras,
+      areas,
     });
   };
 
@@ -294,7 +214,9 @@ export function OnboardSheet() {
         <div className="mt-4 rounded-[1.3rem] border border-[#efeae4] bg-white/80 p-4">
           {step === 1 ? (
             <StepInfo
-              serviceId={serviceId}
+              serviceIds={serviceIds}
+              otherOn={otherOn}
+              otherTrade={otherTrade}
               title={title}
               desc={desc}
               level={level}
@@ -302,7 +224,9 @@ export function OnboardSheet() {
               certOpen={certOpen}
               certDraft={certDraft}
               photos={photos}
-              onService={setServiceId}
+              onToggleService={toggleService}
+              onToggleOther={() => setOtherOn((value) => !value)}
+              onOtherTrade={setOtherTrade}
               onTitle={setTitle}
               onDesc={setDesc}
               onLevel={setLevel}
@@ -315,11 +239,7 @@ export function OnboardSheet() {
                 setCertOpen(false);
               }}
               onRemoveCert={(name) => setCerts(certs.filter((item) => item !== name))}
-              onAddPhoto={() => {
-                const nextPhoto = photoPool.find((item) => !photos.includes(item));
-                if (!nextPhoto) return showToast("Du kan lägga till högst sex bilder");
-                setPhotos([...photos, nextPhoto]);
-              }}
+              onAddPhotos={(files) => void addPhotos(files)}
               onRemovePhoto={(src) => setPhotos(photos.filter((item) => item !== src))}
             />
           ) : null}
@@ -330,6 +250,7 @@ export function OnboardSheet() {
               adding={adding}
               draft={draftOffer}
               includes={includes}
+              includeDraft={includeDraft}
               extras={extras}
               extraOpen={extraOpen}
               extraName={extraName}
@@ -341,13 +262,21 @@ export function OnboardSheet() {
               onAdding={setAdding}
               onDraft={setDraftOffer}
               onCreate={() => {
+                if (offers.length >= 10) return showToast("Du kan lägga till högst tio tjänster");
                 const price = Number(draftOffer.price);
                 if (draftOffer.name.trim().length < 2 || !Number.isFinite(price) || price <= 0) return showToast("Fyll i namn och pris");
                 setOffers([...offers, { id: crypto.randomUUID(), name: draftOffer.name.trim(), hours: draftOffer.hours.trim() || "Efter överenskommelse", price, on: true }]);
                 setDraftOffer({ name: "", hours: "", price: "" });
                 setAdding(false);
               }}
-              onInclude={(text) => setIncludes(includes.map((item) => (item.text === text ? { ...item, on: !item.on } : item)))}
+              onIncludeDraft={setIncludeDraft}
+              onAddInclude={() => {
+                const text = includeDraft.trim();
+                if (text.length < 2) return showToast("Skriv vad som ingår");
+                setIncludes([...includes, text]);
+                setIncludeDraft("");
+              }}
+              onRemoveInclude={(text) => setIncludes(includes.filter((item) => item !== text))}
               onExtraOpen={setExtraOpen}
               onExtraName={setExtraName}
               onExtraPrice={setExtraPrice}
@@ -365,6 +294,7 @@ export function OnboardSheet() {
           {step === 3 ? (
             <StepArea
               areaMode={areaMode}
+              areas={areas}
               km={km}
               days={days}
               from={from}
@@ -374,6 +304,12 @@ export function OnboardSheet() {
               offDate={offDate}
               notice={notice}
               onMode={setAreaMode}
+              onToggleArea={toggleArea}
+              onAddArea={(name) => {
+                const trimmed = name.trim();
+                if (trimmed.length < 2) return showToast("Skriv ett område");
+                setAreas((current) => (current.includes(trimmed) ? current : [...current, trimmed]));
+              }}
               onKm={setKm}
               onDay={(index) => setDays(days.includes(index) ? days.filter((day) => day !== index) : [...days, index])}
               onFrom={setFrom}
@@ -457,8 +393,37 @@ function Label({ icon: Icon, children }: { icon: typeof Briefcase; children: str
   );
 }
 
+function readWorkPhoto(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error);
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const max = 720;
+        const scale = Math.min(1, max / Math.max(img.width, img.height));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(img.width * scale));
+        canvas.height = Math.max(1, Math.round(img.height * scale));
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve(String(reader.result));
+          return;
+        }
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/jpeg", 0.72));
+      };
+      img.onerror = () => reject(new Error("bild"));
+      img.src = String(reader.result);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 function StepInfo(props: {
-  serviceId: ServiceId | "";
+  serviceIds: ServiceId[];
+  otherOn: boolean;
+  otherTrade: string;
   title: string;
   desc: string;
   level: string;
@@ -466,7 +431,9 @@ function StepInfo(props: {
   certOpen: boolean;
   certDraft: string;
   photos: string[];
-  onService: (id: ServiceId) => void;
+  onToggleService: (id: ServiceId) => void;
+  onToggleOther: () => void;
+  onOtherTrade: (value: string) => void;
   onTitle: (value: string) => void;
   onDesc: (value: string) => void;
   onLevel: (value: string) => void;
@@ -474,42 +441,81 @@ function StepInfo(props: {
   onCertDraft: (value: string) => void;
   onAddCert: () => void;
   onRemoveCert: (name: string) => void;
-  onAddPhoto: () => void;
+  onAddPhotos: (files: FileList | null) => void;
   onRemovePhoto: (src: string) => void;
 }) {
+  const fileRef = useRef<HTMLInputElement>(null);
   return (
     <div className="space-y-4">
       <div>
-        <Label icon={Briefcase}>Din yrkesroll *</Label>
-        <div className="relative">
-          <select value={props.serviceId} onChange={(event) => props.onService(event.target.value as ServiceId)} className="w-full appearance-none rounded-2xl border border-[#e6dfd6] bg-white px-4 py-3 text-sm outline-none">
-            <option value="">Välj yrke eller kategori</option>
-            {services.map((service) => (
-              <option key={service.id} value={service.id}>{service.name}</option>
-            ))}
-          </select>
-          <ChevronDown className="pointer-events-none absolute top-3.5 right-3 size-4 text-muted" />
+        <Label icon={Briefcase}>Dina yrken *</Label>
+        <p className="mb-2 text-sm text-muted">Välj upp till tre. Tryck en gång till för att ta bort.</p>
+        <div className="flex flex-wrap gap-1.5">
+          {services.map((service) => {
+            const active = props.serviceIds.includes(service.id);
+            return (
+              <button
+                key={service.id}
+                type="button"
+                aria-pressed={active}
+                onClick={() => props.onToggleService(service.id)}
+                className={cn("rounded-full px-3 py-1.5 text-sm", active ? "bg-[#8a6a3d] text-white" : "border border-[#e6dfd6] bg-white")}
+              >
+                {service.name}
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            aria-pressed={props.otherOn}
+            onClick={props.onToggleOther}
+            className={cn("rounded-full px-3 py-1.5 text-sm", props.otherOn ? "bg-[#8a6a3d] text-white" : "border border-[#e6dfd6] bg-white")}
+          >
+            Annat
+          </button>
+        </div>
+        {props.otherOn ? (
+          <input
+            value={props.otherTrade}
+            onChange={(event) => props.onOtherTrade(event.target.value)}
+            placeholder="Beskriv vad annat betyder"
+            className="mt-2 w-full rounded-2xl border border-[#e6dfd6] bg-white px-4 py-3 text-sm outline-none"
+          />
+        ) : null}
+      </div>
+      <div className="rounded-2xl border border-[#e6dfd6] bg-white p-3">
+        <Label icon={Type}>Titel på din profil *</Label>
+        <input value={props.title} onChange={(event) => props.onTitle(event.target.value)} placeholder="T.ex. Certifierad städfirma i Stockholm" className="w-full rounded-2xl border border-[#e6dfd6] bg-white px-4 py-3 text-sm outline-none" />
+        <p className="mt-3 text-xs font-semibold tracking-wide text-[#8a6a3d]">ERFARENHET</p>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {levels.map((item) => (
+            <button
+              key={item}
+              type="button"
+              aria-pressed={props.level === item}
+              onClick={() => props.onLevel(item)}
+              className={cn("rounded-full px-3 py-1 text-xs", props.level === item ? "bg-[#8a6a3d] text-white" : "border border-[#e6dfd6]")}
+            >
+              {item}
+            </button>
+          ))}
         </div>
       </div>
       <div>
-        <Label icon={Type}>Titel på din profil *</Label>
-        <input value={props.title} onChange={(event) => props.onTitle(event.target.value)} placeholder="T.ex. Certifierad städfirma i Stockholm" className="w-full rounded-2xl border border-[#e6dfd6] bg-white px-4 py-3 text-sm outline-none" />
-      </div>
-      <div>
         <Label icon={MessageSquare}>Beskrivning *</Label>
-        <textarea value={props.desc} maxLength={500} onChange={(event) => props.onDesc(event.target.value)} placeholder="Berätta kort om dig/dit företag, din erfarenhet, certifieringar och vad du erbjuder." className="h-24 w-full rounded-2xl border border-[#e6dfd6] bg-white px-4 py-3 text-sm outline-none" />
+        <textarea value={props.desc} maxLength={500} onChange={(event) => props.onDesc(event.target.value)} placeholder="Berätta kort om dig, ditt företag och vad du erbjuder." className="h-24 w-full rounded-2xl border border-[#e6dfd6] bg-white px-4 py-3 text-sm outline-none" />
         <p className="text-right text-xs text-muted">{props.desc.length}/500</p>
       </div>
       <div>
         <Label icon={ImageIcon}>Bilder</Label>
-        <p className="mb-2 text-sm text-muted">Lägg till bilder på ditt arbete, team eller utrustning.</p>
+        <p className="mb-2 text-sm text-muted">Visa öppet arbete och jobb du utför.</p>
         <div className="flex gap-2 overflow-x-auto">
-          <button type="button" onClick={props.onAddPhoto} className="grid size-20 shrink-0 place-items-center rounded-2xl border border-[#e6dfd6] bg-[#f6f1ea] text-xs text-muted">
+          <button type="button" onClick={() => fileRef.current?.click()} className="grid size-20 shrink-0 place-items-center rounded-2xl border border-[#e6dfd6] bg-[#f6f1ea] text-xs text-muted">
             <Plus className="size-5" />
             Lägg till bild
           </button>
           {props.photos.map((src) => (
-            <span key={src} className="relative size-20 shrink-0">
+            <span key={src.slice(0, 48)} className="relative size-20 shrink-0">
               <img src={src} alt="" className="size-20 rounded-2xl object-cover" />
               <button type="button" aria-label="Ta bort bild" onClick={() => props.onRemovePhoto(src)} className="absolute -top-1 -right-1 grid size-5 place-items-center rounded-full bg-white shadow">
                 <X className="size-3" />
@@ -517,17 +523,7 @@ function StepInfo(props: {
             </span>
           ))}
         </div>
-      </div>
-      <div>
-        <Label icon={Award}>Erfarenhet</Label>
-        <div className="relative">
-          <select value={props.level} onChange={(event) => props.onLevel(event.target.value)} className="w-full appearance-none rounded-2xl border border-[#e6dfd6] bg-white px-4 py-3 text-sm outline-none">
-            {levels.map((item) => (
-              <option key={item}>{item}</option>
-            ))}
-          </select>
-          <ChevronDown className="pointer-events-none absolute top-3.5 right-3 size-4 text-muted" />
-        </div>
+        <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={(event) => props.onAddPhotos(event.target.files)} />
       </div>
       <div>
         <Label icon={Shield}>Certifieringar & behörigheter</Label>
@@ -558,7 +554,8 @@ function StepServices(props: {
   editing: string | null;
   adding: boolean;
   draft: { name: string; hours: string; price: string };
-  includes: { text: string; on: boolean }[];
+  includes: string[];
+  includeDraft: string;
   extras: { name: string; price: number }[];
   extraOpen: boolean;
   extraName: string;
@@ -570,19 +567,20 @@ function StepServices(props: {
   onAdding: (open: boolean) => void;
   onDraft: (draft: { name: string; hours: string; price: string }) => void;
   onCreate: () => void;
-  onInclude: (text: string) => void;
+  onIncludeDraft: (value: string) => void;
+  onAddInclude: () => void;
+  onRemoveInclude: (text: string) => void;
   onExtraOpen: (open: boolean) => void;
   onExtraName: (value: string) => void;
   onExtraPrice: (value: string) => void;
   onAddExtra: () => void;
   onRemoveExtra: (name: string) => void;
 }) {
-  const included = props.includes.filter((item) => item.on).map((item) => item.text).join(" ").length;
   return (
     <div className="space-y-4">
       <div>
         <Label icon={Layers}>Dina tjänster *</Label>
-        <p className="mb-2 text-sm text-muted">Lägg till de tjänster du erbjuder.</p>
+        <p className="mb-2 text-sm text-muted">Skriv de tjänster du erbjuder. Högst tio.</p>
         <div className="space-y-2">
           {props.offers.map((offer) => (
             <div key={offer.id} className="flex items-center gap-2 rounded-2xl border border-[#efeae4] bg-[#fbf8f4] px-3 py-2">
@@ -622,22 +620,26 @@ function StepServices(props: {
             <input value={props.draft.price} inputMode="numeric" onChange={(event) => props.onDraft({ ...props.draft, price: event.target.value })} placeholder="Pris i kr" className="w-full rounded-2xl border border-[#e6dfd6] px-3 py-2 text-sm outline-none" />
             <button type="button" onClick={props.onCreate} className="rounded-full bg-[#2a211c] px-4 py-2 text-sm text-white">Spara tjänst</button>
           </div>
+        ) : props.offers.length >= 10 ? (
+          <p className="mt-3 text-sm text-muted">Du har lagt till tio tjänster.</p>
         ) : (
           <button type="button" onClick={() => props.onAdding(true)} className="mt-3 w-full rounded-full border border-[#e6dfd6] py-3 text-sm font-semibold">+ Lägg till tjänst</button>
         )}
       </div>
       <div>
         <Label icon={MessageSquare}>Vad ingår?</Label>
-        <p className="mb-2 text-sm text-muted">Beskriv kort vad som ingår i dina tjänster.</p>
-        <div className="rounded-2xl border border-[#e6dfd6] px-3 py-2 text-sm">
-          {props.includes.map((item) => (
-            <button key={item.text} type="button" onClick={() => props.onInclude(item.text)} className="flex w-full items-center gap-2 py-1 text-left">
-              <span className={item.on ? "text-[#8a6a3d]" : "text-muted"}>{item.on ? "✓" : "○"}</span>
-              {item.text}
+        <p className="mb-2 text-sm text-muted">Skriv själv vad som ingår.</p>
+        <div className="flex flex-wrap gap-2">
+          {props.includes.map((text) => (
+            <button key={text} type="button" onClick={() => props.onRemoveInclude(text)} className="rounded-full border border-[#e6dfd6] bg-white px-3 py-1.5 text-sm">
+              {text} ×
             </button>
           ))}
         </div>
-        <p className="text-right text-xs text-muted">{included}/300</p>
+        <div className="mt-2 flex gap-2">
+          <input value={props.includeDraft} onChange={(event) => props.onIncludeDraft(event.target.value)} placeholder="T.ex. material och städning efteråt" className="min-w-0 flex-1 rounded-full border border-[#e6dfd6] px-3 py-2 text-sm outline-none" />
+          <button type="button" onClick={props.onAddInclude} className="rounded-full bg-[#2a211c] px-3 text-sm text-white">Lägg till</button>
+        </div>
       </div>
       <div>
         <Label icon={Star}>Extra tillval (valfritt)</Label>
@@ -665,6 +667,7 @@ function StepServices(props: {
 
 function StepArea(props: {
   areaMode: "radius" | "areas" | "city";
+  areas: string[];
   km: number;
   days: number[];
   from: string;
@@ -674,6 +677,8 @@ function StepArea(props: {
   offDate: string;
   notice: string;
   onMode: (mode: "radius" | "areas" | "city") => void;
+  onToggleArea: (name: string) => void;
+  onAddArea: (name: string) => void;
   onKm: (km: number) => void;
   onDay: (index: number) => void;
   onFrom: (value: string) => void;
@@ -683,23 +688,35 @@ function StepArea(props: {
   onAddOff: () => void;
   onNotice: (value: string) => void;
 }) {
+  const [extraOpen, setExtraOpen] = useState(false);
+  const [extraName, setExtraName] = useState("");
+  const presets = ["Överallt", ...Object.keys(areaLayout)];
+  const custom = props.areas.filter((area) => !presets.includes(area));
   const modes = [
     { id: "radius" as const, icon: MapPin, label: "Inom en radie" },
-    { id: "areas" as const, icon: Layers, label: "Specifika områden" },
-    { id: "city" as const, icon: Building2, label: "Hela staden" },
+    { id: "areas" as const, icon: Layers, label: "Valda områden" },
+    { id: "city" as const, icon: Building2, label: "Överallt" },
   ];
   return (
     <div className="space-y-5">
       <div>
         <Label icon={MapPin}>Arbetsområde *</Label>
-        <p className="mb-2 text-sm text-muted">Välj var du erbjuder dina tjänster.</p>
-        <div className="flex gap-2 overflow-x-auto">
+        <p className="mb-2 text-sm text-muted">Välj överallt, eller de områden du tar uppdrag i.</p>
+        <div className="flex flex-wrap gap-1.5">
           {modes.map((mode) => {
             const Icon = mode.icon;
             const active = props.areaMode === mode.id;
             return (
-              <button key={mode.id} type="button" onClick={() => props.onMode(mode.id)} className={cn("flex shrink-0 items-center gap-1.5 rounded-full px-3 py-2 text-sm", active ? "bg-[#8a6a3d] text-white" : "border border-[#e6dfd6] bg-white")}>
-                <Icon className="size-4" /> {mode.label}
+              <button
+                key={mode.id}
+                type="button"
+                onClick={() => {
+                  props.onMode(mode.id);
+                  if (mode.id === "city" && !props.areas.includes("Överallt")) props.onToggleArea("Överallt");
+                }}
+                className={cn("flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs", active ? "bg-[#8a6a3d] text-white" : "border border-[#e6dfd6] bg-white")}
+              >
+                <Icon className="size-3.5" /> {mode.label}
               </button>
             );
           })}
@@ -712,12 +729,42 @@ function StepArea(props: {
             </div>
             <input type="range" min={1} max={50} value={props.km} onChange={(event) => props.onKm(Number(event.target.value))} className="w-full accent-[#8a6a3d]" />
           </div>
-        ) : (
-          <p className="mt-3 text-sm text-muted">{props.areaMode === "city" ? "Du syns i hela Stockholm." : "Välj stadsdelar när uppdraget kommer."}</p>
-        )}
-        <button type="button" className="mt-2 flex w-full items-center gap-2 rounded-full border border-[#e6dfd6] bg-white px-4 py-3 text-sm">
-          <MapPin className="size-4" /> Centrum, Stockholm <ChevronRight className="ml-auto size-4 text-muted" />
-        </button>
+        ) : null}
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {presets.map((name) => {
+            const active = props.areas.includes(name);
+            return (
+              <button key={name} type="button" aria-pressed={active} onClick={() => props.onToggleArea(name)} className={cn("rounded-full px-2.5 py-1 text-xs", active ? "bg-[#8a6a3d] text-white" : "border border-[#e6dfd6] bg-white")}>
+                {name}
+              </button>
+            );
+          })}
+          {custom.map((name) => (
+            <button key={name} type="button" onClick={() => props.onToggleArea(name)} className="rounded-full bg-[#8a6a3d] px-2.5 py-1 text-xs text-white">
+              {name} ×
+            </button>
+          ))}
+          {extraOpen ? (
+            <span className="flex items-center gap-1">
+              <input value={extraName} onChange={(event) => setExtraName(event.target.value)} placeholder="Område" className="w-28 rounded-full border border-[#e6dfd6] px-2 py-1 text-xs outline-none" />
+              <button
+                type="button"
+                onClick={() => {
+                  props.onAddArea(extraName);
+                  setExtraName("");
+                  setExtraOpen(false);
+                }}
+                className="rounded-full bg-[#2a211c] px-2 py-1 text-xs text-white"
+              >
+                OK
+              </button>
+            </span>
+          ) : (
+            <button type="button" onClick={() => setExtraOpen(true)} className="rounded-full border border-[#e6dfd6] px-2.5 py-1 text-xs">
+              + Område
+            </button>
+          )}
+        </div>
       </div>
       <div>
         <Label icon={Calendar}>Tillgänglighet *</Label>

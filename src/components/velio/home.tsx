@@ -33,7 +33,7 @@ import {
   Zap,
   type LucideIcon,
 } from "lucide-react";
-import { greetingName, providerById, ratingLabel, serviceById, services, type ServiceIcon, type ServiceId } from "@/lib/velio/data";
+import { greetingName, providerById, providerTradeNames, ratingLabel, serviceById, services, type ServiceIcon, type ServiceId } from "@/lib/velio/data";
 import { useVelio } from "@/lib/velio/store";
 import { AppHeader, PlaceLink } from "@/components/velio/header";
 import { cn } from "@/lib/cn";
@@ -119,7 +119,9 @@ export function Home() {
       !query ||
       person.name.toLowerCase().includes(query) ||
       person.area.toLowerCase().includes(query) ||
-      serviceById(person.serviceId)?.name.toLowerCase().includes(query),
+      serviceById(person.serviceId)?.name.toLowerCase().includes(query) ||
+      person.serviceIds?.some((id) => serviceById(id)?.name.toLowerCase().includes(query)) ||
+      person.otherTrade?.toLowerCase().includes(query),
   );
 
   return (
@@ -368,7 +370,9 @@ function ProviderHits({ query, onOpen }: { query: string; onOpen: (id: string) =
   const hits = directory.filter(
     (provider) =>
       provider.name.toLowerCase().includes(query) ||
-      serviceById(provider.serviceId)?.name.toLowerCase().includes(query),
+      serviceById(provider.serviceId)?.name.toLowerCase().includes(query) ||
+      provider.serviceIds?.some((id) => serviceById(id)?.name.toLowerCase().includes(query)) ||
+      provider.otherTrade?.toLowerCase().includes(query),
   );
   if (!hits.length) return <p className="mt-4 text-sm text-muted">Inga träffar bland publicerade profiler.</p>;
   return (
@@ -382,7 +386,7 @@ function ProviderHits({ query, onOpen }: { query: string; onOpen: (id: string) =
         >
           <span>
             <span className="block font-semibold">{provider.name}</span>
-            <span className="text-sm text-muted">{serviceById(provider.serviceId)?.name}</span>
+            <span className="text-sm text-muted">{providerTradeNames(provider).join(" · ")}</span>
           </span>
           <span className="text-sm">{ratingLabel(provider.rating)}</span>
         </button>

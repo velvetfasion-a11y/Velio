@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import {
+  areaCoords,
   initialsOf,
   kr,
   providerById,
@@ -143,19 +144,35 @@ export type Booking = {
   holdKr?: number;
 };
 
-export type Listing = { serviceId: ServiceId; desc: string; price: number; experience?: string };
+export type Listing = {
+  serviceId: ServiceId;
+  serviceIds?: ServiceId[];
+  otherTrade?: string;
+  title?: string;
+  desc: string;
+  price: number;
+  experience?: string;
+  photos?: string[];
+  offers?: { name: string; hours: string; price: number }[];
+  includes?: string[];
+  extras?: { name: string; price: number }[];
+  areas?: string[];
+};
 
 export type BusinessForm = {
   serviceId: ServiceId | "";
+  serviceIds: ServiceId[];
+  otherTrade: string;
   title: string;
   desc: string;
   level: string;
   certs: string[];
   photos: string[];
   offers: { id: string; name: string; hours: string; price: number; on: boolean }[];
-  includes: { text: string; on: boolean }[];
+  includes: string[];
   extras: { name: string; price: number }[];
   areaMode: "radius" | "areas" | "city";
+  areas: string[];
   km: number;
   days: number[];
   from: string;
@@ -190,26 +207,50 @@ const seedBookings: Booking[] = [];
 const seedNotifications: AppNotification[] = [];
 const seedCart: CartItem[] = [];
 
+function areaSummary(areas: string[] | undefined) {
+  const list = (areas ?? []).map((area) => area.trim()).filter(Boolean);
+  if (list.includes("Överallt")) {
+    const extra = list.filter((area) => area !== "Överallt");
+    return { area: "Stockholm", place: extra.length ? `Överallt, ${extra.join(", ")}` : "Överallt" };
+  }
+  const known = list.find((area) => areaCoords[area]);
+  if (list.length) return { area: known || "Stockholm", place: list.join(", ") };
+  return { area: "Stockholm", place: "Stockholm" };
+}
+
 function listingToProvider(input: {
   id: string;
   name: string;
   serviceId: ServiceId;
+  serviceIds?: ServiceId[];
+  otherTrade?: string;
+  title?: string;
   desc: string;
   price: number;
   area?: string;
+  place?: string;
   experience?: string;
   photo?: string;
+  photos?: string[];
+  offers?: Listing["offers"];
+  includes?: string[];
+  extras?: Listing["extras"];
+  areas?: string[];
 }): Provider {
   return {
     id: input.id,
     name: input.name,
     initials: initialsOf(input.name) || "V",
     serviceId: input.serviceId,
+    serviceIds: input.serviceIds,
+    otherTrade: input.otherTrade || undefined,
+    title: input.title || undefined,
     rating: 5,
     reviews: 0,
     etaMin: 20,
     price: input.price,
     area: input.area || "Stockholm",
+    place: input.place,
     about: input.desc,
     quote: "",
     reviewer: "",
@@ -217,6 +258,11 @@ function listingToProvider(input: {
     slots: ["morning", "afternoon", "evening"],
     experience: input.experience || undefined,
     photo: input.photo,
+    photos: input.photos,
+    offers: input.offers,
+    includes: input.includes,
+    extras: input.extras,
+    areas: input.areas,
   };
 }
 
@@ -674,9 +720,17 @@ export const useVelio = create<VelioState>()(
           listing: own
             ? {
                 serviceId: own.serviceId,
+                serviceIds: own.serviceIds,
+                otherTrade: own.otherTrade,
+                title: own.title,
                 desc: own.about,
                 price: own.price,
-                experience: own.experience ?? get().listing?.experience,
+                experience: own.experience,
+                photos: own.photos,
+                offers: own.offers,
+                includes: own.includes,
+                extras: own.extras,
+                areas: own.areas,
               }
             : get().listing,
           ...(wasLoggedIn
@@ -1255,15 +1309,26 @@ export const useVelio = create<VelioState>()(
         const profile = get().profile;
         const id = get().accountId ? `biz-${get().accountId}` : `biz-${uid()}`;
         const previous = get().directory.find((item) => item.id === id);
+        const serviceIds = listing.serviceIds ?? (listing.serviceId ? [listing.serviceId] : []);
+        const where = areaSummary(listing.areas);
         const published = listingToProvider({
           id,
           name: profile.name || "Mitt företag",
-          serviceId: listing.serviceId,
+          serviceId: serviceIds[0] ?? listing.serviceId,
+          serviceIds,
+          otherTrade: listing.otherTrade,
+          title: listing.title,
           desc: listing.desc,
           price: listing.price,
-          area: previous?.area || "Stockholm",
+          area: where.area,
+          place: where.place,
           experience: listing.experience,
           photo: profile.avatar || previous?.photo,
+          photos: listing.photos,
+          offers: listing.offers,
+          includes: listing.includes,
+          extras: listing.extras,
+          areas: listing.areas,
         });
         published.rating = previous?.rating ?? published.rating;
         published.reviews = previous?.reviews ?? published.reviews;
@@ -1305,9 +1370,17 @@ export const useVelio = create<VelioState>()(
                 providerId: own.id,
                 listing: get().listing ?? {
                   serviceId: own.serviceId,
+                  serviceIds: own.serviceIds,
+                  otherTrade: own.otherTrade,
+                  title: own.title,
                   desc: own.about,
                   price: own.price,
                   experience: own.experience,
+                  photos: own.photos,
+                  offers: own.offers,
+                  includes: own.includes,
+                  extras: own.extras,
+                  areas: own.areas,
                 },
               }
             : {}),
