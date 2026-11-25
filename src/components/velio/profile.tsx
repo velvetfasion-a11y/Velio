@@ -25,6 +25,7 @@ import {
 import { contactEmail, isSignInEmail, kr, providerTradeNames, publicDisplayName, serviceById } from "@/lib/velio/data";
 import { HistoryCard } from "@/components/velio/history";
 import { VerifyIdScreen } from "@/components/velio/verify-id";
+import { GetPaidCard } from "@/components/velio/get-paid";
 import { ownBusiness, useVelio, type Booking, type SavedAddress } from "@/lib/velio/store";
 import { cn } from "@/lib/cn";
 import { Btn, Field, ProfilePhoto, ScreenHeader, SecurePayNote } from "@/components/velio/ui";
@@ -268,7 +269,8 @@ export function ProfileScreens() {
   const bookings = useVelio((state) => state.bookings);
   const posted = useVelio((state) => state.posted);
   const jobOffers = useVelio((state) => state.jobOffers);
-  const acceptOffer = useVelio((state) => state.acceptOffer);
+  const openCheckout = useVelio((state) => state.openCheckout);
+  const markJobDone = useVelio((state) => state.markJobDone);
   const declineOffer = useVelio((state) => state.declineOffer);
   const accountId = useVelio((state) => state.accountId);
   const directory = useVelio((state) => state.directory);
@@ -453,6 +455,11 @@ export function ProfileScreens() {
                     {job.status && job.status !== "open" ? (
                       <p className="mt-1 text-xs font-semibold text-brown">{job.status === "assigned" ? "Tilldelat" : job.status === "completed" ? "Klart" : job.status === "cancelled" ? "Avbrutet" : job.status}</p>
                     ) : null}
+                    {job.status === "assigned" ? (
+                      <button type="button" onClick={() => markJobDone(job.id)} className="mt-2 h-9 rounded-full border border-line px-3 text-sm font-semibold">
+                        Markera som klart
+                      </button>
+                    ) : null}
                     <div className="mt-2 space-y-2">
                       {jobOffers
                         .filter((offer) => offer.jobId === job.id)
@@ -467,8 +474,8 @@ export function ProfileScreens() {
                             {offer.message ? <p className="mt-1 text-sm text-muted">{offer.message}</p> : null}
                             {offer.status === "pending" && offer.jobOwnerId === accountId ? (
                               <div className="mt-2 flex gap-2">
-                                <button type="button" onClick={() => acceptOffer(offer.id)} className="h-9 rounded-full bg-brown px-3 text-sm font-semibold text-paper">
-                                  Acceptera
+                                <button type="button" onClick={() => openCheckout(offer.id)} className="h-9 rounded-full bg-brown px-3 text-sm font-semibold text-paper">
+                                  Acceptera och betala
                                 </button>
                                 <button type="button" onClick={() => declineOffer(offer.id)} className="h-9 rounded-full border border-line px-3 text-sm font-semibold">
                                   Avböj
@@ -572,6 +579,7 @@ export function ProfileScreens() {
             </button>
           </div>
         ) : null}
+        <GetPaidCard />
         <button
           type="button"
           onClick={() => setSheet("onboard")}

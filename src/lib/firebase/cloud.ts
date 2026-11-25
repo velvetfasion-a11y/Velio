@@ -657,6 +657,14 @@ export async function sendCloudOffer(input: { jobId: string; jobOwnerId: string;
   return ref.id;
 }
 
+export async function completeCloudJob(jobId: string) {
+  await updateDoc(doc(db(), "jobs", jobId), {
+    status: "completed",
+    completedAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+}
+
 export async function setCloudOfferStatus(id: string, status: CloudOffer["status"]) {
   await updateDoc(doc(db(), "offers", id), { status, updatedAt: serverTimestamp() });
   if (status !== "accepted") return;

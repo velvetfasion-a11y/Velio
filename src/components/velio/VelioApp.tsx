@@ -27,6 +27,7 @@ import {
   TrackSheet,
 } from "@/components/velio/flows";
 import { Toast } from "@/components/velio/ui";
+import { CheckoutView } from "@/components/velio/checkout";
 
 const profileScreens: Screen[] = ["profile", "edit", "payments", "bookings", "posted", "business", "verify-id", "settings", "help", "favorites", "addresses", "wallet"];
 
@@ -108,6 +109,9 @@ export function VelioApp() {
     <div className="flex min-h-dvh justify-center bg-stage md:items-center md:p-4">
       <div className="relative flex h-dvh w-full max-w-phone flex-col overflow-hidden bg-cream md:h-[calc(100dvh-2rem)] md:rounded-[2rem] md:shadow-2xl">
         {loggedIn ? (
+          screen === "checkout" ? (
+            <CheckoutView embedded onClose={() => go("posted")} />
+          ) : (
           <>
             {showChrome && sheet !== "onboard" && sheet !== "job" ? <AppHeader /> : null}
 
@@ -174,6 +178,7 @@ export function VelioApp() {
             {sheet === "onboard" ? <BusinessSetup /> : null}
             <HomeSheets />
           </>
+          )
         ) : (
           <LoginScreen />
         )}

@@ -68,7 +68,8 @@ export type Screen =
   | "help"
   | "favorites"
   | "addresses"
-  | "wallet";
+  | "wallet"
+  | "checkout";
 
 export type AppNotification = {
   id: string;
@@ -223,6 +224,15 @@ export type PostedJob = {
   status?: string;
 };
 
+export type CheckoutDraft = {
+  offerId: string;
+  jobId: string;
+  jobTitle: string;
+  workerName: string;
+  workerId: string;
+  priceSek: number;
+};
+
 export type JobOffer = {
   id: string;
   ownerId: string;
@@ -337,6 +347,7 @@ const screens: Screen[] = [
   "favorites",
   "addresses",
   "wallet",
+  "checkout",
 ];
 
 const sheets: Exclude<Sheet, null>[] = [
@@ -427,6 +438,9 @@ type VelioState = {
   jobOffers: JobOffer[];
   acceptOffer: (id: string) => void;
   declineOffer: (id: string) => void;
+  checkout: CheckoutDraft | null;
+  openCheckout: (offerId: string) => void;
+  markJobDone: (jobId: string) => void;
   activeBookingId: string | null;
   toast: string | null;
   go: (screen: Screen, opts?: { replace?: boolean }) => void;
@@ -661,6 +675,7 @@ export const useVelio = create<VelioState>()(
       bookings: seedBookings,
       posted: [],
       jobOffers: [],
+      checkout: null,
       activeBookingId: null,
       toast: null,
       go: (screen, opts) => {
@@ -1981,6 +1996,42 @@ export const useVelio = create<VelioState>()(
       },
       rememberBankIdNumber: (value) => {
         set({ bankIdPersonalNumber: value });
+      },
+      openCheckout: (offerId) => {
+        const offer = get().jobOffers.find((item) => item.id === offerId);
+        if (!offer) return;
+        const job = get().posted.find((item) => item.id === offer.jobId);
+        const worker = get().directory.find((item) => item.id === offer.ownerId);
+        set({
+          screen: "checkout",
+          sheet: null,
+          checkout: {
+            offerId: offer.id,
+            jobId: offer.jobId,
+            jobTitle: serviceById(job?.serviceId)?.name || "Uppdrag",
+            workerName: worker?.name || "Utförare",
+            workerId: offer.ownerId,
+            priceSek: offer.amount,
+          },
+        });
+      },
+      markJobDone: (jobId) => {
+        void (async () => {
+          try {
+            const { completeCloudJob } = await import("@/lib/firebase/cloud");
+            await completeCloudJob(jobId);
+            try {
+              const { releasePayout } = await import("@/lib/stripe/api");
+              await releasePayout(jobId);
+              get().showToast("Jobbet är klart. Utbetalningen väntar tre timmar.");
+            } catch {
+              get().showToast("Jobbet är markerat som klart.");
+            }
+          } catch (error) {
+            const { cloudErrorSv } = await import("@/lib/firebase/cloud");
+            get().showToast(cloudErrorSv(error));
+          }
+        })();
       },
       acceptOffer: (id) => {
         void (async () => {
