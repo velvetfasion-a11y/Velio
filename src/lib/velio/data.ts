@@ -41,6 +41,7 @@ export type Provider = {
   photos?: string[];
   offers?: { name: string; hours: string; price: number }[];
   includes?: string[];
+  qualifications?: string[];
   extras?: { name: string; price: number }[];
   areas?: string[];
 };

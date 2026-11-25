@@ -181,6 +181,13 @@ export function ProviderSheet() {
                 </div>
               ))}
             </div>
+            {provider.qualifications?.length ? (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {provider.qualifications.map((item) => (
+                  <span key={item} className="rounded-full border border-line px-3 py-1 text-sm">{item}</span>
+                ))}
+              </div>
+            ) : null}
             {provider.includes?.length ? <p className="mt-2 text-sm text-muted">Ingår: {provider.includes.join(", ")}</p> : null}
             {provider.extras?.length ? (
               <p className="mt-1 text-sm text-muted">Tillval: {provider.extras.map((extra) => `${extra.name} + ${kr(extra.price)}`).join(", ")}</p>

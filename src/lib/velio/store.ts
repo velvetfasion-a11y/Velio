@@ -157,6 +157,7 @@ export type Listing = {
   photos?: string[];
   offers?: { name: string; hours: string; price: number }[];
   includes?: string[];
+  qualifications?: string[];
   extras?: { name: string; price: number }[];
   areas?: string[];
 };
@@ -236,6 +237,7 @@ function listingToProvider(input: {
   photos?: string[];
   offers?: Listing["offers"];
   includes?: string[];
+  qualifications?: string[];
   extras?: Listing["extras"];
   areas?: string[];
 }): Provider {
@@ -263,6 +265,7 @@ function listingToProvider(input: {
     photos: input.photos,
     offers: input.offers,
     includes: input.includes,
+    qualifications: input.qualifications,
     extras: input.extras,
     areas: input.areas,
   };
@@ -793,6 +796,7 @@ export const useVelio = create<VelioState>()(
                 photos: own.photos,
                 offers: own.offers,
                 includes: own.includes,
+                qualifications: own.qualifications,
                 extras: own.extras,
                 areas: own.areas,
               }
@@ -1478,6 +1482,7 @@ export const useVelio = create<VelioState>()(
           photos: listing.photos,
           offers: listing.offers,
           includes: listing.includes,
+          qualifications: listing.qualifications,
           extras: listing.extras,
           areas: listing.areas,
         });
@@ -1530,6 +1535,7 @@ export const useVelio = create<VelioState>()(
                   photos: own.photos,
                   offers: own.offers,
                   includes: own.includes,
+                  qualifications: own.qualifications,
                   extras: own.extras,
                   areas: own.areas,
                 },

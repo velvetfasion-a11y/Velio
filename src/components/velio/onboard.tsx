@@ -35,7 +35,7 @@ const dayNames = ["Mån", "Tis", "Ons", "Tor", "Fre", "Lör", "Sön"];
 
 const blurbs = [
   "Fyll i dina uppgifter så att kunder kan hitta, boka och anlita dig.",
-  "Fyll i vilka tjänster du erbjuder, vad som ingår och dina villkor.",
+  "Fyll i vilka tjänster du erbjuder och dina kvalifikationer.",
   "Ange önskad plats och radien du tar uppdrag inom.",
   "Sätt dina priser, hantera betalning och välj hur du får dina utbetalningar.",
 ];
@@ -71,9 +71,8 @@ export function OnboardSheet() {
   const [title, setTitle] = useState(savedTitle);
   const [desc, setDesc] = useState(savedDesc.startsWith("\n") ? savedDesc.trim() : savedDesc);
   const [level, setLevel] = useState(saved?.level || listing?.experience || "");
-  const [certs, setCerts] = useState<string[]>(saved?.certs ?? []);
+  const [certs, setCerts] = useState<string[]>(saved?.certs ?? listing?.qualifications ?? []);
   const [certDraft, setCertDraft] = useState("");
-  const [certOpen, setCertOpen] = useState(false);
   const [photos, setPhotos] = useState<string[]>((saved?.photos ?? listing?.photos ?? []).filter((src) => src.startsWith("data:")));
   const [offers, setOffers] = useState<Offer[]>(
     saved?.offers?.length
@@ -83,8 +82,7 @@ export function OnboardSheet() {
   const [editing, setEditing] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [draftOffer, setDraftOffer] = useState({ name: "", hours: "", price: "" });
-  const [includes, setIncludes] = useState<string[]>(saved?.includes ?? listing?.includes ?? []);
-  const [includeDraft, setIncludeDraft] = useState("");
+  const includes = useRef(saved?.includes ?? listing?.includes ?? []).current
   const [extras, setExtras] = useState<{ name: string; price: number }[]>(saved?.extras ?? listing?.extras ?? []);
   const [extraOpen, setExtraOpen] = useState(false);
   const [extraName, setExtraName] = useState("");
@@ -194,6 +192,7 @@ export function OnboardSheet() {
       photos,
       offers: active.slice(0, 10).map(({ name, hours, price }) => ({ name, hours, price })),
       includes,
+      qualifications: certs,
       extras,
       areas: areas[0]?.trim() ? [`${areas[0].trim()} · ${km} km`] : [],
     });
@@ -227,9 +226,6 @@ export function OnboardSheet() {
               title={title}
               desc={desc}
               level={level}
-              certs={certs}
-              certOpen={certOpen}
-              certDraft={certDraft}
               photos={photos}
               onToggleService={toggleService}
               onToggleOther={() => setOtherOn((value) => !value)}
@@ -237,15 +233,6 @@ export function OnboardSheet() {
               onTitle={setTitle}
               onDesc={setDesc}
               onLevel={setLevel}
-              onCertOpen={setCertOpen}
-              onCertDraft={setCertDraft}
-              onAddCert={() => {
-                if (certDraft.trim().length < 2) return showToast("Skriv en kvalifikation");
-                setCerts([...certs, certDraft.trim()]);
-                setCertDraft("");
-                setCertOpen(false);
-              }}
-              onRemoveCert={(name) => setCerts(certs.filter((item) => item !== name))}
               onAddPhotos={(files) => void addPhotos(files)}
               onRemovePhoto={(src) => setPhotos(photos.filter((item) => item !== src))}
             />
@@ -256,8 +243,8 @@ export function OnboardSheet() {
               editing={editing}
               adding={adding}
               draft={draftOffer}
-              includes={includes}
-              includeDraft={includeDraft}
+              certs={certs}
+              certDraft={certDraft}
               extras={extras}
               extraOpen={extraOpen}
               extraName={extraName}
@@ -276,14 +263,14 @@ export function OnboardSheet() {
                 setDraftOffer({ name: "", hours: "", price: "" });
                 setAdding(false);
               }}
-              onIncludeDraft={setIncludeDraft}
-              onAddInclude={() => {
-                const text = includeDraft.trim();
-                if (text.length < 2) return showToast("Skriv vad som ingår");
-                setIncludes([...includes, text]);
-                setIncludeDraft("");
+              onCertDraft={setCertDraft}
+              onAddCert={() => {
+                const text = certDraft.trim();
+                if (text.length < 2) return showToast("Skriv en kvalifikation");
+                setCerts([...certs, text]);
+                setCertDraft("");
               }}
-              onRemoveInclude={(text) => setIncludes(includes.filter((item) => item !== text))}
+              onRemoveCert={(name) => setCerts(certs.filter((item) => item !== name))}
               onExtraOpen={setExtraOpen}
               onExtraName={setExtraName}
               onExtraPrice={setExtraPrice}
@@ -439,9 +426,6 @@ function StepInfo(props: {
   title: string;
   desc: string;
   level: string;
-  certs: string[];
-  certOpen: boolean;
-  certDraft: string;
   photos: string[];
   onToggleService: (id: ServiceId) => void;
   onToggleOther: () => void;
@@ -449,10 +433,6 @@ function StepInfo(props: {
   onTitle: (value: string) => void;
   onDesc: (value: string) => void;
   onLevel: (value: string) => void;
-  onCertOpen: (open: boolean) => void;
-  onCertDraft: (value: string) => void;
-  onAddCert: () => void;
-  onRemoveCert: (name: string) => void;
   onAddPhotos: (files: FileList | null) => void;
   onRemovePhoto: (src: string) => void;
 }) {
@@ -551,25 +531,6 @@ function StepInfo(props: {
         </div>
         <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={(event) => props.onAddPhotos(event.target.files)} />
       </div>
-      <div>
-        <Label icon={Shield}>Dina kvalifikationer</Label>
-        <p className="mb-2 text-sm text-muted">Skriv en kvalifikation och tryck på spara.</p>
-        <div className="flex flex-wrap gap-2">
-          {props.certs.map((cert) => (
-            <button key={cert} type="button" onClick={() => props.onRemoveCert(cert)} className="rounded-full border border-[#e6dfd6] bg-white px-3 py-1.5 text-sm">
-              {cert} ×
-            </button>
-          ))}
-          {props.certOpen ? (
-            <div className="flex w-full gap-2">
-              <input value={props.certDraft} onChange={(event) => props.onCertDraft(event.target.value)} placeholder="Kvalifikation" className="min-w-0 flex-1 rounded-full border border-[#e6dfd6] px-3 py-2 text-sm outline-none" />
-              <button type="button" onClick={props.onAddCert} className="rounded-full bg-[#2a211c] px-3 text-sm text-white">Spara</button>
-            </div>
-          ) : (
-            <button type="button" onClick={() => props.onCertOpen(true)} className="rounded-full border border-[#e6dfd6] px-3 py-1.5 text-sm">+ Lägg till kvalifikation</button>
-          )}
-        </div>
-      </div>
     </div>
   );
 }
@@ -579,8 +540,8 @@ function StepServices(props: {
   editing: string | null;
   adding: boolean;
   draft: { name: string; hours: string; price: string };
-  includes: string[];
-  includeDraft: string;
+  certs: string[];
+  certDraft: string;
   extras: { name: string; price: number }[];
   extraOpen: boolean;
   extraName: string;
@@ -592,9 +553,9 @@ function StepServices(props: {
   onAdding: (open: boolean) => void;
   onDraft: (draft: { name: string; hours: string; price: string }) => void;
   onCreate: () => void;
-  onIncludeDraft: (value: string) => void;
-  onAddInclude: () => void;
-  onRemoveInclude: (text: string) => void;
+  onCertDraft: (value: string) => void;
+  onAddCert: () => void;
+  onRemoveCert: (name: string) => void;
   onExtraOpen: (open: boolean) => void;
   onExtraName: (value: string) => void;
   onExtraPrice: (value: string) => void;
@@ -652,18 +613,18 @@ function StepServices(props: {
         )}
       </div>
       <div>
-        <Label icon={MessageSquare}>Vad ingår?</Label>
-        <p className="mb-2 text-sm text-muted">Skriv själv vad som ingår.</p>
+        <Label icon={Shield}>Dina kvalifikationer</Label>
+        <p className="mb-2 text-sm text-muted">Skriv en kvalifikation och tryck på spara.</p>
         <div className="flex flex-wrap gap-2">
-          {props.includes.map((text) => (
-            <button key={text} type="button" onClick={() => props.onRemoveInclude(text)} className="rounded-full border border-[#e6dfd6] bg-white px-3 py-1.5 text-sm">
-              {text} ×
+          {props.certs.map((cert) => (
+            <button key={cert} type="button" onClick={() => props.onRemoveCert(cert)} className="rounded-full border border-[#e6dfd6] bg-white px-3 py-1.5 text-sm">
+              {cert} ×
             </button>
           ))}
         </div>
         <div className="mt-2 flex gap-2">
-          <input value={props.includeDraft} onChange={(event) => props.onIncludeDraft(event.target.value)} placeholder="T.ex. material och städning efteråt" className="min-w-0 flex-1 rounded-full border border-[#e6dfd6] px-3 py-2 text-sm outline-none" />
-          <button type="button" onClick={props.onAddInclude} className="rounded-full bg-[#2a211c] px-3 text-sm text-white">Lägg till</button>
+          <input value={props.certDraft} onChange={(event) => props.onCertDraft(event.target.value)} placeholder="Kvalifikation" className="min-w-0 flex-1 rounded-full border border-[#e6dfd6] px-3 py-2 text-sm outline-none" />
+          <button type="button" onClick={props.onAddCert} className="rounded-full bg-[#2a211c] px-3 text-sm text-white">Spara</button>
         </div>
       </div>
       <div>
