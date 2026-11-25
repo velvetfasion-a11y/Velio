@@ -21,6 +21,7 @@ function run(cmd, args, env = {}) {
 
 let moved = false;
 try {
+  await rm(join(root, "out"), { recursive: true, force: true });
   await rename(apiDir, stashDir);
   moved = true;
   await run("npx", ["next", "build"], {
