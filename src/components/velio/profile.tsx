@@ -85,6 +85,7 @@ export function ProfileScreens() {
   const notifications = useVelio((state) => state.notifications);
   const setNotifications = useVelio((state) => state.setNotifications);
   const locationOn = useVelio((state) => state.locationOn);
+  const userLocation = useVelio((state) => state.userLocation);
   const showToast = useVelio((state) => state.showToast);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [issue, setIssue] = useState("");
@@ -309,9 +310,11 @@ export function ProfileScreens() {
                 {notifications ? "På" : "Av"}
               </span>
             </button>
-            <button type="button" onClick={() => setSheet("location")} className="flex w-full items-center justify-between border-b border-line py-4">
+            <button type="button" onClick={() => setSheet("location")} className="flex w-full items-center justify-between border-b border-line py-4 text-left">
               <span>Plats</span>
-              <span className="text-sm text-muted">{locationOn ? "När appen används" : "Av"}</span>
+              <span className={cn("max-w-[55%] truncate text-sm", locationOn ? "font-medium text-[#2f7a3c]" : "text-muted")}>
+                {locationOn ? userLocation?.label || "GPS på" : "Av"}
+              </span>
             </button>
             <button type="button" onClick={() => setLegal("privacy")} className="flex w-full items-center justify-between border-b border-line py-4">
               <span>Integritetspolicy</span>

@@ -2005,6 +2005,7 @@ export function TrackSheet() {
   const openChat = useVelio((state) => state.openChat);
   const openProvider = useVelio((state) => state.openProvider);
   const locationOn = useVelio((state) => state.locationOn);
+  const userLocation = useVelio((state) => state.userLocation);
   const [rating, setRating] = useState(5);
   const [tip, setTip] = useState(50);
   const [doneStep, setDoneStep] = useState(false);
@@ -2021,6 +2022,7 @@ export function TrackSheet() {
           <CityMap
             people={[provider]}
             locationOn={locationOn}
+            userLocation={userLocation}
             activeArea={provider.area}
             onArea={() => undefined}
             onClear={() => undefined}
@@ -2087,24 +2089,49 @@ export function TrackSheet() {
 export function LocationSheet() {
   const closeSheet = useVelio((state) => state.closeSheet);
   const allowLocation = useVelio((state) => state.allowLocation);
+  const clearLocation = useVelio((state) => state.clearLocation);
+  const locationOn = useVelio((state) => state.locationOn);
+  const locationBusy = useVelio((state) => state.locationBusy);
+  const userLocation = useVelio((state) => state.userLocation);
   const showToast = useVelio((state) => state.showToast);
   return (
     <BottomSheet title="Dela plats" onClose={closeSheet}>
       <p className="mb-4 text-sm leading-relaxed text-muted">
-        VELIO använder din plats för att visa utförare i närheten och räkna ut ankomsttid. I demon sätts platsen
-        till Östermalm.
+        VELIO hämtar din riktiga GPS-position från enheten och visar den som en grön markör på OpenStreetMap. Ingen låtsasadress
+        används.
       </p>
-      <Btn onClick={allowLocation}>Tillåt</Btn>
-      <Btn
-        variant="secondary"
-        className="mt-2"
-        onClick={() => {
-          closeSheet();
-          showToast("Plats delas inte. Du kan slå på den senare.");
-        }}
-      >
-        Inte nu
+      {locationOn && userLocation ? (
+        <div className="mb-4 rounded-2xl bg-soft px-4 py-3">
+          <div className="flex items-center gap-2 text-sm font-semibold text-[#2f7a3c]">
+            <span className="size-2 rounded-full bg-[#3d8f4a]" />
+            Din plats är på
+          </div>
+          <p className="mt-1 font-semibold">{userLocation.label}</p>
+          <p className="mt-1 text-xs text-muted">
+            {userLocation.lat.toFixed(5)}, {userLocation.lng.toFixed(5)}
+            {userLocation.accuracy ? ` · ±${Math.round(userLocation.accuracy)} m` : ""}
+          </p>
+        </div>
+      ) : null}
+      <Btn disabled={locationBusy} onClick={() => void allowLocation()}>
+        {locationBusy ? "Hämtar GPS…" : locationOn ? "Uppdatera min plats" : "Tillåt riktig plats"}
       </Btn>
+      {locationOn ? (
+        <Btn variant="secondary" className="mt-2" onClick={clearLocation}>
+          Sluta dela plats
+        </Btn>
+      ) : (
+        <Btn
+          variant="secondary"
+          className="mt-2"
+          onClick={() => {
+            closeSheet();
+            showToast("Plats delas inte. Du kan slå på den senare.");
+          }}
+        >
+          Inte nu
+        </Btn>
+      )}
     </BottomSheet>
   );
 }

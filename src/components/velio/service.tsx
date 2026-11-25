@@ -98,6 +98,7 @@ export function ServiceScreen() {
   const openThread = useVelio((state) => state.openThread);
   const go = useVelio((state) => state.go);
   const locationOn = useVelio((state) => state.locationOn);
+  const userLocation = useVelio((state) => state.userLocation);
   const showToast = useVelio((state) => state.showToast);
   const service = serviceById(serviceId);
   const [menu, setMenu] = useState<"time" | "place" | "tags" | null>(null);
@@ -293,6 +294,7 @@ export function ServiceScreen() {
           <CityMap
             people={visible}
             locationOn={locationOn}
+            userLocation={userLocation}
             activeArea={area}
             activeId={focusId}
             onClear={() => setArea(null)}

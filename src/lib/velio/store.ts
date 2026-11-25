@@ -12,6 +12,7 @@ import {
   type Slot,
   type SortKey,
 } from "@/lib/velio/data";
+import { resolveCurrentLocation, type UserLocation } from "@/lib/velio/geo";
 import {
   createAccountRemote,
   createJobRemote,
@@ -218,6 +219,8 @@ type VelioState = {
   conversationByProvider: Record<string, string>;
   peers: Record<string, PeerInfo>;
   locationOn: boolean;
+  userLocation: UserLocation | null;
+  locationBusy: boolean;
   notifications: boolean;
   appNotifications: AppNotification[];
   search: string;
@@ -271,7 +274,8 @@ type VelioState = {
   refreshSync: () => Promise<void>;
   login: () => void;
   logout: () => void;
-  allowLocation: () => void;
+  allowLocation: () => Promise<void>;
+  clearLocation: () => void;
   setNotifications: (notifications: boolean) => void;
   pushNotification: (input: Omit<AppNotification, "id" | "createdAt" | "read"> & { id?: string; createdAt?: string; read?: boolean }) => void;
   markNotificationRead: (id: string) => void;
@@ -410,6 +414,8 @@ export const useVelio = create<VelioState>()(
       conversationByProvider: {},
       peers: {},
       locationOn: false,
+      userLocation: null,
+      locationBusy: false,
       notifications: true,
       appNotifications: seedNotifications,
       search: "",
@@ -735,9 +741,30 @@ export const useVelio = create<VelioState>()(
           idMethod: null,
         });
       },
-      allowLocation: () => {
-        set({ locationOn: true, sheet: null });
-        get().showToast("Plats delad. Visar utförare nära Östermalm.");
+      allowLocation: async () => {
+        if (get().locationBusy) return;
+        set({ locationBusy: true });
+        get().showToast("Hämtar din riktiga plats…");
+        try {
+          const userLocation = await resolveCurrentLocation();
+          set({
+            locationOn: true,
+            userLocation,
+            locationBusy: false,
+            sheet: null,
+          });
+          get().showToast(`Plats delad: ${userLocation.label}`);
+        } catch (error) {
+          set({ locationBusy: false });
+          const code = error && typeof error === "object" && "code" in error ? Number((error as GeolocationPositionError).code) : 0;
+          if (code === 1) get().showToast("Du nekade platsåtkomst i webbläsaren");
+          else if (code === 3) get().showToast("Det tog för lång tid att hitta platsen. Försök igen.");
+          else get().showToast("Kunde inte hämta din plats. Kontrollera att GPS är på.");
+        }
+      },
+      clearLocation: () => {
+        set({ locationOn: false, userLocation: null, sheet: null });
+        get().showToast("Platsdelning avstängd");
       },
       setNotifications: (notifications) => {
         set({ notifications });
@@ -1026,7 +1053,7 @@ export const useVelio = create<VelioState>()(
           cost: provider.price,
           holdKr: provider.price,
           tip: null,
-          location: get().locationOn ? "Östermalm" : provider.area,
+          location: get().userLocation?.label || provider.area,
           rating: null,
           status: "requested",
         };
@@ -1198,12 +1225,13 @@ export const useVelio = create<VelioState>()(
       },
     }),
     {
-      name: "velio-v5",
+      name: "velio-v6",
       skipHydration: true,
       storage: createJSONStorage(() => (typeof window === "undefined" ? memoryStorage : localStorage)),
       partialize: (state) => ({
         loginIntro: state.loginIntro,
         locationOn: state.locationOn,
+        userLocation: state.userLocation,
         notifications: state.notifications,
         chats: state.chats,
         peers: state.peers,
