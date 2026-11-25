@@ -29,7 +29,8 @@ export function LoginScreen() {
   const [challengeId, setChallengeId] = useState("");
   const [hint, setHint] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
-  const [caps, setCaps] = useState({ google: false, email: false, sms: false, bankid: false });
+  const [caps, setCaps] = useState({ google: false, email: false, sms: false, bankid: false, idura: false });
+  const [capsReady, setCapsReady] = useState(false);
   const [bankOrderRef, setBankOrderRef] = useState("");
   const [bankLaunchUrl, setBankLaunchUrl] = useState("");
   const [bankStatus, setBankStatus] = useState("Startar BankID…");
@@ -39,17 +40,21 @@ export function LoginScreen() {
   useEffect(() => {
     if (staticHost) {
       // Static hosts have no API routes — never fake email/SMS/BankID delivery.
-      setCaps({ google: googleGisAvailable(), email: false, sms: false, bankid: false });
+      setCaps({ google: googleGisAvailable(), email: false, sms: false, bankid: false, idura: false });
+      setCapsReady(true);
       return;
     }
-    void fetchAuthCapabilities().then((next) =>
-      setCaps({
-        google: next.google,
-        email: next.email,
-        sms: next.sms,
-        bankid: Boolean(next.bankid),
-      }),
-    );
+    void fetchAuthCapabilities()
+      .then((next) =>
+        setCaps({
+          google: next.google,
+          email: next.email,
+          sms: next.sms,
+          bankid: Boolean(next.bankid),
+          idura: Boolean(next.idura),
+        }),
+      )
+      .finally(() => setCapsReady(true));
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       const err = params.get("authError");
@@ -94,9 +99,38 @@ export function LoginScreen() {
     }
   };
 
+  const iduraStart = (method: "bankid" | "bankid-qr" | "freja") => {
+    const base = process.env.NEXT_PUBLIC_BASE_PATH || "";
+    window.location.href = `${base}/api/auth/idura/start?method=${method}`;
+  };
+
+  const startFreja = () => {
+    if (busy) return;
+    setLocalError(null);
+    if (staticHost || !caps.idura) {
+      setLocalError("Freja eID är inte aktiverat ännu.");
+      return;
+    }
+    iduraStart("freja");
+  };
+
+  const startBankIdQr = () => {
+    if (busy) return;
+    setLocalError(null);
+    if (staticHost || !caps.idura) {
+      setLocalError("BankID på annan enhet är inte aktiverat ännu.");
+      return;
+    }
+    iduraStart("bankid-qr");
+  };
+
   const startBankId = async () => {
     if (busy) return;
     setLocalError(null);
+    if (caps.idura) {
+      iduraStart("bankid");
+      return;
+    }
     if (staticHost || !caps.bankid) {
       setLocalError("BankID är inte aktiverat ännu. Det krävs en BankID-koppling som öppnar BankID-appen.");
       return;
@@ -270,7 +304,8 @@ export function LoginScreen() {
       <div className="pointer-events-none absolute top-1/3 -right-20 size-72 rounded-full bg-[#efe4d4] blur-3xl" />
       <div className="pointer-events-none absolute bottom-0 left-8 size-48 rounded-full bg-[#f7f1e8] blur-3xl" />
 
-      <div className="relative flex flex-1 flex-col justify-center px-6 pb-8">
+      <div className="relative min-h-0 flex-1 overflow-y-auto px-6 py-8">
+        <div className="flex min-h-full flex-col justify-center">
         {step !== "methods" ? (
           <button type="button" aria-label="Tillbaka" onClick={back} className="mb-2 grid size-9 place-items-center self-start">
             <ArrowLeft className="size-5 text-[#2a211c]" />
@@ -282,13 +317,36 @@ export function LoginScreen() {
         {step === "methods" ? (
           <>
             <h1 className="mt-8 text-center font-serif text-[2.7rem] leading-none font-medium text-[#2a211c]">Logga in</h1>
-            <p className="mx-auto mt-3 max-w-[17rem] text-center text-sm leading-snug text-[#6e6964]">
-              BankID öppnar BankID-appen. E-post- och SMS-kod skickas till dig — aldrig i appen.
+            <p className="mx-auto mt-3 max-w-[18rem] text-center text-sm leading-snug text-[#6e6964]">
+              Logga in med BankID eller Freja eID. E-post- och SMS-kod skickas till dig — aldrig i appen.
+            </p>
+            <p className="mx-auto mt-2 max-w-[18rem] text-center text-xs leading-snug text-[#8a847e]">
+              Ett konto som identifierats med BankID kan inte också loggas in med e-post, SMS eller Google.
             </p>
 
             <div className="mt-8 rounded-[1.7rem] border border-white/80 bg-white/45 p-3 shadow-[0_18px_50px_rgba(70,50,20,0.08)] backdrop-blur-xl">
               <div className="space-y-2.5">
-                <Method label="Fortsätt med BankID" onClick={() => void startBankId()} icon={<BankIdMark />} disabled={busy} />
+                <Method
+                  label="Logga in med BankID"
+                  onClick={() => void startBankId()}
+                  icon={<BankIdMark />}
+                  disabled={busy || !capsReady}
+                  tone="bankid"
+                />
+                <button
+                  type="button"
+                  disabled={busy || !capsReady}
+                  onClick={startBankIdQr}
+                  className="w-full py-1 text-center text-sm text-[#6e5636] underline-offset-2 hover:underline disabled:opacity-60"
+                >
+                  BankID på annan enhet
+                </button>
+                <Method
+                  label="Logga in med Freja eID"
+                  onClick={startFreja}
+                  icon={<FrejaMark />}
+                  disabled={busy || !capsReady}
+                />
                 <Method label="Fortsätt med Google" onClick={() => void onGoogle()} icon={<GoogleMark />} disabled={busy} />
                 <Method label="Fortsätt med e-post" onClick={() => setStep("email")} icon={<MailMark />} disabled={busy} />
                 <Method label="Fortsätt med mobilnummer" onClick={() => setStep("phone")} icon={<PhoneMark />} disabled={busy} />
@@ -385,6 +443,7 @@ export function LoginScreen() {
         {localError || authError ? (
           <p className="mt-4 text-center text-sm text-red-700">{localError || authError}</p>
         ) : null}
+        </div>
       </div>
     </div>
   );
@@ -424,18 +483,24 @@ function Method({
   icon,
   onClick,
   disabled,
+  tone = "default",
 }: {
   label: string;
   icon: ReactNode;
   onClick: () => void;
   disabled?: boolean;
+  tone?: "default" | "bankid";
 }) {
   return (
     <button
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className="flex h-12 w-full items-center rounded-full border border-white/90 bg-white/75 px-4 text-[15px] font-medium text-[#2a211c] disabled:opacity-60"
+      className={`flex h-12 w-full items-center rounded-full px-4 text-[15px] font-medium disabled:opacity-60 ${
+        tone === "bankid"
+          ? "border border-[#e3b423] bg-[#F7C948] text-[#1a1a1a]"
+          : "border border-white/90 bg-white/75 text-[#2a211c]"
+      }`}
     >
       <span className="grid size-6 shrink-0 place-items-center">{icon}</span>
       <span className="-ml-6 flex-1 text-center">{label}</span>
@@ -454,6 +519,15 @@ function BankIdMark() {
         strokeWidth="1.7"
         strokeLinecap="round"
       />
+    </svg>
+  );
+}
+
+function FrejaMark() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-6" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" fill="#1b3a4b" />
+      <path d="M8 14.5c1.2-3 2.2-4.6 4-4.6 1.5 0 2.3.9 2.3 2" fill="none" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" />
     </svg>
   );
 }

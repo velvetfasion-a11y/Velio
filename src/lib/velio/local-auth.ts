@@ -164,6 +164,9 @@ export async function localVerifyEmailOtp(input: {
 
   const accounts = readAccounts();
   let account = accounts.find((a) => a.email === otp.target);
+  if (account && (account.provider === "bankid" || account.provider === "freja")) {
+    throw new Error("Det här kontot är identifierat med BankID eller Freja eID och kan bara loggas in den vägen.");
+  }
   if (!account) {
     account = {
       id: uid(),
@@ -240,6 +243,9 @@ export async function localVerifySmsOtp(input: {
 
   const accounts = readAccounts();
   let account = accounts.find((a) => a.phone === otp.target);
+  if (account && (account.provider === "bankid" || account.provider === "freja")) {
+    throw new Error("Det här kontot är identifierat med BankID eller Freja eID och kan bara loggas in den vägen.");
+  }
   if (!account) {
     account = {
       id: uid(),
@@ -307,6 +313,9 @@ export function localBankIdSignIn(input?: { name?: string; personalNumber?: stri
 export function localGoogleSignIn(email: string, name: string, providerId?: string): LocalAccount {
   const accounts = readAccounts();
   let account = accounts.find((a) => a.email === email.toLowerCase());
+  if (account && (account.provider === "bankid" || account.provider === "freja")) {
+    throw new Error("Det här kontot är identifierat med BankID eller Freja eID och kan bara loggas in den vägen.");
+  }
   if (!account) {
     account = {
       id: uid(),

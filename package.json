@@ -7,8 +7,9 @@
     "build": "next build && node scripts/migrate.mjs",
     "build:gh-pages": "node scripts/build-gh-pages.mjs",
     "start": "next start --hostname 0.0.0.0 --port 8080",
-    "typecheck": "tsc --noEmit",
-    "lint": "eslint ."
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tests/tsconfig.json",
+    "lint": "eslint .",
+    "test": "node --experimental-strip-types --import ./tests/register-alias.mjs --test tests/*.test.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.6.0",
@@ -16,6 +17,7 @@
     "leaflet": "^1.9.4",
     "lucide-react": "^0.510.0",
     "next": "^15.5.29",
+    "openid-client": "^6.9.1",
     "pg": "^8.23.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
