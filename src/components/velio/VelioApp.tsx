@@ -27,7 +27,7 @@ import {
   TrackSheet,
 } from "@/components/velio/flows";
 import { Toast } from "@/components/velio/ui";
-import { CheckoutView } from "@/components/velio/checkout";
+import { PaymentSheet } from "@/components/velio/payment-sheet";
 
 const profileScreens: Screen[] = ["profile", "edit", "payments", "bookings", "posted", "business", "verify-id", "settings", "help", "favorites", "addresses", "wallet"];
 
@@ -44,6 +44,10 @@ export function VelioApp() {
   const bootstrapAuth = useVelio((state) => state.bootstrapAuth);
   const refreshSync = useVelio((state) => state.refreshSync);
   const loggedIn = useVelio((state) => state.loggedIn);
+  const checkout = useVelio((state) => state.checkout);
+  const checkoutOpen = useVelio((state) => state.checkoutOpen);
+  const closeCheckout = useVelio((state) => state.closeCheckout);
+  const acceptOffer = useVelio((state) => state.acceptOffer);
 
   useLayoutEffect(() => {
     const el = mainRef.current;
@@ -109,9 +113,6 @@ export function VelioApp() {
     <div className="flex min-h-dvh justify-center bg-stage md:items-center md:p-4">
       <div className="relative flex h-dvh w-full max-w-phone flex-col overflow-hidden bg-cream md:h-[calc(100dvh-2rem)] md:rounded-[2rem] md:shadow-2xl">
         {loggedIn ? (
-          screen === "checkout" ? (
-            <CheckoutView embedded onClose={() => go("posted")} />
-          ) : (
           <>
             {showChrome && sheet !== "onboard" && sheet !== "job" ? <AppHeader /> : null}
 
@@ -177,8 +178,25 @@ export function VelioApp() {
             {sheet === "bankid" ? <BankIdSheet /> : null}
             {sheet === "onboard" ? <BusinessSetup /> : null}
             <HomeSheets />
+            {checkoutOpen && checkout ? (
+              <PaymentSheet
+                contained
+                open
+                order={{
+                  offerId: checkout.offerId,
+                  jobId: checkout.jobId,
+                  jobTitle: checkout.jobTitle,
+                  workerName: checkout.workerName,
+                  whenLabel: checkout.whenLabel,
+                  priceSek: checkout.priceSek,
+                }}
+                onClose={() => closeCheckout()}
+                onPaid={() => {
+                  if (checkout.offerId !== "demo") acceptOffer(checkout.offerId);
+                }}
+              />
+            ) : null}
           </>
-          )
         ) : (
           <LoginScreen />
         )}

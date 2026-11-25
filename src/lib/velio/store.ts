@@ -230,6 +230,7 @@ export type CheckoutDraft = {
   jobTitle: string;
   workerName: string;
   workerId: string;
+  whenLabel?: string;
   priceSek: number;
 };
 
@@ -439,7 +440,9 @@ type VelioState = {
   acceptOffer: (id: string) => void;
   declineOffer: (id: string) => void;
   checkout: CheckoutDraft | null;
+  checkoutOpen: boolean;
   openCheckout: (offerId: string) => void;
+  closeCheckout: () => void;
   markJobDone: (jobId: string) => void;
   activeBookingId: string | null;
   toast: string | null;
@@ -676,6 +679,7 @@ export const useVelio = create<VelioState>()(
       posted: [],
       jobOffers: [],
       checkout: null,
+      checkoutOpen: false,
       activeBookingId: null,
       toast: null,
       go: (screen, opts) => {
@@ -2003,18 +2007,20 @@ export const useVelio = create<VelioState>()(
         const job = get().posted.find((item) => item.id === offer.jobId);
         const worker = get().directory.find((item) => item.id === offer.ownerId);
         set({
-          screen: "checkout",
           sheet: null,
+          checkoutOpen: true,
           checkout: {
             offerId: offer.id,
             jobId: offer.jobId,
             jobTitle: serviceById(job?.serviceId)?.name || "Uppdrag",
             workerName: worker?.name || "Utförare",
             workerId: offer.ownerId,
+            whenLabel: job?.when,
             priceSek: offer.amount,
           },
         });
       },
+      closeCheckout: () => set({ checkoutOpen: false }),
       markJobDone: (jobId) => {
         void (async () => {
           try {
@@ -2114,6 +2120,7 @@ export const useVelio = create<VelioState>()(
         const providerId = saved.providerId ?? null;
         let screen = isScreen(saved.screen) ? saved.screen : current.screen;
         if (screen === "service" && !serviceId) screen = "home";
+        if (screen === "checkout") screen = "posted";
         let sheet = isSheet(saved.sheet) ? saved.sheet : null;
         if ((sheet === "provider" || sheet === "chat" || sheet === "book" || sheet === "pay" || sheet === "rate") && !providerId) {
           sheet = null;

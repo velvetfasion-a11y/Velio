@@ -1,3 +1,12 @@
+export type CheckoutOrder = {
+  offerId: string;
+  jobId: string;
+  jobTitle: string;
+  workerName: string;
+  whenLabel?: string;
+  priceSek: number;
+};
+
 /** In-app payments. A missing or live key stays in the local demo. */
 
 export function stripePublishableKey() {
@@ -29,9 +38,9 @@ export function quoteBreakdown(priceSek: number) {
 
 export function paymentReturnUrl() {
   if (typeof window === "undefined") return "";
-  const envBase = (process.env.NEXT_PUBLIC_BASE_PATH || "").replace(/\/$/, "");
-  const prefix = envBase || (window.location.pathname.startsWith("/Velio") ? "/Velio" : "");
-  return `${window.location.origin}${prefix}/checkout/`;
+  const url = new URL(window.location.href);
+  for (const key of ["payment_intent", "payment_intent_client_secret", "redirect_status"]) url.searchParams.delete(key);
+  return url.toString();
 }
 
 export function sek(value: number) {

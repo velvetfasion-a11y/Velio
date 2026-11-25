@@ -475,7 +475,7 @@ export function ProfileScreens() {
                             {offer.status === "pending" && offer.jobOwnerId === accountId ? (
                               <div className="mt-2 flex gap-2">
                                 <button type="button" onClick={() => openCheckout(offer.id)} className="h-9 rounded-full bg-brown px-3 text-sm font-semibold text-paper">
-                                  Acceptera och betala
+                                  Betala
                                 </button>
                                 <button type="button" onClick={() => declineOffer(offer.id)} className="h-9 rounded-full border border-line px-3 text-sm font-semibold">
                                   Avböj
