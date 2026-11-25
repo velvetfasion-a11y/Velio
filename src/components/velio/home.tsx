@@ -401,6 +401,7 @@ export function InboxScreen() {
   const bookings = useVelio((state) => state.bookings);
   const openThread = useVelio((state) => state.openThread);
   const closeSheet = useVelio((state) => state.closeSheet);
+  const go = useVelio((state) => state.go);
 
   useEffect(() => {
     // Meddelanden is always the conversation list — never keep a chat sheet open here.
@@ -435,7 +436,14 @@ export function InboxScreen() {
       <AppHeader />
       <div className="px-4 pt-5 pb-8">
         <h1 className="mb-5 font-serif text-[2.6rem] leading-none font-medium">Meddelanden</h1>
-        {threads.length === 0 ? <p className="text-sm text-muted">Inga meddelanden ännu.</p> : null}
+        {threads.length === 0 ? (
+          <div>
+            <p className="text-sm text-muted">Inga meddelanden ännu.</p>
+            <button type="button" onClick={() => go("home")} className="mt-4 rounded-full bg-ink px-4 py-2.5 text-sm font-semibold text-paper">
+              Hitta uppdrag
+            </button>
+          </div>
+        ) : null}
         <div className="space-y-3">
           {threads.map(({ providerId, messages, last, booking }) => {
             const provider = providerById(providerId);

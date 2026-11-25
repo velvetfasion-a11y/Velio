@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Briefcase,
-  Building2,
   Calendar,
   Check,
   ChevronDown,
@@ -36,7 +35,7 @@ const dayNames = ["Mån", "Tis", "Ons", "Tor", "Fre", "Lör", "Sön"];
 const blurbs = [
   "Fyll i dina uppgifter så att kunder kan hitta, boka och anlita dig.",
   "Fyll i vilka tjänster du erbjuder, vad som ingår och dina villkor.",
-  "Välj var du arbetar, din räckvidd och när du är tillgänglig.",
+  "Ange önskad plats och radien du tar uppdrag inom.",
   "Sätt dina priser, hantera betalning och välj hur du får dina utbetalningar.",
 ];
 
@@ -49,7 +48,8 @@ export function OnboardSheet() {
   const showToast = useVelio((state) => state.showToast);
   const saved = useRef(useVelio.getState().businessForm).current;
   const listing = useRef(useVelio.getState().listing).current;
-  const savedTitle = saved?.title || listing?.title || "";
+  const profileName = useRef(useVelio.getState().profile.name.trim()).current;
+  const savedTitle = saved?.title || listing?.title || profileName;
   const savedDesc = saved?.desc || (listing?.desc ?? "");
   const tradesOf = (source: { serviceIds?: ServiceId[]; serviceId?: ServiceId | "" } | null | undefined) => {
     if (!source) return null;
@@ -83,8 +83,15 @@ export function OnboardSheet() {
   const [extraOpen, setExtraOpen] = useState(false);
   const [extraName, setExtraName] = useState("");
   const [extraPrice, setExtraPrice] = useState("");
-  const [areaMode, setAreaMode] = useState<"radius" | "areas" | "city">(saved?.areaMode ?? (listing?.areas?.includes("Överallt") ? "city" : "areas"));
-  const [areas, setAreas] = useState<string[]>(saved?.areas ?? listing?.areas ?? []);
+  const previousPlace = (saved?.areas ?? listing?.areas ?? []).find((area) => area !== "Överallt" && !(area in areaLayout));
+  const located = useRef(useVelio.getState()).current;
+  const [areaMode, setAreaMode] = useState<"radius" | "areas" | "city">("radius");
+  const [areas, setAreas] = useState<string[]>(previousPlace ? [previousPlace.replace(/ · \d+ km$/, "")] : located.locationOn && located.userLocation?.label ? [located.userLocation.label] : []);
+  const [followGps, setFollowGps] = useState(!previousPlace && Boolean(located.locationOn && located.userLocation?.label));
+  const locationOn = useVelio((state) => state.locationOn);
+  const userLocation = useVelio((state) => state.userLocation);
+  const allowLocation = useVelio((state) => state.allowLocation);
+  const locationBusy = useVelio((state) => state.locationBusy);
   const [km, setKm] = useState(saved?.km ?? 20);
   const [days, setDays] = useState(saved?.days ?? [0, 1, 2, 3, 4]);
   const [from, setFrom] = useState(saved?.from ?? "08:00");
@@ -107,22 +114,9 @@ export function OnboardSheet() {
     });
   };
 
-  const toggleArea = (name: string) => {
-    const districts = Object.keys(areaLayout);
-    if (name !== "Överallt" && !districts.includes(name)) {
-      setAreas((current) => current.filter((item) => item !== name));
-      return;
-    }
-    setAreas((current) => {
-      if (name === "Överallt") {
-        if (current.includes("Överallt")) return current.filter((item) => item !== "Överallt");
-        return ["Överallt", ...current.filter((item) => !districts.includes(item))];
-      }
-      const withoutAll = current.filter((item) => item !== "Överallt");
-      return withoutAll.includes(name) ? withoutAll.filter((item) => item !== name) : [...withoutAll, name];
-    });
-    setAreaMode(name === "Överallt" ? "city" : "areas");
-  };
+  useEffect(() => {
+    if (followGps && userLocation?.label) setAreas([userLocation.label]);
+  }, [followGps, userLocation]);
 
   const addPhotos = async (files: FileList | null) => {
     if (!files?.length) return;
@@ -170,7 +164,7 @@ export function OnboardSheet() {
       if (desc.trim().length < 12) return showToast("Beskriv dig lite mer");
     }
     if (step === 2 && !offers.some((offer) => offer.on)) return showToast("Lägg till minst en tjänst");
-    if (step === 3 && !areas.length) return showToast("Välj minst ett område");
+    if (step === 3 && (areas[0]?.trim().length ?? 0) < 2) return showToast("Ange en önskad plats");
     if (step === 3 && days.length === 0) return showToast("Välj minst en arbetsdag");
     setStep(step + 1);
   };
@@ -195,7 +189,7 @@ export function OnboardSheet() {
       offers: active.slice(0, 10).map(({ name, hours, price }) => ({ name, hours, price })),
       includes,
       extras,
-      areas,
+      areas: areas[0]?.trim() ? [`${areas[0].trim()} · ${km} km`] : [],
     });
   };
 
@@ -235,7 +229,7 @@ export function OnboardSheet() {
               onCertOpen={setCertOpen}
               onCertDraft={setCertDraft}
               onAddCert={() => {
-                if (certDraft.trim().length < 2) return;
+                if (certDraft.trim().length < 2) return showToast("Skriv en kvalifikation");
                 setCerts([...certs, certDraft.trim()]);
                 setCertDraft("");
                 setCertOpen(false);
@@ -295,9 +289,11 @@ export function OnboardSheet() {
           ) : null}
           {step === 3 ? (
             <StepArea
-              areaMode={areaMode}
-              areas={areas}
+              place={areas[0] ?? ""}
               km={km}
+              gpsOn={locationOn}
+              gpsLabel={userLocation?.label ?? ""}
+              gpsBusy={locationBusy}
               days={days}
               from={from}
               to={to}
@@ -305,12 +301,15 @@ export function OnboardSheet() {
               offOpen={offOpen}
               offDate={offDate}
               notice={notice}
-              onMode={setAreaMode}
-              onToggleArea={toggleArea}
-              onAddArea={(name) => {
-                const trimmed = name.trim();
-                if (trimmed.length < 2) return showToast("Skriv ett område");
-                setAreas((current) => (current.includes(trimmed) ? current : [...current, trimmed]));
+              onUseGps={() => {
+                setFollowGps(true);
+                setAreaMode("radius");
+                void allowLocation();
+              }}
+              onPlace={(value) => {
+                setFollowGps(false);
+                setAreaMode("radius");
+                setAreas(value.trim() ? [value.trim()] : []);
               }}
               onKm={setKm}
               onDay={(index) => setDays(days.includes(index) ? days.filter((day) => day !== index) : [...days, index])}
@@ -447,6 +446,7 @@ function StepInfo(props: {
   onRemovePhoto: (src: string) => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const [titleOpen, setTitleOpen] = useState(false);
   return (
     <div className="space-y-4">
       <div>
@@ -487,7 +487,20 @@ function StepInfo(props: {
       </div>
       <div className="rounded-2xl border border-[#e6dfd6] bg-white p-3">
         <Label icon={Type}>Titel på din profil *</Label>
-        <input value={props.title} onChange={(event) => props.onTitle(event.target.value)} placeholder="T.ex. Certifierad städfirma i Stockholm" className="w-full rounded-2xl border border-[#e6dfd6] bg-white px-4 py-3 text-sm outline-none" />
+        {titleOpen ? (
+          <input
+            autoFocus
+            value={props.title}
+            onChange={(event) => props.onTitle(event.target.value)}
+            onBlur={() => setTitleOpen(false)}
+            className="w-full rounded-2xl border border-[#e6dfd6] bg-white px-4 py-3 text-sm outline-none"
+          />
+        ) : (
+          <button type="button" onClick={() => setTitleOpen(true)} className="flex w-full items-center justify-between rounded-2xl border border-[#e6dfd6] bg-white px-4 py-3 text-left text-sm">
+            <span className="font-semibold">{props.title}</span>
+            <Pencil className="size-4 text-muted" />
+          </button>
+        )}
         <p className="mt-3 text-xs font-semibold tracking-wide text-[#8a6a3d]">ERFARENHET</p>
         <div className="mt-2 flex flex-wrap gap-1.5">
           {levels.map((item) => (
@@ -528,24 +541,23 @@ function StepInfo(props: {
         <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={(event) => props.onAddPhotos(event.target.files)} />
       </div>
       <div>
-        <Label icon={Shield}>Certifieringar & behörigheter</Label>
+        <Label icon={Shield}>Dina kvalifikationer</Label>
+        <p className="mb-2 text-sm text-muted">Skriv en kvalifikation och tryck på spara.</p>
         <div className="flex flex-wrap gap-2">
           {props.certs.map((cert) => (
-            <button key={cert} type="button" onClick={() => props.onRemoveCert(cert)} className="rounded-full bg-[#f3ece3] px-3 py-1 text-sm">
+            <button key={cert} type="button" onClick={() => props.onRemoveCert(cert)} className="rounded-full border border-[#e6dfd6] bg-white px-3 py-1.5 text-sm">
               {cert} ×
             </button>
           ))}
+          {props.certOpen ? (
+            <div className="flex w-full gap-2">
+              <input value={props.certDraft} onChange={(event) => props.onCertDraft(event.target.value)} placeholder="Kvalifikation" className="min-w-0 flex-1 rounded-full border border-[#e6dfd6] px-3 py-2 text-sm outline-none" />
+              <button type="button" onClick={props.onAddCert} className="rounded-full bg-[#2a211c] px-3 text-sm text-white">Spara</button>
+            </div>
+          ) : (
+            <button type="button" onClick={() => props.onCertOpen(true)} className="rounded-full border border-[#e6dfd6] px-3 py-1.5 text-sm">+ Lägg till kvalifikation</button>
+          )}
         </div>
-        {props.certOpen ? (
-          <div className="mt-2 flex gap-2">
-            <input value={props.certDraft} onChange={(event) => props.onCertDraft(event.target.value)} placeholder="T.ex. Yrkesbevis" className="min-w-0 flex-1 rounded-full border border-[#e6dfd6] px-4 py-2 text-sm outline-none" />
-            <button type="button" onClick={props.onAddCert} className="rounded-full bg-[#2a211c] px-4 text-sm text-white">Lägg till</button>
-          </div>
-        ) : (
-          <button type="button" onClick={() => props.onCertOpen(true)} className="mt-2 rounded-full border border-[#e6dfd6] px-4 py-2 text-sm">
-            + Lägg till (t.ex. Yrkesbevis, ID06, F-skatt)
-          </button>
-        )}
       </div>
     </div>
   );
@@ -668,9 +680,11 @@ function StepServices(props: {
 }
 
 function StepArea(props: {
-  areaMode: "radius" | "areas" | "city";
-  areas: string[];
+  place: string;
   km: number;
+  gpsOn: boolean;
+  gpsLabel: string;
+  gpsBusy: boolean;
   days: number[];
   from: string;
   to: string;
@@ -678,9 +692,8 @@ function StepArea(props: {
   offOpen: boolean;
   offDate: string;
   notice: string;
-  onMode: (mode: "radius" | "areas" | "city") => void;
-  onToggleArea: (name: string) => void;
-  onAddArea: (name: string) => void;
+  onUseGps: () => void;
+  onPlace: (value: string) => void;
   onKm: (km: number) => void;
   onDay: (index: number) => void;
   onFrom: (value: string) => void;
@@ -690,82 +703,46 @@ function StepArea(props: {
   onAddOff: () => void;
   onNotice: (value: string) => void;
 }) {
-  const [extraOpen, setExtraOpen] = useState(false);
-  const [extraName, setExtraName] = useState("");
-  const presets = ["Överallt", ...Object.keys(areaLayout)];
-  const custom = props.areas.filter((area) => !presets.includes(area));
-  const modes = [
-    { id: "radius" as const, icon: MapPin, label: "Inom en radie" },
-    { id: "areas" as const, icon: Layers, label: "Valda områden" },
-    { id: "city" as const, icon: Building2, label: "Överallt" },
-  ];
+  const showToast = useVelio((state) => state.showToast);
+  const [pinOpen, setPinOpen] = useState(false);
+  const [pinDraft, setPinDraft] = useState("");
   return (
     <div className="space-y-5">
       <div>
-        <Label icon={MapPin}>Arbetsområde *</Label>
-        <p className="mb-2 text-sm text-muted">Välj överallt, eller de områden du tar uppdrag i.</p>
-        <div className="flex flex-wrap gap-1.5">
-          {modes.map((mode) => {
-            const Icon = mode.icon;
-            const active = props.areaMode === mode.id;
-            return (
-              <button
-                key={mode.id}
-                type="button"
-                onClick={() => {
-                  props.onMode(mode.id);
-                  if (mode.id === "city" && !props.areas.includes("Överallt")) props.onToggleArea("Överallt");
-                }}
-                className={cn("flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs", active ? "bg-[#8a6a3d] text-white" : "border border-[#e6dfd6] bg-white")}
-              >
-                <Icon className="size-3.5" /> {mode.label}
-              </button>
-            );
-          })}
-        </div>
-        {props.areaMode === "radius" ? (
-          <div className="mt-3">
-            <div className="mb-1 flex items-center justify-between text-sm font-semibold">
-              <span>Radie</span>
-              <span className="rounded-full border border-[#e6dfd6] px-3 py-1 font-medium">{props.km} km</span>
-            </div>
-            <input type="range" min={1} max={50} value={props.km} onChange={(event) => props.onKm(Number(event.target.value))} className="w-full accent-[#8a6a3d]" />
+        <Label icon={MapPin}>Önskad plats *</Label>
+        <p className="mb-2 text-sm text-muted">Utgår från var du är. Använd platstjänster för fler jobbalternativ, eller sätt en pin på önskad plats.</p>
+        {props.place ? <p className="mb-2 rounded-2xl bg-[#f6f1ea] px-3 py-2 text-sm font-semibold">{props.place}</p> : null}
+        <button type="button" onClick={props.onUseGps} className="w-full rounded-full border border-[#e6dfd6] bg-white py-2.5 text-sm font-semibold">
+          {props.gpsBusy ? "Hämtar plats…" : props.gpsOn && props.gpsLabel ? "Uppdatera min plats" : "Använd platstjänster för fler jobbalternativ"}
+        </button>
+        {pinOpen ? (
+          <div className="mt-2 flex gap-2">
+            <input value={pinDraft} onChange={(event) => setPinDraft(event.target.value)} placeholder="Önskad plats" className="min-w-0 flex-1 rounded-full border border-[#e6dfd6] px-3 py-2 text-sm outline-none" />
+            <button
+              type="button"
+              onClick={() => {
+                if (pinDraft.trim().length < 2) return showToast("Skriv en önskad plats");
+                props.onPlace(pinDraft);
+                setPinDraft("");
+                setPinOpen(false);
+              }}
+              className="rounded-full bg-[#2a211c] px-3 text-sm text-white"
+            >
+              Spara
+            </button>
           </div>
-        ) : null}
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {presets.map((name) => {
-            const active = props.areas.includes(name);
-            return (
-              <button key={name} type="button" aria-pressed={active} onClick={() => props.onToggleArea(name)} className={cn("rounded-full px-2.5 py-1 text-xs", active ? "bg-[#8a6a3d] text-white" : "border border-[#e6dfd6] bg-white")}>
-                {name}
-              </button>
-            );
-          })}
-          {custom.map((name) => (
-            <button key={name} type="button" onClick={() => props.onToggleArea(name)} className="rounded-full bg-[#8a6a3d] px-2.5 py-1 text-xs text-white">
-              {name} ×
-            </button>
-          ))}
-          {extraOpen ? (
-            <span className="flex items-center gap-1">
-              <input value={extraName} onChange={(event) => setExtraName(event.target.value)} placeholder="Område" className="w-28 rounded-full border border-[#e6dfd6] px-2 py-1 text-xs outline-none" />
-              <button
-                type="button"
-                onClick={() => {
-                  props.onAddArea(extraName);
-                  setExtraName("");
-                  setExtraOpen(false);
-                }}
-                className="rounded-full bg-[#2a211c] px-2 py-1 text-xs text-white"
-              >
-                OK
-              </button>
-            </span>
-          ) : (
-            <button type="button" onClick={() => setExtraOpen(true)} className="rounded-full border border-[#e6dfd6] px-2.5 py-1 text-xs">
-              + Område
-            </button>
-          )}
+        ) : (
+          <button type="button" onClick={() => setPinOpen(true)} className="mt-2 rounded-full border border-[#e6dfd6] px-3 py-1.5 text-sm">
+            Sätt en pin på önskad plats
+          </button>
+        )}
+        <div className="mt-4">
+          <div className="mb-1 flex items-center justify-between text-sm font-semibold">
+            <span>Radie</span>
+            <span className="rounded-full border border-[#e6dfd6] px-3 py-1 font-medium">{props.km} km</span>
+          </div>
+          <input type="range" min={1} max={50} value={props.km} onChange={(event) => props.onKm(Number(event.target.value))} className="w-full accent-[#8a6a3d]" />
+          <p className="mt-1 text-xs text-muted">Uppdrag inom {props.km} km från önskad plats.</p>
         </div>
       </div>
       <div>
