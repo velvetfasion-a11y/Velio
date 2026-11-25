@@ -87,11 +87,15 @@ export function AddressSearch({
               aria-label="Adress"
               className="min-w-0 flex-1 bg-transparent py-3 text-base outline-none"
               autoComplete="off"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+              enterKeyHint="search"
             />
           </label>
           {busy ? <p className="mt-2 text-sm text-muted">Söker adresser…</p> : null}
           {hits.length ? (
-            <ul className="mt-2 overflow-hidden rounded-2xl border border-line">
+            <ul className="relative z-30 mt-2 overflow-hidden rounded-2xl border border-line bg-paper">
               {hits.map((hit) => (
                 <li key={hit.id} className="border-b border-line last:border-b-0">
                   <button type="button" onClick={() => onPick(hit)} className="flex w-full items-start gap-2 px-3 py-3 text-left">

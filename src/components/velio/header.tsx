@@ -3,7 +3,6 @@ import { cn } from "@/lib/cn";
 import { useVelio } from "@/lib/velio/store";
 
 export function PlaceLink({ tone = "cream" }: { tone?: "cream" | "glass" }) {
-  const setSheet = useVelio((state) => state.setSheet);
   const locationOn = useVelio((state) => state.locationOn);
   const locationBusy = useVelio((state) => state.locationBusy);
   const userLocation = useVelio((state) => state.userLocation);
@@ -20,8 +19,12 @@ export function PlaceLink({ tone = "cream" }: { tone?: "cream" | "glass" }) {
         ? userLocation?.label || "Plats delad"
         : "Välj adress";
 
+  const sheet = useVelio((state) => state.sheet);
+  const openAddressSheet = useVelio((state) => state.openAddressSheet);
+  if (sheet === "onboard" || sheet === "job") return null;
+
   const onPlaceClick = () => {
-    setSheet("location");
+    openAddressSheet();
   };
 
   return (
@@ -78,7 +81,10 @@ export function AppHeader({ tone = "cream", onBack }: { tone?: "cream" | "glass"
 
         <button
           type="button"
-          onClick={() => go("home")}
+          onClick={() => {
+            if (sheet === "onboard" || sheet === "job") return;
+            go("home");
+          }}
           className={cn(
             "justify-self-center text-center font-serif text-[1.7rem] leading-none font-medium tracking-[0.28em]",
             glass && "text-paper",

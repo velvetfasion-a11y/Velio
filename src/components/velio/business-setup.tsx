@@ -1,8 +1,10 @@
-import { useState } from "react";
-import { Building2, Check, IdCard, MapPin, Shield, ShieldCheck, UserRound, type LucideIcon } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Building2, Check, IdCard, Shield, ShieldCheck, UserRound, type LucideIcon } from "lucide-react";
 import { services, type ServiceId } from "@/lib/velio/data";
 import { formatOrg, lookupCompany, orgDigits, type CompanyRecord } from "@/lib/velio/company";
+import { searchAddresses, type AddressHit } from "@/lib/velio/geo";
 import { formatPerson, personDigits, validatePersonnummer } from "@/lib/velio/personnummer";
+import { AddressSearch } from "@/components/velio/address-search";
 import { useVelio, type Listing } from "@/lib/velio/store";
 import dynamic from "next/dynamic";
 import { IdentityFlow } from "@/components/velio/identity";
@@ -119,9 +121,9 @@ export function BusinessSetup() {
   const closeSheet = useVelio((state) => state.closeSheet);
   const showToast = useVelio((state) => state.showToast);
   const publishDemoBusiness = useVelio((state) => state.publishDemoBusiness);
+  const saveSetupDraft = useVelio((state) => state.saveSetupDraft);
+  const setupDraft = useVelio((state) => state.setupDraft);
   const profile = useVelio((state) => state.profile);
-  const allowLocation = useVelio((state) => state.allowLocation);
-  const userLocation = useVelio((state) => state.userLocation);
   const bankIdPersonalNumber = useVelio((state) => state.bankIdPersonalNumber);
   const [step, setStep] = useState<Step>("welcome");
   const [identityVia, setIdentityVia] = useState<"bankid" | "document" | null>(null);
@@ -134,7 +136,7 @@ export function BusinessSetup() {
   const [company, setCompany] = useState<CompanyRecord | null>(null);
   const [trades, setTrades] = useState<ServiceId[]>([]);
   const [offers, setOffers] = useState<Offer[]>([]);
-  const [place, setPlace] = useState("Södermalm, Stockholm");
+  const [area, setArea] = useState<AddressHit | null>(null);
   const [km, setKm] = useState(15);
   const [photos, setPhotos] = useState<string[]>([]);
 
@@ -159,6 +161,71 @@ export function BusinessSetup() {
       setRevealPn(false);
     }
     setStep("person");
+  };
+
+  const seededArea = useRef(false);
+  useEffect(() => {
+    if (seededArea.current) return;
+    seededArea.current = true;
+    if (useVelio.getState().setupDraft?.place) return;
+    const state = useVelio.getState();
+    const saved = state.addresses.find((item) => item.id === state.activeAddressId);
+    if (!saved) return;
+    setArea({ id: saved.id, label: saved.line, detail: saved.label, lat: saved.lat, lng: saved.lng });
+  }, []);
+
+  useEffect(() => {
+    if (!area || (area.lat != null && area.lng != null)) return;
+    const controller = new AbortController();
+    void searchAddresses(area.label, controller.signal)
+      .then((hits) => {
+        const hit = hits.find((item) => item.lat != null) ?? hits[0];
+        if (hit && !controller.signal.aborted) setArea(hit);
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [area]);
+
+  useEffect(() => {
+    if (step === "welcome") return;
+    saveSetupDraft({
+      step,
+      identityVia,
+      seller,
+      org,
+      pn,
+      company,
+      trades,
+      offers,
+      place: area?.label ?? "",
+      detail: area?.detail ?? "",
+      lat: area?.lat ?? null,
+      lng: area?.lng ?? null,
+      km,
+    });
+  }, [step, identityVia, seller, org, pn, company, trades, offers, area, km, saveSetupDraft]);
+
+  const resumeSetup = () => {
+    const draft = setupDraft;
+    if (!draft) return;
+    if (typeof draft.step === "string") setStep(draft.step as Step);
+    if (draft.identityVia === "bankid" || draft.identityVia === "document") setIdentityVia(draft.identityVia);
+    if (draft.seller === "company" || draft.seller === "private") setSeller(draft.seller);
+    if (typeof draft.org === "string") setOrg(draft.org);
+    if (typeof draft.pn === "string") setPn(draft.pn);
+    if (draft.company && typeof draft.company === "object") setCompany(draft.company as CompanyRecord);
+    if (Array.isArray(draft.trades)) setTrades(draft.trades as ServiceId[]);
+    if (Array.isArray(draft.offers)) setOffers(draft.offers as Offer[]);
+    if (typeof draft.km === "number") setKm(draft.km);
+    if (typeof draft.place === "string" && draft.place) {
+      setArea({
+        id: "draft",
+        label: draft.place,
+        detail: typeof draft.detail === "string" ? draft.detail : "",
+        lat: typeof draft.lat === "number" ? draft.lat : undefined,
+        lng: typeof draft.lng === "number" ? draft.lng : undefined,
+      });
+    }
   };
 
   const toggleTrade = (id: ServiceId) => {
@@ -196,21 +263,22 @@ export function BusinessSetup() {
   const publish = () => {
     const active = offers.filter((offer) => offer.on);
     if (!active.length) return showToast("Välj minst ett pris");
-    if (place.trim().length < 2) return showToast("Skriv ett område");
+    if (!area) return showToast("Välj en adress i listan");
     const names = trades.map((id) => services.find((item) => item.id === id)?.name).filter(Boolean);
     const who = profile.name || "Jag";
+    const where = area.label;
     const listing: Listing = {
       serviceId: trades[0],
       serviceIds: trades,
       title: seller === "private" ? "Privatperson" : company?.name || who,
       desc:
         seller === "private"
-          ? `${who} tar uppdrag som privatperson inom ${names.join(", ")} kring ${place.trim()}.`
-          : `${company?.name ?? who} tar uppdrag inom ${names.join(", ")} kring ${place.trim()}.`,
+          ? `${who} tar uppdrag som privatperson inom ${names.join(", ")} kring ${where}.`
+          : `${company?.name ?? who} tar uppdrag inom ${names.join(", ")} kring ${where}.`,
       price: Math.min(...active.map((offer) => offer.price)),
       photos,
       offers: active.map(({ name, hours, price }) => ({ name, hours, price })),
-      areas: [`${place.trim()} · ${km} km`],
+      areas: [`${where} · ${km} km`],
       sellerKind: seller === "private" ? "private" : "company",
       demo: true,
       ...(seller === "private" || !company
@@ -219,6 +287,7 @@ export function BusinessSetup() {
     };
     if (seller !== "private" && !company) return showToast("Slå upp företaget först");
     publishDemoBusiness(listing);
+    saveSetupDraft(null);
   };
 
   if (step === "welcome") {
@@ -252,6 +321,11 @@ export function BusinessSetup() {
           <button type="button" onClick={() => setStep("identity")} className="h-14 w-full rounded-full bg-brown text-base font-semibold text-paper">
             Kom igång
           </button>
+          {setupDraft && setupDraft.step !== "welcome" ? (
+            <button type="button" onClick={resumeSetup} className="mt-2 h-12 w-full rounded-full border border-line text-sm font-semibold">
+              Fortsätt där du slutade
+            </button>
+          ) : null}
         </div>
       </div>
     );
@@ -496,24 +570,9 @@ export function BusinessSetup() {
           ) : null}
 
           {step === "area" ? (
-            <div className="space-y-3">
-              <RadiusMap km={km} />
-              <label className="flex items-center gap-2 rounded-2xl border border-line bg-paper px-3">
-                <MapPin className="size-4 text-brown" />
-                <input value={place} onChange={(event) => setPlace(event.target.value)} aria-label="Område" className="h-12 min-w-0 flex-1 bg-transparent text-base outline-none" />
-              </label>
-              <button
-                type="button"
-                onClick={() => {
-                  void allowLocation().then(() => {
-                    const label = useVelio.getState().userLocation?.label;
-                    if (label) setPlace(label);
-                  });
-                }}
-                className="h-11 w-full rounded-full border border-line text-sm font-semibold"
-              >
-                {userLocation?.label ? "Använd min plats" : "Använd min plats"}
-              </button>
+            <div className="relative z-10 space-y-3">
+              <RadiusMap km={km} lat={area?.lat ?? 59.3293} lng={area?.lng ?? 18.0686} />
+              <AddressSearch picked={area} onPick={setArea} onClear={() => setArea(null)} />
               <div>
                 <div className="mb-1 flex justify-between text-sm font-semibold">
                   <span>Radie</span>
@@ -573,7 +632,7 @@ export function BusinessSetup() {
                 </div>
                 <p className="mt-3 text-sm">fr. {Math.min(...offers.filter((offer) => offer.on).map((offer) => offer.price))} kr</p>
                 <p className="mt-1 text-sm text-muted">
-                  {trades.map((id) => services.find((item) => item.id === id)?.name).filter(Boolean).join(" · ")} · {place} · {km} km
+                  {trades.map((id) => services.find((item) => item.id === id)?.name).filter(Boolean).join(" · ")} · {area?.label ?? "Ingen adress"} · {km} km
                 </p>
                 <ul className="mt-3 space-y-1 text-sm">
                   {offers.filter((offer) => offer.on).map((offer) => (

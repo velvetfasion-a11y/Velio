@@ -2203,7 +2203,7 @@ export function TrackSheet() {
 }
 
 export function LocationSheet() {
-  const closeSheet = useVelio((state) => state.closeSheet);
+  const closeSheet = useVelio((state) => state.closeAddressSheet);
   const allowLocation = useVelio((state) => state.allowLocation);
   const locationBusy = useVelio((state) => state.locationBusy);
   const locationError = useVelio((state) => state.locationError);

@@ -33,6 +33,7 @@ const profileScreens: Screen[] = ["profile", "edit", "payments", "bookings", "po
 export function VelioApp() {
   const screen = useVelio((state) => state.screen);
   const sheet = useVelio((state) => state.sheet);
+  const addressOpen = useVelio((state) => state.addressOpen);
   const go = useVelio((state) => state.go);
   const accountMode = useVelio((state) => state.accountMode);
   const mapMode = useVelio((state) => state.mapMode);
@@ -108,7 +109,7 @@ export function VelioApp() {
       <div className="relative flex h-dvh w-full max-w-phone flex-col overflow-hidden bg-cream md:h-[calc(100dvh-2rem)] md:rounded-[2rem] md:shadow-2xl">
         {loggedIn ? (
           <>
-            {showChrome ? <AppHeader /> : null}
+            {showChrome && sheet !== "onboard" && sheet !== "job" ? <AppHeader /> : null}
 
             <main
               key={screen}
@@ -164,7 +165,11 @@ export function VelioApp() {
             {sheet === "track" ? <TrackSheet /> : null}
             {sheet === "pay" ? <PaySheet /> : null}
             {sheet === "rate" ? <RateSheet /> : null}
-            {sheet === "location" ? <LocationSheet /> : null}
+            {addressOpen ? (
+              <div className="absolute inset-0 z-50">
+                <LocationSheet />
+              </div>
+            ) : null}
             {sheet === "bankid" ? <BankIdSheet /> : null}
             {sheet === "onboard" ? <BusinessSetup /> : null}
             <HomeSheets />

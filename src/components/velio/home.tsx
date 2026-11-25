@@ -32,11 +32,12 @@ import {
 } from "lucide-react";
 import { coordsForArea, distanceKm, greetingName, providerById, providerTradeNames, ratingLabel, serviceById, services, type ServiceIcon, type ServiceId } from "@/lib/velio/data";
 import { useVelio } from "@/lib/velio/store";
-import { AppHeader, PlaceLink } from "@/components/velio/header";
+import { AppHeader } from "@/components/velio/header";
 import { cn } from "@/lib/cn";
 import { BottomSheet, Btn, StepProgress, TrustNote } from "@/components/velio/ui";
 import { asset } from "@/lib/velio/asset";
 import { resolveCurrentLocation, searchAddresses, type AddressHit } from "@/lib/velio/geo";
+import { AddressSearch } from "@/components/velio/address-search";
 
 const icons: Record<ServiceIcon, LucideIcon> = {
   zap: Zap,
@@ -561,7 +562,7 @@ function MenuSheet() {
   return (
     <BottomSheet title="Meny" onClose={closeSheet}>
       <div className="space-y-2">
-        <Btn variant="secondary" onClick={() => setSheet("location")}>Dela plats</Btn>
+        <Btn variant="secondary" onClick={() => useVelio.getState().openAddressSheet()}>Välj adress</Btn>
         <Btn variant="secondary" onClick={() => go("history")}>Bokningar</Btn>
         <Btn variant="secondary" onClick={() => go("profile")}>Profil</Btn>
         <Btn variant="secondary" onClick={() => go("help")}>Hjälp</Btn>
@@ -616,6 +617,8 @@ function JobSheet() {
   const closeSheet = useVelio((state) => state.closeSheet);
   const showToast = useVelio((state) => state.showToast);
   const addPosted = useVelio((state) => state.addPosted);
+  const saveJobDraft = useVelio((state) => state.saveJobDraft);
+  const jobDraft = useVelio((state) => state.jobDraft);
   const [serviceId, setServiceId] = useState<ServiceId>("stad");
   const [text, setText] = useState("");
   const [whenMode, setWhenMode] = useState<WhenMode>("day");
@@ -636,6 +639,37 @@ function JobSheet() {
   const [done, setDone] = useState(false);
   const [keyboard, setKeyboard] = useState(0);
   const chosenWhen = whenSummary(whenMode, startDate, endDate, timeWindow, clock);
+  useEffect(() => {
+    if (step === 0 && text.trim().length < 3) return;
+    saveJobDraft({
+      step,
+      serviceId,
+      text,
+      whenMode,
+      start: startDate ? startDate.toISOString() : null,
+      end: endDate ? endDate.toISOString() : null,
+      timeWindow,
+      clock,
+      address: pickedAddress,
+      budget,
+      quotes,
+    });
+  }, [step, serviceId, text, whenMode, startDate, endDate, timeWindow, clock, pickedAddress, budget, quotes, saveJobDraft]);
+  const resumeJob = () => {
+    const draft = jobDraft;
+    if (!draft) return;
+    if (typeof draft.step === "number") setStep(draft.step);
+    if (typeof draft.serviceId === "string") setServiceId(draft.serviceId as ServiceId);
+    if (typeof draft.text === "string") setText(draft.text);
+    if (typeof draft.whenMode === "string") setWhenMode(draft.whenMode as WhenMode);
+    if (typeof draft.start === "string") setStartDate(new Date(draft.start));
+    if (typeof draft.end === "string") setEndDate(new Date(draft.end));
+    if (typeof draft.timeWindow === "string") setTimeWindow(draft.timeWindow as TimeWindow);
+    if (typeof draft.clock === "string") setClock(draft.clock);
+    if (draft.address && typeof draft.address === "object") setPickedAddress(draft.address as AddressHit);
+    if (typeof draft.budget === "string") setBudget(draft.budget);
+    if (typeof draft.quotes === "boolean") setQuotes(draft.quotes);
+  };
   const catCols = services.length % 2 === 0 ? 2 : 3;
   const catRows = Math.ceil(services.length / catCols);
   const stepNames = ["Tjänst", "Beskrivning", "Tid", "Plats", "Budget", "Granska"];
@@ -749,6 +783,7 @@ function JobSheet() {
       price,
     });
     setDone(true);
+    saveJobDraft(null);
   };
 
   const serviceName = services.find((item) => item.id === serviceId)?.name ?? "Tjänst";
@@ -756,7 +791,6 @@ function JobSheet() {
   return (
     <div className="absolute inset-0 z-40 flex flex-col bg-cream">
       <div className="px-4 pt-3">
-        <PlaceLink />
         <div className="mt-1 flex items-center">
           <button
             type="button"
@@ -776,6 +810,11 @@ function JobSheet() {
         <h1 className={cn("ios-title", step === 0 ? "text-[1.35rem] leading-tight" : "text-[1.85rem]")}>
           {step === 0 ? "Vad behöver du hjälp med?" : step === 1 ? "Beskriv uppdraget" : step === 2 ? "När ska det göras?" : step === 3 ? "Var ska det utföras?" : step === 4 ? "Ungefärlig budget" : "Granska och publicera"}
         </h1>
+        {step === 0 && jobDraft ? (
+          <button type="button" onClick={resumeJob} className="mt-3 h-11 w-full rounded-full border border-line text-sm font-semibold">
+            Fortsätt där du slutade
+          </button>
+        ) : null}
         <p className={cn("leading-snug text-muted", step === 0 ? "mt-1 text-xs" : "mt-2 text-sm")}>
           {step === 4
             ? "Budgeten är en riktlinje. Du betalar när jobbet är klart, och inget dras om arbetet inte utförs."
@@ -930,82 +969,8 @@ function JobSheet() {
         ) : null}
 
         {step === 3 ? (
-          <section className="rounded-[1.3rem] border border-line bg-paper p-3 shadow-soft">
-            {pickedAddress ? (
-              <div className="flex items-start gap-3 rounded-2xl bg-sand px-3 py-3">
-                <MapPin className="mt-0.5 size-5 shrink-0 text-brown" />
-                <div className="min-w-0 flex-1">
-                  <p className="font-semibold">{pickedAddress.label}</p>
-                  <p className="text-sm text-muted">{pickedAddress.detail}</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPickedAddress(null);
-                    setAddressQuery("");
-                  }}
-                  className="text-sm font-semibold text-brown"
-                >
-                  Ändra
-                </button>
-              </div>
-            ) : (
-              <>
-                <label className="flex items-center gap-2 rounded-full border border-line px-3">
-                  <Search className="size-4 shrink-0 text-muted" />
-                  <input
-                    value={addressQuery}
-                    onChange={(event) => {
-                      setAddressQuery(event.target.value);
-                      setPickedAddress(null);
-                      setPlaceError("");
-                    }}
-                    placeholder="Sök gata, ort eller plats"
-                    className="min-w-0 flex-1 bg-transparent py-3 text-base outline-none"
-                    autoComplete="off"
-                  />
-                </label>
-                {addressBusy ? <p className="mt-2 text-sm text-muted">Söker adresser…</p> : null}
-                {addressHits.length ? (
-                  <ul className="mt-2 overflow-hidden rounded-2xl border border-line">
-                    {addressHits.map((hit) => (
-                      <li key={hit.id} className="border-b border-line last:border-b-0">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setPickedAddress(hit);
-                            setAddressQuery(hit.label);
-                            setAddressHits([]);
-                            setPlaceError("");
-                          }}
-                          className="flex w-full items-start gap-2 px-3 py-3 text-left"
-                        >
-                          <MapPin className="mt-0.5 size-4 shrink-0 text-brown" />
-                          <span>
-                            <span className="block font-semibold">{hit.label}</span>
-                            <span className="block text-sm text-muted">{hit.detail}</span>
-                          </span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-                {!addressBusy && addressQuery.trim().length >= 2 && addressHits.length === 0 ? (
-                  <p className="mt-2 text-sm text-muted">Inga adresser i Sverige. Prova gata och ort.</p>
-                ) : null}
-              </>
-            )}
-            <button
-              type="button"
-              onClick={useMyPlace}
-              disabled={locating}
-              className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-full border border-line bg-paper text-sm font-semibold disabled:opacity-60"
-            >
-              <Navigation className="size-4" />
-              {locating ? "Hämtar plats…" : "Använd min plats"}
-            </button>
-            {placeError ? <p className="mt-2 text-sm text-red-800">{placeError}</p> : null}
-            <p className="mt-2 text-[11px] leading-snug text-muted">Adressförslag via Photon och OpenStreetMap. Bara Sverige.</p>
+          <section className="relative z-10 rounded-[1.3rem] border border-line bg-paper p-3 shadow-soft">
+            <AddressSearch picked={pickedAddress} onPick={(hit) => { setPickedAddress(hit); setAddressQuery(hit.label); }} onClear={() => { setPickedAddress(null); setAddressQuery(""); }} />
           </section>
         ) : null}
 

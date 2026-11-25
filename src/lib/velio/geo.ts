@@ -26,7 +26,9 @@ type PhotonProps = {
 function formatPhoton(props: PhotonProps): { label: string; detail: string } | null {
   if (props.countrycode && props.countrycode !== "SE") return null;
   const street = [props.street, props.housenumber].filter(Boolean).join(" ");
-  const place = props.city || props.locality || props.district || "";
+  const municipality = props.city && !/län$/i.test(props.city) ? props.city : "";
+  const local = props.locality || props.district || "";
+  const place = municipality || local;
   const line = street || props.name || place;
   if (!line) return null;
   const cityLine = [props.postcode, place].filter(Boolean).join(" ");
@@ -165,17 +167,10 @@ export async function reverseGeocode(lat: number, lng: number): Promise<string> 
       display_name?: string;
     };
     const address = data.address ?? {};
-    const short =
-      address.suburb ||
-      address.neighbourhood ||
-      address.city_district ||
-      address.quarter ||
-      address.village ||
-      address.town ||
-      address.city ||
-      address.municipality ||
-      "";
-    if (short) return short;
+    const town = (address.town || address.municipality || address.city || "").replace(/ kommun$/i, "");
+    const local = address.quarter || address.suburb || address.village || address.hamlet || address.neighbourhood || "";
+    if (local && town && local !== town) return `${local}, ${town}`;
+    if (town) return town;
     return data.display_name?.split(",")[0]?.trim() || fallback;
   } catch {
     return fallback;

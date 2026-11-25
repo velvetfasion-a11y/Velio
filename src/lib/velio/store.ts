@@ -460,6 +460,13 @@ type VelioState = {
   setAvatar: (avatar: string) => void;
   toggleFavorite: (providerId: string) => void;
   activeAddressId: string | null;
+  addressOpen: boolean;
+  openAddressSheet: () => void;
+  closeAddressSheet: () => void;
+  setupDraft: Record<string, unknown> | null;
+  jobDraft: Record<string, unknown> | null;
+  saveSetupDraft: (draft: Record<string, unknown> | null) => void;
+  saveJobDraft: (draft: Record<string, unknown> | null) => void;
   addAddress: (input: { label: string; line: string; lat?: number; lng?: number }) => boolean;
   updateAddress: (id: string, input: { label: string; line: string; lat?: number; lng?: number }) => boolean;
   selectAddress: (id: string) => void;
@@ -632,6 +639,9 @@ export const useVelio = create<VelioState>()(
       favorites: [],
       addresses: [],
       activeAddressId: null,
+      addressOpen: false,
+      setupDraft: null,
+      jobDraft: null,
       cards: [],
       cart: seedCart,
       chats: {},
@@ -1065,7 +1075,7 @@ export const useVelio = create<VelioState>()(
       },
       allowLocation: async () => {
         const request = ++locationRequest;
-        set({ locationBusy: true, locationError: null, sheet: "location" });
+        set({ locationBusy: true, locationError: null });
         try {
           const userLocation = await resolveCurrentLocation();
           if (request !== locationRequest) return;
@@ -1074,7 +1084,7 @@ export const useVelio = create<VelioState>()(
             userLocation,
             locationBusy: false,
             locationError: null,
-            sheet: null,
+            addressOpen: false,
           });
           get().showToast(`Plats: ${userLocation.label}`);
         } catch (error) {
@@ -1090,12 +1100,12 @@ export const useVelio = create<VelioState>()(
                   : code === 0 || String(error).includes("unsupported")
                     ? "Den här enheten har ingen platstjänst. Lägg in önskad plats i arbetsinformationen."
                     : "Ingen plats kom fram. Slå på platstjänster för VELIO och tryck Dela plats igen.";
-          set({ locationBusy: false, locationError, sheet: "location" });
+          set({ locationBusy: false, locationError, addressOpen: true });
         }
       },
       clearLocation: () => {
         locationRequest += 1;
-        set({ locationOn: false, userLocation: null, locationError: null, locationBusy: false, sheet: null });
+        set({ locationOn: false, userLocation: null, locationError: null, locationBusy: false, addressOpen: false });
         get().showToast("Platsdelning avstängd");
       },
       setNotifications: (notifications) => {
@@ -1227,7 +1237,7 @@ export const useVelio = create<VelioState>()(
         if (!item) return;
         set({
           activeAddressId: id,
-          sheet: null,
+          addressOpen: false,
           ...(item.lat != null && item.lng != null
             ? { locationOn: true, userLocation: { lat: item.lat, lng: item.lng, label: item.line, accuracy: null }, locationError: null }
             : {}),
@@ -1255,6 +1265,10 @@ export const useVelio = create<VelioState>()(
         set({ addresses: get().addresses.map((item) => ({ ...item, primary: item.id === id })) });
         get().showToast("Standardadress sparad");
       },
+      openAddressSheet: () => set({ addressOpen: true }),
+      closeAddressSheet: () => set({ addressOpen: false }),
+      saveSetupDraft: (setupDraft) => set({ setupDraft }),
+      saveJobDraft: (jobDraft) => set({ jobDraft }),
       addCard: (card) => set({ cards: [...get().cards, card] }),
       addToCart: () => {
         const { providerId, cart } = get();
@@ -1835,6 +1849,8 @@ export const useVelio = create<VelioState>()(
         favorites: state.favorites,
         addresses: state.addresses,
         activeAddressId: state.activeAddressId,
+        setupDraft: state.setupDraft,
+        jobDraft: state.jobDraft,
         cards: state.cards,
         accountMode: state.accountMode,
         idVerified: state.idVerified,
@@ -1891,6 +1907,8 @@ export const useVelio = create<VelioState>()(
           favorites: Array.isArray(saved.favorites) ? saved.favorites.filter((id) => typeof id === "string") : [],
           addresses: Array.isArray(saved.addresses) ? saved.addresses.filter(isSavedAddress) : [],
           activeAddressId: typeof saved.activeAddressId === "string" ? saved.activeAddressId : null,
+          setupDraft: saved.setupDraft && typeof saved.setupDraft === "object" ? saved.setupDraft : null,
+          jobDraft: saved.jobDraft && typeof saved.jobDraft === "object" ? saved.jobDraft : null,
           directory,
           cart: [],
           notifications: saved.notifications === true && notificationsAllowed,

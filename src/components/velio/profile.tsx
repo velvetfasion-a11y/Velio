@@ -691,7 +691,7 @@ export function ProfileScreens() {
                   type="button"
                   role="switch"
                   aria-checked={locationOn}
-                  onClick={() => (locationOn ? clearLocation() : setSheet("location"))}
+                  onClick={() => (locationOn ? clearLocation() : useVelio.getState().openAddressSheet())}
                   className="flex w-full items-center gap-3 px-4 py-3.5 text-left"
                 >
                   <span className="min-w-0 flex-1">
