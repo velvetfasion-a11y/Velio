@@ -60,6 +60,7 @@ export function BusinessHome() {
   const directory = useVelio((state) => state.directory);
   const listing = useVelio((state) => state.listing);
   const posted = useVelio((state) => state.posted);
+  const wallet = useVelio((state) => state.wallet);
   const [open, setOpen] = useState(true);
   const [editing, setEditing] = useState(false);
   const [offersOpen, setOffersOpen] = useState(false);
@@ -194,14 +195,15 @@ export function BusinessHome() {
         </button>
       </div>
 
-      <button type="button" onClick={() => showToast("Inget saldo att ta ut ännu")} className="relative mt-4 block w-full overflow-hidden rounded-[1.35rem] text-left text-white">
+      <button type="button" onClick={() => go("wallet")} className="relative mt-4 block w-full overflow-hidden rounded-[1.35rem] text-left text-white">
         <img src={asset("/velio/business-home.jpg")} alt="" className="absolute inset-0 h-full w-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-r from-brown/85 via-brown/45 to-transparent" />
         <div className="relative px-5 py-6">
           <p className="text-lg">VELIO-saldo</p>
           <p className="mt-1 flex items-center gap-1 font-serif text-5xl leading-none">
-            0 kr <ChevronRight className="size-6" />
+            {wallet.available.toLocaleString("sv-SE")} kr <ChevronRight className="size-6" />
           </p>
+          <p className="mt-2 max-w-[16rem] text-sm text-white/85">Öppna utbetalningar. Väntande belopp släpps 3 timmar efter jobbet.</p>
         </div>
       </button>
 

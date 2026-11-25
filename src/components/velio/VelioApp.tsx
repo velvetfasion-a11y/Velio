@@ -1,12 +1,14 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Home, MessageCircle, User } from "lucide-react";
+import { Home, MessageCircle, User, Wallet } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useVelio, type Screen } from "@/lib/velio/store";
 import { Home as HomeScreen, HomeSheets, InboxScreen, SearchScreen } from "@/components/velio/home";
 import { HistoryScreen } from "@/components/velio/history";
 import { NotificationsScreen } from "@/components/velio/notifications";
 import { ServiceScreen } from "@/components/velio/service";
-import { OnboardSheet, ProfileScreens } from "@/components/velio/profile";
+import { ProfileScreens } from "@/components/velio/profile";
+import { BusinessSetup } from "@/components/velio/business-setup";
+import { WalletScreen } from "@/components/velio/wallet";
 import { LoginScreen } from "@/components/velio/login";
 import { AppHeader } from "@/components/velio/header";
 import { BusinessHome } from "@/components/velio/business-home";
@@ -26,7 +28,7 @@ import {
 } from "@/components/velio/flows";
 import { Toast } from "@/components/velio/ui";
 
-const profileScreens: Screen[] = ["profile", "edit", "payments", "bookings", "posted", "business", "verify-id", "settings", "help", "favorites", "addresses"];
+const profileScreens: Screen[] = ["profile", "edit", "payments", "bookings", "posted", "business", "verify-id", "settings", "help", "favorites", "addresses", "wallet"];
 
 export function VelioApp() {
   const screen = useVelio((state) => state.screen);
@@ -64,16 +66,25 @@ export function VelioApp() {
     return () => window.clearInterval(timer);
   }, [loggedIn, refreshSync]);
 
-  const nav: { id: Screen; label: string; icon: typeof Home }[] = [
-    { id: "home", label: "Hem", icon: Home },
-    { id: "inbox", label: "Meddelanden", icon: MessageCircle },
-    { id: "profile", label: "Profil", icon: User },
-  ];
+  const nav: { id: Screen; label: string; icon: typeof Home }[] =
+    accountMode === "business"
+      ? [
+          { id: "home", label: "Hem", icon: Home },
+          { id: "wallet", label: "Saldo", icon: Wallet },
+          { id: "inbox", label: "Meddelanden", icon: MessageCircle },
+          { id: "profile", label: "Profil", icon: User },
+        ]
+      : [
+          { id: "home", label: "Hem", icon: Home },
+          { id: "inbox", label: "Meddelanden", icon: MessageCircle },
+          { id: "profile", label: "Profil", icon: User },
+        ];
 
   const navActive = (id: Screen) => {
     if (id === "home") return screen === "home" || screen === "service";
     if (id === "inbox") return screen === "inbox";
-    if (id === "profile") return profileScreens.includes(screen);
+    if (id === "wallet") return screen === "wallet";
+    if (id === "profile") return profileScreens.includes(screen) && screen !== "wallet";
     return screen === id;
   };
   const showChrome =
@@ -110,7 +121,8 @@ export function VelioApp() {
               {screen === "notifications" ? <NotificationsScreen /> : null}
               {screen === "service" ? <ServiceScreen /> : null}
               {screen === "history" ? <HistoryScreen /> : null}
-              {profileScreens.includes(screen) ? <ProfileScreens /> : null}
+              {screen === "wallet" ? <WalletScreen /> : null}
+              {screen !== "wallet" && profileScreens.includes(screen) ? <ProfileScreens /> : null}
             </main>
 
             {sheet ? null : (
@@ -154,7 +166,7 @@ export function VelioApp() {
             {sheet === "rate" ? <RateSheet /> : null}
             {sheet === "location" ? <LocationSheet /> : null}
             {sheet === "bankid" ? <BankIdSheet /> : null}
-            {sheet === "onboard" ? <OnboardSheet /> : null}
+            {sheet === "onboard" ? <BusinessSetup /> : null}
             <HomeSheets />
           </>
         ) : (

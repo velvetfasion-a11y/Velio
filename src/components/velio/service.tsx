@@ -400,7 +400,11 @@ export function ServiceScreen() {
                       <button type="button" onClick={() => openProvider(person.id)} className="min-w-0 text-left">
                         <span className="flex items-center gap-1 font-semibold">
                           <span className="truncate">{person.name}</span>
-                          <BadgeCheck className="size-4 shrink-0 fill-gold text-paper" aria-label="Verifierad" />
+                          {person.demo ? (
+                            <span className="rounded-full bg-brown px-1.5 py-0.5 text-[10px] font-semibold text-paper">Demo</span>
+                          ) : (
+                            <BadgeCheck className="size-4 shrink-0 fill-gold text-paper" aria-label="Verifierad" />
+                          )}
                         </span>
                         <span className="mt-0.5 block truncate text-xs text-muted">{service.name}</span>
                       </button>

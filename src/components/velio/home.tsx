@@ -504,7 +504,11 @@ export function InboxScreen() {
                   <span className="flex items-center justify-between gap-2">
                     <span className="flex min-w-0 items-center gap-1 font-semibold">
                       <span className="truncate">{name}</span>
-                      {provider ? <BadgeCheck className="size-4 shrink-0 fill-gold text-paper" /> : null}
+                      {provider?.demo ? (
+                        <span className="rounded-full bg-brown px-1.5 py-0.5 text-[10px] font-semibold text-paper">Demo</span>
+                      ) : provider ? (
+                        <BadgeCheck className="size-4 shrink-0 fill-gold text-paper" />
+                      ) : null}
                     </span>
                     <span className={cn("flex shrink-0 items-center gap-1.5 text-sm font-medium", active ? "text-ok" : "text-muted")}>
                       <span className={cn("size-2 rounded-full", active ? "bg-ok" : "bg-muted")} />
@@ -605,6 +609,8 @@ function JobSheet() {
   const [done, setDone] = useState(false);
   const [keyboard, setKeyboard] = useState(0);
   const chosenWhen = whenSummary(whenMode, startDate, endDate, timeWindow, clock);
+  const catCols = services.length % 2 === 0 ? 2 : 3;
+  const catRows = Math.ceil(services.length / catCols);
   const stepNames = ["Tjänst", "Beskrivning", "Tid", "Plats", "Budget", "Granska"];
   const hours = Array.from({ length: 14 }, (_, index) => `${String(index + 7).padStart(2, "0")}:00`);
 
@@ -737,19 +743,29 @@ function JobSheet() {
           <span className="size-10" />
         </div>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-2 pb-4">
+      <div className={cn("min-h-0 flex-1 px-4 pt-2", step === 0 ? "flex flex-col overflow-hidden pb-2" : "overflow-y-auto pb-4")}>
+        <div className={step === 0 ? "shrink-0" : undefined}>
         <StepProgress step={step + 1} total={6} label={stepNames[step]} />
-        <h1 className="ios-title text-[1.85rem]">
+        <h1 className={cn("ios-title", step === 0 ? "text-[1.35rem] leading-tight" : "text-[1.85rem]")}>
           {step === 0 ? "Vad behöver du hjälp med?" : step === 1 ? "Beskriv uppdraget" : step === 2 ? "När ska det göras?" : step === 3 ? "Var ska det utföras?" : step === 4 ? "Ungefärlig budget" : "Granska och publicera"}
         </h1>
-        <p className="mt-2 text-sm leading-snug text-muted">
+        <p className={cn("leading-snug text-muted", step === 0 ? "mt-1 text-xs" : "mt-2 text-sm")}>
           {step === 4
             ? "Budgeten är en riktlinje. Du betalar när jobbet är klart, och inget dras om arbetet inte utförs."
-            : "Kort steg för steg. Du kan gå tillbaka och ändra innan du publicerar."}
+            : step === 0
+              ? "Välj en tjänst."
+              : "Kort steg för steg. Du kan gå tillbaka och ändra innan du publicerar."}
         </p>
-        <div className="mt-4 space-y-3">
+        </div>
+        <div className={cn(step === 0 ? "mt-2 min-h-0 flex-1" : "mt-4 space-y-3")}>
         {step === 0 ? (
-          <div className="grid grid-cols-2 gap-3">
+          <div
+            className="grid h-full min-h-0 gap-1.5"
+            style={{
+              gridTemplateColumns: `repeat(${catCols}, minmax(0, 1fr))`,
+              gridTemplateRows: `repeat(${catRows}, minmax(0, 1fr))`,
+            }}
+          >
             {services.map((service) => {
               const photo = popular.find((item) => item.id === service.id);
               const selected = serviceId === service.id;
@@ -760,8 +776,8 @@ function JobSheet() {
                   aria-pressed={selected}
                   onClick={() => setServiceId(service.id)}
                   className={cn(
-                    "relative aspect-[3/4] overflow-hidden rounded-[1.35rem] text-left text-paper",
-                    selected ? "ring-2 ring-brown ring-offset-2 ring-offset-cream" : "",
+                    "relative h-full min-h-0 overflow-hidden rounded-2xl border-2 text-left text-paper",
+                    selected ? "border-brown" : "border-transparent",
                   )}
                 >
                   {photo ? (
@@ -769,14 +785,14 @@ function JobSheet() {
                   ) : (
                     <span className="absolute inset-0 bg-sand" />
                   )}
-                  <span className={cn("absolute inset-0", selected ? "bg-brown/45" : "bg-gradient-to-t from-ink/80 via-ink/20 to-ink/10")} />
+                  <span className={cn("absolute inset-0", selected ? "bg-brown/40" : "bg-gradient-to-t from-ink/80 via-ink/15 to-transparent")} />
                   {selected ? (
-                    <span className="absolute top-2.5 right-2.5 grid size-8 place-items-center rounded-full bg-paper text-brown shadow-soft">
-                      <Check className="size-4" />
+                    <span className="absolute top-1 right-1 grid size-5 place-items-center rounded-full bg-paper text-brown">
+                      <Check className="size-3" />
                     </span>
                   ) : null}
-                  <span className="scrim-text absolute inset-x-3 bottom-3 text-[15px] leading-tight font-semibold">
-                    {photo ? null : <ServiceIcon name={service.icon} className="mb-2 size-6" />}
+                  <span className="scrim-text absolute inset-x-1.5 bottom-1 text-[clamp(0.62rem,2.1dvh,0.95rem)] leading-tight font-semibold">
+                    {photo ? null : <ServiceIcon name={service.icon} className="mb-0.5 size-4" />}
                     {service.name}
                   </span>
                 </button>

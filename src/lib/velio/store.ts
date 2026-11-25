@@ -33,6 +33,7 @@ import {
 } from "@/lib/velio/auth-api";
 import { chatDtoToMsg, previewMessageText, resolveTakeRequestStatuses } from "@/lib/velio/chat-codec";
 import { isStaticHost, localDeleteAccount, localSetAccountMode } from "@/lib/velio/local-auth";
+import { demoWallet, emptyWallet, payoutFee, type PayoutSpeed, type WalletState } from "@/lib/velio/wallet";
 
 function mapSyncedMessages(
   messages: { id: string; from: "me" | "them"; text: string; time?: string }[],
@@ -69,7 +70,8 @@ export type Screen =
   | "settings"
   | "help"
   | "favorites"
-  | "addresses";
+  | "addresses"
+  | "wallet";
 
 export type AppNotification = {
   id: string;
@@ -165,6 +167,8 @@ export type Listing = {
   companyName?: string;
   orgNumber?: string;
   fTax?: "yes" | "no" | "unsure";
+  /** Published without a real identity check. */
+  demo?: boolean;
 };
 
 export type BusinessForm = {
@@ -259,6 +263,7 @@ function listingToProvider(input: {
   companyName?: string;
   orgNumber?: string;
   fTax?: "yes" | "no" | "unsure";
+  demo?: boolean;
 }): Provider {
   return {
     id: input.id,
@@ -290,6 +295,7 @@ function listingToProvider(input: {
     companyName: input.companyName,
     orgNumber: input.orgNumber,
     fTax: input.fTax,
+    demo: input.demo,
   };
 }
 
@@ -315,6 +321,7 @@ const screens: Screen[] = [
   "help",
   "favorites",
   "addresses",
+  "wallet",
 ];
 
 const sheets: Exclude<Sheet, null>[] = [
@@ -384,6 +391,13 @@ type VelioState = {
   accountMode: "customer" | "business";
   idVerified: boolean;
   idMethod: string | null;
+  /** Local placeholder only. Never contains image data. */
+  kycPending: { document: "passport" | "national-id" | "driving-licence"; submittedAt: string; reference: string } | null;
+  markKycPending: (input: { document: "passport" | "national-id" | "driving-licence"; reference: string }) => void;
+  wallet: WalletState;
+  connectPayoutBank: (bank: { clearing: string; account: string }) => void;
+  requestPayout: (amount: number, speed: PayoutSpeed) => string | { id: string; amount: number; fee: number; net: number; speed: PayoutSpeed };
+  publishDemoBusiness: (listing: Listing) => void;
   profile: Profile;
   favorites: string[];
   addresses: SavedAddress[];
@@ -596,6 +610,8 @@ export const useVelio = create<VelioState>()(
       accountMode: "customer",
       idVerified: false,
       idMethod: null,
+      kycPending: null,
+      wallet: emptyWallet(),
       profile: {
         name: "",
         phone: "",
@@ -813,8 +829,8 @@ export const useVelio = create<VelioState>()(
             avatar: get().profile.avatar,
           },
           accountMode,
-          idVerified: Boolean(me.account.idVerified) || Boolean(own) || get().idVerified,
-          idMethod: me.account.idMethod ?? get().idMethod,
+          idVerified: own?.demo ? false : Boolean(me.account.idVerified) || Boolean(own) || get().idVerified,
+          idMethod: own?.demo ? "demo" : me.account.idMethod ?? get().idMethod,
           posted: isStaticHost() ? get().posted : jobsToPosted(me.jobs),
           conversationByProvider: {
             ...get().conversationByProvider,
@@ -1600,7 +1616,8 @@ export const useVelio = create<VelioState>()(
           accountMode,
           ...(accountMode === "business" && own
             ? {
-                idVerified: true,
+                idVerified: own.demo ? false : true,
+                idMethod: own.demo ? "demo" : get().idMethod,
                 providerId: own.id,
                 listing: get().listing ?? {
                   serviceId: own.serviceId,
@@ -1632,6 +1649,93 @@ export const useVelio = create<VelioState>()(
             });
           }
         });
+      },
+      markKycPending: ({ document, reference }) => {
+        set({
+          kycPending: { document, reference, submittedAt: new Date().toISOString() },
+        });
+      },
+      connectPayoutBank: (bank) => {
+        set({ wallet: { ...get().wallet, bank } });
+      },
+      requestPayout: (amount, speed) => {
+        const wallet = get().wallet;
+        if (!wallet.bank) return "Koppla ett bankkonto först";
+        const fee = payoutFee(speed);
+        if (!Number.isFinite(amount) || amount < 1) return "Skriv ett belopp";
+        if (amount > wallet.available) return "Beloppet är större än tillgängligt saldo";
+        if (amount <= fee) return "Beloppet behöver täcka avgiften";
+        const id = `UT-${Date.now().toString().slice(-6)}`;
+        const note =
+          speed === "instant"
+            ? `Avgift ${fee} kr. Demo: ingen bank har tagit emot uttaget.`
+            : "Ingen avgift. 1–2 bankdagar. Demo: ingen bank har tagit emot uttaget.";
+        set({
+          wallet: {
+            ...wallet,
+            available: wallet.available - amount,
+            txs: [
+              {
+                id,
+                title: speed === "instant" ? "Uttag · direkt" : "Uttag · 1–2 bankdagar",
+                amount: -amount,
+                bucket: "sent",
+                at: "Nu",
+                note,
+              },
+              ...wallet.txs,
+            ],
+          },
+        });
+        return { id, amount, fee, net: amount - fee, speed };
+      },
+      publishDemoBusiness: (listing) => {
+        const profile = get().profile;
+        const id = get().accountId ? `biz-${get().accountId}` : `biz-${uid()}`;
+        const previous = get().directory.find((item) => item.id === id);
+        const serviceIds = listing.serviceIds ?? (listing.serviceId ? [listing.serviceId] : []);
+        const where = areaSummary(listing.areas);
+        const published = listingToProvider({
+          id,
+          name: profile.name || listing.companyName || "Mitt företag",
+          serviceId: serviceIds[0] ?? listing.serviceId,
+          serviceIds,
+          otherTrade: listing.otherTrade,
+          title: listing.title,
+          desc: listing.desc,
+          price: listing.price,
+          area: where.area,
+          place: where.place,
+          experience: listing.experience,
+          photo: profile.avatar || previous?.photo,
+          photos: listing.photos,
+          offers: listing.offers,
+          includes: listing.includes,
+          qualifications: listing.qualifications,
+          extras: listing.extras,
+          areas: listing.areas,
+          companyName: listing.companyName,
+          orgNumber: listing.orgNumber,
+          fTax: listing.fTax,
+          demo: true,
+        });
+        const directory = [...get().directory.filter((item) => item.id !== id), published];
+        syncDirectory(directory);
+        set({
+          listing: { ...listing, demo: true },
+          directory,
+          accountMode: "business",
+          idVerified: false,
+          idMethod: "demo",
+          sheet: "provider",
+          screen: "business",
+          providerId: id,
+          wallet: get().wallet.txs.length ? get().wallet : demoWallet(),
+        });
+        void import("@/lib/velio/local-auth").then(({ isStaticHost: staticHost, localSetAccountMode: setMode }) => {
+          if (staticHost()) setMode("business");
+        });
+        get().showToast("Profilen är publicerad som Demo. Den är inte verifierad.");
       },
       addPosted: (job) => {
         const local: PostedJob = {
@@ -1672,6 +1776,8 @@ export const useVelio = create<VelioState>()(
         accountMode: state.accountMode,
         idVerified: state.idVerified,
         idMethod: state.idMethod,
+        kycPending: state.kycPending,
+        wallet: state.wallet,
         screen: state.screen,
         navStack: state.navStack,
         sheet: state.sheet,

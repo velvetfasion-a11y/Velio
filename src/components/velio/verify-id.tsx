@@ -1,30 +1,22 @@
 import { useCallback, useEffect, useState } from "react";
-import {
-  completeBankIdVerification,
-  startBankIdVerification,
-  submitPassportVerification,
-} from "@/lib/velio/auth-api";
+import { completeBankIdVerification, startBankIdVerification } from "@/lib/velio/auth-api";
 import { isStaticHost } from "@/lib/velio/local-auth";
 import { useVelio } from "@/lib/velio/store";
 import { ScreenHeader } from "@/components/velio/ui";
+import { IdentityFlow } from "@/components/velio/identity";
 
-type Method = "choose" | "bankid" | "passport";
+type Method = "choose" | "bankid" | "document";
 
 export function VerifyIdScreen() {
   const go = useVelio((state) => state.go);
   const applyAccountFlags = useVelio((state) => state.applyAccountFlags);
   const showToast = useVelio((state) => state.showToast);
-  const profile = useVelio((state) => state.profile);
   const [method, setMethod] = useState<Method>("choose");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [challengeId, setChallengeId] = useState<string | null>(null);
   const [launchUrl, setLaunchUrl] = useState("");
   const [bankStatus, setBankStatus] = useState("BankID är inte kopplat.");
-  const [passportNumber, setPassportNumber] = useState("");
-  const [country, setCountry] = useState("SE");
-  const [fullName, setFullName] = useState(profile.name);
-  const [expiry, setExpiry] = useState("");
   const staticHost = typeof window !== "undefined" && isStaticHost();
 
   const startBankId = async () => {
@@ -75,36 +67,11 @@ export function VerifyIdScreen() {
     return () => window.clearInterval(timer);
   }, [challengeId, finishBankId, staticHost]);
 
-  const finishPassport = async () => {
-    if (busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      if (staticHost) {
-        setError("Passgranskning kräver servern. Ingenting har markerats som verifierat.");
-        return;
-      }
-      const result = await submitPassportVerification({
-        passportNumber,
-        country,
-        fullName,
-        expiry,
-      });
-      applyAccountFlags(result.account);
-      showToast(result.message || "Pass skickat för granskning. Identiteten är inte verifierad ännu.");
-      go("profile");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Passverifiering misslyckades");
-    } finally {
-      setBusy(false);
-    }
-  };
-
   return (
     <div className="px-5 pt-4 pb-8">
       <ScreenHeader title="Verifiera dig" />
       <p className="mt-2 text-sm leading-relaxed text-muted">
-        Identiteten behövs så att kunder vet vem som utför jobbet och så att utbetalningar kan kopplas till rätt person. Ingenting markeras som verifierat förrän BankID svarar, eller tills en manuell granskning är godkänd.
+        Identiteten behövs för både kund och VELIO Business. BankID är det rekommenderade sättet. ID-handling är en platshållare: bilderna laddas inte upp och kontot blir inte verifierat.
       </p>
 
       {method === "choose" ? (
@@ -116,13 +83,18 @@ export function VerifyIdScreen() {
           >
             Identifiera med BankID
           </button>
+          <p className="text-center text-xs font-medium text-muted">Rekommenderas</p>
           <button
             type="button"
-            onClick={() => setMethod("passport")}
+            onClick={() => {
+              setError(null);
+              setMethod("document");
+            }}
             className="flex h-14 w-full items-center justify-center rounded-full border border-line bg-white text-[15px] font-semibold text-ink"
           >
-            Skicka pass för granskning
+            ID-handling
           </button>
+          <p className="text-center text-xs text-muted">Pass, nationellt id-kort eller svenskt körkort. Platshållare.</p>
         </div>
       ) : null}
 
@@ -134,6 +106,7 @@ export function VerifyIdScreen() {
             onClick={() => {
               setMethod("choose");
               setChallengeId(null);
+              setError(null);
             }}
           >
             ← Byt metod
@@ -155,51 +128,9 @@ export function VerifyIdScreen() {
         </div>
       ) : null}
 
-      {method === "passport" ? (
-        <div className="mt-5 space-y-3">
-          <button type="button" className="text-sm font-medium text-brown" onClick={() => setMethod("choose")}>
-            ← Byt metod
-          </button>
-          <Field label="Namn som i passet" value={fullName} onChange={setFullName} />
-          <Field label="Passnummer" value={passportNumber} onChange={setPassportNumber} placeholder="AB1234567" />
-          <Field label="Landskod" value={country} onChange={setCountry} placeholder="SE" />
-          <Field label="Giltigt t.o.m." value={expiry} onChange={setExpiry} placeholder="ÅÅÅÅ-MM-DD" />
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void finishPassport()}
-            className="h-12 w-full rounded-full bg-brown text-[15px] font-semibold text-white disabled:opacity-60"
-          >
-            {busy ? "Skickar…" : "Skicka för granskning"}
-          </button>
-        </div>
-      ) : null}
+      {method === "document" ? <IdentityFlow onBack={() => setMethod("choose")} /> : null}
 
-      {error ? <p className="mt-4 text-center text-sm text-red-700">{error}</p> : null}
+      {method === "bankid" && error ? <p className="mt-4 text-center text-sm text-red-700">{error}</p> : null}
     </div>
-  );
-}
-
-function Field({
-  label,
-  value,
-  onChange,
-  placeholder,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  placeholder?: string;
-}) {
-  return (
-    <label className="block">
-      <span className="mb-1 block text-sm font-medium text-muted">{label}</span>
-      <input
-        value={value}
-        placeholder={placeholder}
-        onChange={(event) => onChange(event.target.value)}
-        className="h-12 w-full rounded-full border border-line bg-paper/80 backdrop-blur-xl px-4 text-[15px] outline-none"
-      />
-    </label>
   );
 }

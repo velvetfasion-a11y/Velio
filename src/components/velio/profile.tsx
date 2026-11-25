@@ -20,6 +20,7 @@ import {
   ShieldCheck,
   TrendingUp,
   User,
+  Wallet,
 } from "lucide-react";
 import { contactEmail, isSignInEmail, kr, providerTradeNames, publicDisplayName, serviceById } from "@/lib/velio/data";
 import { HistoryCard } from "@/components/velio/history";
@@ -82,6 +83,7 @@ function ProfileCompleteness({
   phone,
   email,
   verified,
+  pending,
   onVerify,
 }: {
   name: string;
@@ -89,6 +91,7 @@ function ProfileCompleteness({
   phone: boolean;
   email: boolean;
   verified: boolean;
+  pending: boolean;
   onVerify: () => void;
 }) {
   const checks = [
@@ -96,7 +99,7 @@ function ProfileCompleteness({
     { label: "Profilbild", ok: avatar },
     { label: "Telefon", ok: phone },
     { label: "E-post", ok: email },
-    { label: "Identitet", ok: verified },
+    { label: "Identitet", ok: verified, note: pending && !verified ? "Granskas" : undefined },
   ];
   const done = checks.filter((item) => item.ok).length;
   const pct = Math.round((done / checks.length) * 100);
@@ -105,7 +108,7 @@ function ProfileCompleteness({
       <div className="flex items-center justify-between gap-3">
         <p className="font-semibold">Profilen är {pct}% klar</p>
         <span className={verified ? "rounded-full bg-ok/15 px-2 py-0.5 text-[11px] font-semibold text-ok" : "rounded-full bg-sand px-2 py-0.5 text-[11px] font-semibold text-brown"}>
-          {verified ? "Identitet verifierad" : "Inte verifierad"}
+          {verified ? "Verifierad" : pending ? "Granskas" : "Inte verifierad"}
         </span>
       </div>
       <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-line" aria-hidden="true">
@@ -115,13 +118,13 @@ function ProfileCompleteness({
         {checks.map((item) => (
           <li key={item.label} className="flex items-center justify-between">
             <span>{item.label}</span>
-            <span className={item.ok ? "text-ok" : "text-muted"}>{item.ok ? "Klar" : "Saknas"}</span>
+            <span className={item.ok ? "text-ok" : "text-muted"}>{item.ok ? "Klar" : "note" in item && item.note ? item.note : "Saknas"}</span>
           </li>
         ))}
       </ul>
       {verified ? null : (
         <button type="button" onClick={onVerify} className="mt-3 h-11 w-full rounded-full bg-brown text-sm font-semibold text-paper">
-          Verifiera med BankID
+          {pending ? "Visa identitet" : "Identifiera dig"}
         </button>
       )}
     </section>
@@ -234,6 +237,7 @@ export function ProfileScreens() {
   const listing = useVelio((state) => state.listing);
   const accountMode = useVelio((state) => state.accountMode);
   const idVerified = useVelio((state) => state.idVerified);
+  const kycPending = useVelio((state) => state.kycPending);
   const idMethod = useVelio((state) => state.idMethod);
   const setAccountMode = useVelio((state) => state.setAccountMode);
   const setSheet = useVelio((state) => state.setSheet);
@@ -410,11 +414,14 @@ export function ProfileScreens() {
     const own = ownBusiness({ accountId, directory, loggedIn: true });
     const activeListing = listing ?? (own ? { serviceId: own.serviceId, desc: own.about, price: own.price } : null);
     const listed = activeListing ? serviceById(activeListing.serviceId) : null;
-    const verifyLabel = !idVerified
-      ? "Identitet\nkrävs"
-      : idMethod === "passport"
-        ? "Verifierad\nmed pass"
-        : "Verifierad\nmed BankID";
+    const demo = Boolean(own?.demo || idMethod === "demo");
+    const verifyLabel = demo
+      ? "Demo\ninte verifierad"
+      : !idVerified
+        ? "Identitet\nkrävs"
+        : idMethod === "passport"
+          ? "Verifierad\nmed pass"
+          : "Verifierad\nmed BankID";
     const points = [
       { icon: ShieldCheck, label: verifyLabel },
       { icon: Layers, label: "Få uppdrag\ndirekt i appen" },
@@ -434,18 +441,11 @@ export function ProfileScreens() {
             </p>
           </div>
         </div>
-        {!idVerified && !own ? (
+        {!own ? (
           <div className="mt-5 rounded-[1.2rem] border border-line bg-soft p-4">
             <p className="text-sm leading-relaxed text-muted">
-              Business kräver identifiering. Verifiera dig med BankID eller pass innan du lägger upp jobb.
+              Identiteten ingår i stegen. Utan BankID publiceras profilen som Demo, inte som verifierad.
             </p>
-            <button
-              type="button"
-              onClick={() => go("verify-id")}
-              className="mt-3 h-11 w-full rounded-full bg-brown text-sm font-semibold text-white"
-            >
-              Verifiera nu
-            </button>
           </div>
         ) : null}
         <div className="mt-6 grid grid-cols-3">
@@ -487,11 +487,11 @@ export function ProfileScreens() {
         ) : null}
         <button
           type="button"
-          onClick={() => (idVerified || own ? setSheet("onboard") : go("verify-id"))}
+          onClick={() => setSheet("onboard")}
           className="mt-6 flex h-14 w-full items-center justify-center gap-3 rounded-full bg-ink text-base font-semibold text-white"
         >
           <Briefcase className="size-5" strokeWidth={1.6} />
-          {!idVerified && !own ? "Verifiera för att fortsätta" : activeListing ? "Uppdatera jobb" : "Lägg upp ditt jobb"}
+          {activeListing ? "Uppdatera profil" : "Kom igång"}
         </button>
       </div>
     );
@@ -841,6 +841,7 @@ export function ProfileScreens() {
   ];
   const rows = [
     { icon: User, label: "Redigera profil", onClick: () => go("settings") },
+    { icon: Wallet, label: "Utbetalningar", note: "Saldo, väntande belopp och uttag.", onClick: () => go("wallet") },
     { icon: CreditCard, label: "Betalningsmetoder", onClick: () => go("payments") },
     { icon: Clock, label: "Bokningshistorik", onClick: () => go("bookings") },
     { icon: Briefcase, label: "VELIO Business", note: own ? "Din profil är publicerad. Öppna den här." : "Erbjud dina tjänster, få uppdrag och tjäna pengar.", onClick: () => go("business") },
@@ -904,6 +905,7 @@ export function ProfileScreens() {
         phone={Boolean(profile.phone)}
         email={Boolean(contactEmail(profile.email))}
         verified={idVerified}
+        pending={Boolean(kycPending) && !idVerified}
         onVerify={() => go("verify-id")}
       />
 

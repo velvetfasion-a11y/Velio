@@ -48,6 +48,8 @@ export type Provider = {
   companyName?: string;
   orgNumber?: string;
   fTax?: "yes" | "no" | "unsure";
+  /** Shown instead of a verified badge. Not an identity check. */
+  demo?: boolean;
 };
 
 /** Public “Om” text: the description the person wrote, without a leading account name. */

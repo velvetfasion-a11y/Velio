@@ -109,7 +109,11 @@ export function ProviderSheet() {
           <div className="min-w-0">
             <h2 className="ios-title flex items-center gap-2 text-[1.85rem]">
               {provider.name}
-              <BadgeCheck className="size-6 shrink-0 fill-gold text-paper" aria-label="Verifierad profil" />
+              {provider.demo ? (
+                <span className="rounded-full bg-brown px-2 py-0.5 text-xs font-semibold tracking-wide text-paper">Demo</span>
+              ) : (
+                <BadgeCheck className="size-6 shrink-0 fill-gold text-paper" aria-label="Verifierad profil" />
+              )}
             </h2>
             {provider.title || provider.experience ? (
               <p className="mt-2 text-sm font-medium">
