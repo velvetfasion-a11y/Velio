@@ -25,6 +25,7 @@ import { areaLayout, kr, services, type ServiceId } from "@/lib/velio/data";
 import { saveWeekTemplate } from "@/lib/velio/schedule";
 import { useVelio, type BusinessForm } from "@/lib/velio/store";
 import { AppHeader } from "@/components/velio/header";
+import { ProfilePhoto } from "@/components/velio/ui";
 import { cn } from "@/lib/cn";
 import { asset } from "@/lib/velio/asset";
 
@@ -43,6 +44,7 @@ type Offer = { id: string; name: string; hours: string; price: number; on: boole
 
 export function OnboardSheet() {
   const closeSheet = useVelio((state) => state.closeSheet);
+  const hasProfilePhoto = useVelio((state) => Boolean(state.profile.avatar));
   const finishOnboard = useVelio((state) => state.finishOnboard);
   const saveBusinessForm = useVelio((state) => state.saveBusinessForm);
   const showToast = useVelio((state) => state.showToast);
@@ -204,11 +206,16 @@ export function OnboardSheet() {
         <h2 className="mb-3 text-xl font-semibold">Velio Business</h2>
         <div className="relative overflow-hidden rounded-[1.2rem]">
           <img src={asset("/velio/business.jpg")} alt="" className="h-36 w-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-r from-[#4a3424]/80 via-[#4a3424]/35 to-transparent" />
-          <div className="absolute inset-0 flex flex-col justify-center px-4 text-white">
-            <h3 className="font-serif text-[1.7rem] leading-none">Uppdatera ditt jobb</h3>
-            <p className="mt-2 max-w-[16rem] text-sm leading-snug">{blurbs[step - 1]}</p>
+          <div className="absolute inset-0 bg-gradient-to-b from-[#4a3424]/75 to-[#4a3424]/25" />
+          <div className="absolute inset-x-0 top-0 px-4 pt-3.5 text-white">
+            <h3 className="font-serif text-[1.45rem] leading-none">Uppdatera ditt jobb</h3>
+            <p className="mt-1.5 max-w-[16rem] text-sm leading-snug">{blurbs[step - 1]}</p>
           </div>
+        </div>
+        <div className="-mt-10 flex flex-col items-center">
+          <ProfilePhoto large prompt />
+          <p className="mt-2 text-sm font-semibold">Profilbild</p>
+          <p className="text-xs text-[#5c564f]">{hasProfilePhoto ? "Tryck för att byta bild." : "Tryck för att lägga upp din bild."}</p>
         </div>
         <Stepper step={step} />
         <div className="mt-4 rounded-[1.3rem] border border-[#efeae4] bg-white/80 p-4">

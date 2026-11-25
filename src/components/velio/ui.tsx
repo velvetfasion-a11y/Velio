@@ -1,5 +1,5 @@
 import { useRef, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from "react";
-import { ArrowLeft, Pencil, Star } from "lucide-react";
+import { ArrowLeft, Camera, Pencil, Plus, Star } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { initialsOf, publicDisplayName } from "@/lib/velio/data";
 import { useVelio } from "@/lib/velio/store";
@@ -65,28 +65,29 @@ function readAvatarFile(file: File) {
   });
 }
 
-export function ProfilePhoto({ large = false }: { large?: boolean }) {
+export function ProfilePhoto({ large = false, prompt = false }: { large?: boolean; prompt?: boolean }) {
   const profile = useVelio((state) => state.profile);
   const setAvatar = useVelio((state) => state.setAvatar);
   const showToast = useVelio((state) => state.showToast);
   const inputRef = useRef<HTMLInputElement>(null);
   const initials = initialsOf(publicDisplayName(profile.name) || "V") || "V";
+  const hasPhoto = Boolean(profile.avatar);
 
   return (
     <div className="relative shrink-0">
       <button
         type="button"
-        aria-label="Byt bild"
+        aria-label={hasPhoto ? "Byt profilbild" : "Lägg upp profilbild"}
         onClick={() => inputRef.current?.click()}
         className={cn(
           "grid place-items-center overflow-hidden rounded-full bg-[#f3ece3] font-serif text-ink",
           large ? "size-[6.6rem] text-3xl ring-[3px] ring-white" : "size-14 text-lg",
         )}
       >
-        {profile.avatar ? <img src={profile.avatar} alt="" className="h-full w-full object-cover" /> : initials}
+        {profile.avatar ? <img src={profile.avatar} alt="" className="h-full w-full object-cover" /> : prompt ? <Camera className={large ? "size-8" : "size-5"} /> : initials}
       </button>
       <span className="pointer-events-none absolute right-0 bottom-0 grid size-7 place-items-center rounded-full bg-white shadow">
-        <Pencil className="size-3.5" />
+        {prompt && !hasPhoto ? <Plus className="size-3.5" /> : <Pencil className="size-3.5" />}
       </span>
       <input
         ref={inputRef}
