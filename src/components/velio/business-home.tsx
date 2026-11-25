@@ -41,23 +41,12 @@ function monthName(date: Date) {
   return date.toLocaleDateString("sv-SE", { month: "short" }).replace(".", "");
 }
 
-function writtenDay(date: Date) {
-  const label = date.toLocaleDateString("sv-SE", { weekday: "long", day: "numeric", month: "long" });
-  return label.replace(".", "");
-}
-
 function rangeLabel(now: Date, offset: number) {
   const days = weekDates(now, offset);
   const first = days[0];
   const last = days[6];
   if (first.getMonth() === last.getMonth()) return `${first.getDate()}–${last.getDate()} ${monthName(last)}`;
   return `${first.getDate()} ${monthName(first)}–${last.getDate()} ${monthName(last)}`;
-}
-
-function todayCopy(now: Date, hours: DayHours) {
-  const written = writtenDay(now);
-  if (!hours.on) return `Ledig idag, ${written}`;
-  return `Idag, ${written} · ${hours.from}–${hours.to}`;
 }
 
 export function BusinessHome() {
@@ -116,7 +105,6 @@ export function BusinessHome() {
   if (otherTrade) tradeNames.push(otherTrade);
   const openJobs = posted.filter((job) => !skipped.includes(job.id) && job.ownerId !== accountId && tradeIds.includes(job.serviceId));
   const first = greetingName(profile.name);
-  const todayHours = now ? hoursOn(schedule, now) : null;
   const thisWeek = now ? weekDates(now, 0) : [];
 
   const newCount = offers.filter((offer) => offer.status === "new").length + openJobs.length;
@@ -217,25 +205,6 @@ export function BusinessHome() {
         </div>
       </button>
 
-      <div className="mt-3 rounded-[1.3rem] border border-[#efeae4] bg-white/80 px-4 py-3">
-        <div className="flex items-center justify-between">
-          <span className="font-medium">Tillgänglig för uppdrag</span>
-          <button type="button" aria-pressed={open} onClick={() => setOpen(!open)} className={cn("relative h-7 w-12 rounded-full", open ? "bg-[#8a6a3d]" : "bg-[#e6dfd6]")}>
-            <span className={cn("absolute top-0.5 size-6 rounded-full bg-white", open ? "right-0.5" : "left-0.5")} />
-          </button>
-        </div>
-        <div className="mt-3 border-t border-[#f0ebe6] pt-3 text-sm">
-          <span className={cn("inline-flex items-center gap-1.5 rounded-full px-3 py-1", open ? "bg-[#e7f3e4] text-[#2f7a3a]" : "bg-[#f3ece3] text-muted")}>
-            <span className={cn("size-2 rounded-full", open ? "bg-[#2f7a3a]" : "bg-muted")} />
-            {open ? "Aktiv för arbete" : "Inte tillgänglig"}
-          </span>
-          <p className="mt-2 flex items-start gap-1.5 text-[#5c564f]">
-            <Calendar className="mt-0.5 size-4 shrink-0" />
-            <span>{now && todayHours ? todayCopy(now, todayHours) : "Hämtar dagens datum"}</span>
-          </p>
-        </div>
-      </div>
-
       <button type="button" onClick={() => setOffersOpen(true)} className="mt-3 flex w-full items-center gap-3 rounded-[1.2rem] bg-[#6e5636] px-4 py-3 text-left text-white">
         <Briefcase className="size-6" strokeWidth={1.5} />
         <span className="min-w-0 flex-1">
@@ -280,6 +249,21 @@ export function BusinessHome() {
           <span className="ml-auto text-sm text-[#5c564f]">{now ? rangeLabel(now, 0) : "Denna vecka"}</span>
           <ChevronRight className="size-4 text-muted" />
         </button>
+        <div className="mb-3 flex items-center justify-between gap-3 px-1">
+          <span className={cn("inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm", open ? "bg-[#e7f3e4] text-[#2f7a3a]" : "bg-[#f3ece3] text-muted")}>
+            <span className={cn("size-2 rounded-full", open ? "bg-[#2f7a3a]" : "bg-muted")} />
+            {open ? "Aktiv för arbete" : "Inte tillgänglig"}
+          </span>
+          <button
+            type="button"
+            aria-label="Tillgänglig för uppdrag"
+            aria-pressed={open}
+            onClick={() => setOpen(!open)}
+            className={cn("relative h-7 w-12 shrink-0 rounded-full", open ? "bg-[#8a6a3d]" : "bg-[#e6dfd6]")}
+          >
+            <span className={cn("absolute top-0.5 size-6 rounded-full bg-white", open ? "right-0.5" : "left-0.5")} />
+          </button>
+        </div>
         <div className="grid grid-cols-7 gap-1">
           {thisWeek.map((date) => {
             const hours = hoursOn(schedule, date);
