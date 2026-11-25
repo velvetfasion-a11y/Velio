@@ -200,7 +200,6 @@ function presence(messages: ChatMsg[]) {
 
 export function ChatSheet() {
   const providerId = useVelio((state) => state.providerId);
-  const screen = useVelio((state) => state.screen);
   const chats = useVelio((state) => state.chats);
   const peers = useVelio((state) => state.peers);
   const sendChat = useVelio((state) => state.sendChat);
