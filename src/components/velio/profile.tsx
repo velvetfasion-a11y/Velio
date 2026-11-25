@@ -21,7 +21,7 @@ import {
   TrendingUp,
   User,
 } from "lucide-react";
-import { contactEmail, kr, publicDisplayName, serviceById } from "@/lib/velio/data";
+import { contactEmail, isSignInEmail, kr, publicDisplayName, serviceById } from "@/lib/velio/data";
 import { HistoryCard } from "@/components/velio/history";
 import { VerifyIdScreen } from "@/components/velio/verify-id";
 import { ownBusiness, useVelio, type Booking } from "@/lib/velio/store";
@@ -366,13 +366,14 @@ export function ProfileScreens() {
                   label="E-post"
                   value={knownEmail}
                   type="email"
-                  placeholder="namn@mail.se"
+                  placeholder="namn@.com"
                   onSave={(email) => {
-                    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !contactEmail(email)) {
-                      showToast("Skriv din e-post");
+                    const chosen = isSignInEmail(email);
+                    if (!chosen) {
+                      showToast("Skriv en e-postadress, till exempel namn@.com");
                       return;
                     }
-                    return saveContact({ email }, "E-post sparad");
+                    return saveContact({ email: chosen }, "E-post sparad");
                   }}
                 />
               </div>

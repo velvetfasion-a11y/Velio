@@ -311,6 +311,38 @@ export function localBankIdSignIn(input?: { name?: string; personalNumber?: stri
   return account;
 }
 
+export function localSignInWithEmail(email: string, name?: string): LocalAccount {
+  const normalized = email.trim().toLowerCase();
+  const accounts = readAccounts();
+  const chosen = name?.trim() || "";
+  const localPart = normalized.split("@")[0] || "";
+  const fallback = /[a-zåäö]/i.test(localPart) ? localPart : "";
+  let account = accounts.find((item) => item.email.toLowerCase() === normalized);
+  if (!account) {
+    account = {
+      id: uid(),
+      provider: "email",
+      name: chosen || fallback,
+      email: normalized,
+      phone: "",
+      providerId: null,
+      accountMode: "customer",
+      emailVerified: true,
+      phoneVerified: false,
+      idVerified: false,
+      idMethod: null,
+    };
+    accounts.push(account);
+  } else if (chosen) {
+    account = { ...account, name: chosen, emailVerified: true };
+    const idx = accounts.findIndex((item) => item.id === account!.id);
+    accounts[idx] = account;
+  }
+  writeAccounts(accounts);
+  localStorage.setItem(SESSION_KEY, account.id);
+  return account;
+}
+
 export function localGoogleSignIn(email: string, name: string, providerId?: string): LocalAccount {
   const accounts = readAccounts();
   let account = accounts.find((a) => a.email === email.toLowerCase());

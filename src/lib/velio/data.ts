@@ -125,10 +125,17 @@ export function publicDisplayName(name: string | null | undefined) {
   return trimmed;
 }
 
-/** Drop generated stand-in addresses. A real mailbox is kept. */
+/** Drop generated stand-in addresses. A chosen address is kept. */
 export function contactEmail(email: string | null | undefined) {
   const value = (email ?? "").trim();
-  if (!value || /@(?:bankid\.)?velio\.local$/i.test(value)) return "";
+  if (!value || /@(?:bankid\.|users\.)?velio\.local$/i.test(value)) return "";
+  return value;
+}
+
+/** An address the person chooses, including one that is not a real mailbox, such as namn@.com. */
+export function isSignInEmail(email: string | null | undefined) {
+  const value = contactEmail(email).toLowerCase();
+  if (!/^[^\s@]+@[^\s@]*\.[^\s@]+$/.test(value)) return "";
   return value;
 }
 

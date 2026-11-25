@@ -11,7 +11,8 @@ import {
   verifyEmailOtp,
   verifySmsOtp,
 } from "@/lib/velio/auth-api";
-import { isStaticHost, localGoogleSignIn, localMePayload } from "@/lib/velio/local-auth";
+import { isSignInEmail } from "@/lib/velio/data";
+import { isStaticHost, localGoogleSignIn, localMePayload, localSignInWithEmail } from "@/lib/velio/local-auth";
 import { googleGisAvailable, signInWithGoogleGis } from "@/lib/velio/google-gis";
 
 type Step = "methods" | "bankid-open" | "email" | "email-code" | "phone" | "phone-code";
@@ -175,14 +176,20 @@ export function LoginScreen() {
 
   const sendEmail = async () => {
     if (busy) return;
-    if (!email.includes("@")) return setLocalError("Ange en giltig e-postadress");
+    const chosen = isSignInEmail(email);
+    if (!chosen) return setLocalError("Skriv en e-postadress, till exempel namn@.com");
     setBusy(true);
     setLocalError(null);
     try {
-      if (staticHost || !caps.email) {
+      if (staticHost) {
+        const account = localSignInWithEmail(chosen, name.trim() || undefined);
+        applyMe(localMePayload(account));
+        return;
+      }
+      if (!caps.email) {
         throw new Error("E-postinloggning skickar koden till din mejlbox och är inte aktiverad ännu.");
       }
-      const result = await startEmailOtp(email.trim(), name.trim() || undefined);
+      const result = await startEmailOtp(chosen, name.trim() || undefined);
       setChallengeId(result.challengeId);
       setHint(result.message ?? "Vi har skickat en kod till din mejlbox. Kolla inkorgen (och skräppost).");
       setStep("email-code");
@@ -283,7 +290,9 @@ export function LoginScreen() {
           <>
             <h1 className="mt-8 text-center font-serif text-[2.7rem] leading-none font-medium text-[#2a211c]">Logga in</h1>
             <p className="mx-auto mt-3 max-w-[17rem] text-center text-sm leading-snug text-[#6e6964]">
-              BankID öppnar BankID-appen. E-post- och SMS-kod skickas till dig — aldrig i appen.
+              {staticHost
+                ? "E-post loggar in med adressen du skriver, även om den inte är en riktig inkorg."
+                : "BankID öppnar BankID-appen. E-post- och SMS-kod skickas till dig — aldrig i appen."}
             </p>
 
             <div className="mt-8 rounded-[1.7rem] border border-white/80 bg-white/45 p-3 shadow-[0_18px_50px_rgba(70,50,20,0.08)] backdrop-blur-xl">
@@ -325,14 +334,25 @@ export function LoginScreen() {
             </h1>
             <p className="mx-auto mt-3 max-w-[18rem] text-center text-sm leading-snug text-[#6e6964]">
               {step === "email"
-                ? "Vi skickar en engångskod till din mejlbox. Koden visas aldrig i appen."
+                ? staticHost
+                  ? "Skriv adressen du vill logga in med, till exempel namn@.com. Ingen kod skickas."
+                  : "Vi skickar en engångskod till din mejlbox. Koden visas aldrig i appen."
                 : `Ange koden som skickades till ${email}.`}
             </p>
             <div className="mt-5 space-y-3">
               {step === "email" ? (
                 <>
                   <Field label="Namn (valfritt)" value={name} onChange={setName} placeholder="För- och efternamn" />
-                  <Field label="E-post" value={email} onChange={setEmail} placeholder="namn@mail.se" type="email" />
+                  <Field
+                    label="E-post"
+                    value={email}
+                    onChange={(value) => {
+                      setEmail(value);
+                      setLocalError(null);
+                    }}
+                    placeholder="namn@.com"
+                    type="text"
+                  />
                 </>
               ) : (
                 <Field label="Verifieringskod från mejlen" value={code} onChange={setCode} placeholder="6 siffror" />
@@ -345,7 +365,7 @@ export function LoginScreen() {
               onClick={() => void (step === "email" ? sendEmail() : confirmEmail())}
               className="mt-5 h-12 w-full rounded-full bg-[#6e5636] text-[15px] font-semibold text-white disabled:opacity-60"
             >
-              {busy ? "Vänta…" : step === "email" ? "Skicka kod till mejlen" : "Bekräfta och logga in"}
+              {busy ? "Vänta…" : step === "email" ? (staticHost ? "Logga in" : "Skicka kod till mejlen") : "Bekräfta och logga in"}
             </button>
           </>
         ) : null}
@@ -412,8 +432,10 @@ function Field({
         placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
         className="h-12 w-full rounded-full border border-[#efeae4] bg-white/80 px-4 text-[15px] outline-none"
-        autoComplete={type === "email" ? "email" : "one-time-code"}
-        inputMode={type === "email" ? "email" : "numeric"}
+        autoComplete={type === "email" || placeholder?.includes("@") ? "email" : "one-time-code"}
+        autoCapitalize={placeholder?.includes("@") ? "off" : undefined}
+        autoCorrect={placeholder?.includes("@") ? "off" : undefined}
+        inputMode={type === "email" || placeholder?.includes("@") ? "email" : "numeric"}
       />
     </label>
   );
