@@ -27,8 +27,9 @@ import { kr, services, type ServiceId } from "@/lib/velio/data";
 import { useVelio, type BusinessForm } from "@/lib/velio/store";
 import { AppHeader } from "@/components/velio/header";
 import { cn } from "@/lib/cn";
+import { asset } from "@/lib/velio/asset";
 
-const photoPool = ["/velio/stad.jpg", "/velio/rep.jpg", "/velio/ren.jpg", "/velio/trad.jpg", "/velio/garden.jpg", "/velio/clean.jpg"];
+const photoPool = [asset("/velio/stad.jpg"), asset("/velio/rep.jpg"), asset("/velio/ren.jpg"), asset("/velio/trad.jpg"), asset("/velio/garden.jpg"), asset("/velio/clean.jpg")];
 const levels = ["Välj erfarenhetsnivå", "Nybörjare", "1–3 år", "3–5 år", "5–10 år", "10+ år"];
 const hours = Array.from({ length: 16 }, (_, index) => `${String(index + 6).padStart(2, "0")}:00`);
 const dayNames = ["Mån", "Tis", "Ons", "Tor", "Fre", "Lör", "Sön"];
@@ -282,7 +283,7 @@ export function OnboardSheet() {
           <h2 className="text-xl font-semibold">Velio Business</h2>
         </div>
         <div className="relative overflow-hidden rounded-[1.2rem]">
-          <img src="/velio/business.jpg" alt="" className="h-36 w-full object-cover" />
+          <img src={asset("/velio/business.jpg")} alt="" className="h-36 w-full object-cover" />
           <div className="absolute inset-0 bg-gradient-to-r from-[#4a3424]/80 via-[#4a3424]/35 to-transparent" />
           <div className="absolute inset-0 flex flex-col justify-center px-4 text-white">
             <h3 className="font-serif text-[1.7rem] leading-none">Uppdatera ditt jobb</h3>

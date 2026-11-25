@@ -7,7 +7,7 @@ const noStore = { "cache-control": "private, no-store" };
 
 /**
  * Accepts passport details for manual review. Does not auto-activate Business
- * or set id_verified — that requires BankID RP or Cursor identity.
+ * or set id_verified — that requires BankID RP approval.
  */
 export async function POST(request: Request) {
   const account = await getAccountBySession(request);

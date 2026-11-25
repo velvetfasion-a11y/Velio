@@ -4,7 +4,6 @@ import { useVelio } from "@/lib/velio/store";
 import {
   fetchAuthCapabilities,
   fetchMe,
-  loginWithCursor,
   startEmailOtp,
   startSmsOtp,
   verifyEmailOtp,
@@ -19,6 +18,7 @@ import {
   localVerifyEmailOtp,
   localVerifySmsOtp,
 } from "@/lib/velio/local-auth";
+import { googleGisAvailable, signInWithGoogleGis } from "@/lib/velio/google-gis";
 
 type Step = "methods" | "email" | "email-code" | "phone" | "phone-code";
 
@@ -33,7 +33,7 @@ export function LoginScreen() {
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [challengeId, setChallengeId] = useState("");
-  const [localInboxCode, setLocalInboxCode] = useState<string | null>(null);
+  const [deliveryCode, setDeliveryCode] = useState<string | null>(null);
   const [hint, setHint] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const [caps, setCaps] = useState({ google: false, email: false, sms: false });
@@ -41,7 +41,7 @@ export function LoginScreen() {
 
   useEffect(() => {
     if (staticHost) {
-      setCaps({ google: true, email: true, sms: true });
+      setCaps({ google: googleGisAvailable(), email: true, sms: true });
       return;
     }
     void fetchAuthCapabilities().then((next) => setCaps(next));
@@ -60,7 +60,7 @@ export function LoginScreen() {
   const back = () => {
     setLocalError(null);
     setHint(null);
-    setLocalInboxCode(null);
+    setDeliveryCode(null);
     setCode("");
     if (step === "email-code") setStep("email");
     else if (step === "phone-code") setStep("phone");
@@ -68,34 +68,25 @@ export function LoginScreen() {
   };
 
   const onGoogle = async () => {
-    if (staticHost) {
-      setStep("email");
-      setHint("Ange din Gmail-adress och bekräfta med lokal kod (GitHub Pages-läge).");
-      return;
-    }
-    if (!caps.google) {
-      setLocalError("Google-inloggning kräver GOOGLE_CLIENT_ID och GOOGLE_CLIENT_SECRET.");
-      return;
-    }
-    window.location.href = `${process.env.NEXT_PUBLIC_BASE_PATH || ""}/api/auth/google/start`;
-  };
-
-  const onCursor = async () => {
     if (busy) return;
     setBusy(true);
     setLocalError(null);
     try {
       if (staticHost) {
-        const account = localGoogleSignIn("cursor.user@velio.local", name.trim() || "Cursor-användare");
-        const verified = { ...account, idVerified: true, idMethod: "cursor", emailVerified: true };
-        applyMe(localMePayload(verified));
+        if (!googleGisAvailable()) {
+          throw new Error("Google-inloggning är inte aktiverad ännu.");
+        }
+        const profile = await signInWithGoogleGis();
+        const account = localGoogleSignIn(profile.email, profile.name, profile.sub);
+        applyMe(localMePayload(account));
         return;
       }
-      const me = await loginWithCursor();
-      if (!me.authenticated) throw new Error("Cursor-inloggning misslyckades");
-      applyMe(me);
+      if (!caps.google) {
+        throw new Error("Google-inloggning är inte aktiverad ännu.");
+      }
+      window.location.href = `${process.env.NEXT_PUBLIC_BASE_PATH || ""}/api/auth/google/start`;
     } catch (error) {
-      setLocalError(error instanceof Error ? error.message : "Cursor-inloggning misslyckades");
+      setLocalError(error instanceof Error ? error.message : "Google-inloggning misslyckades");
     } finally {
       setBusy(false);
     }
@@ -110,15 +101,15 @@ export function LoginScreen() {
       if (staticHost) {
         const result = await localStartEmailOtp(email.trim(), name.trim() || undefined);
         setChallengeId(result.challengeId);
-        setLocalInboxCode(result.localInboxCode);
+        setDeliveryCode(result.deliveryCode);
         setHint(result.message);
         setStep("email-code");
         return;
       }
-      if (!caps.email) throw new Error("E-postinloggning är inte konfigurerad ännu.");
+      if (!caps.email) throw new Error("E-postinloggning är inte aktiverad ännu.");
       const result = await startEmailOtp(email.trim(), name.trim() || undefined);
       setChallengeId(result.challengeId);
-      setLocalInboxCode(null);
+      setDeliveryCode(null);
       setHint(result.message ?? "Kolla din inkorg.");
       setStep("email-code");
     } catch (error) {
@@ -167,15 +158,15 @@ export function LoginScreen() {
       if (staticHost) {
         const result = await localStartSmsOtp(phone.trim(), name.trim() || undefined);
         setChallengeId(result.challengeId);
-        setLocalInboxCode(result.localInboxCode);
+        setDeliveryCode(result.deliveryCode);
         setHint(result.message);
         setStep("phone-code");
         return;
       }
-      if (!caps.sms) throw new Error("SMS-inloggning är inte konfigurerad ännu.");
+      if (!caps.sms) throw new Error("SMS-inloggning är inte aktiverad ännu.");
       const result = await startSmsOtp(phone.trim(), name.trim() || undefined);
       setChallengeId(result.challengeId);
-      setLocalInboxCode(null);
+      setDeliveryCode(null);
       setHint(result.message ?? "Kolla ditt SMS.");
       setStep("phone-code");
     } catch (error) {
@@ -215,7 +206,6 @@ export function LoginScreen() {
     }
   };
 
-  // Warm session after OAuth redirect
   useEffect(() => {
     if (staticHost) return;
     void fetchMe().then((me) => {
@@ -242,7 +232,7 @@ export function LoginScreen() {
           <>
             <h1 className="mt-8 text-center font-serif text-[2.7rem] leading-none font-medium text-[#2a211c]">Logga in</h1>
             <p className="mx-auto mt-3 max-w-[17rem] text-center text-sm leading-snug text-[#6e6964]">
-              Google, e-post med kod, mobil med SMS eller Cursor. Business kräver ID-verifiering.
+              Google, e-post med engångskod eller mobil med SMS. Business kräver ID-verifiering.
             </p>
 
             <div className="mt-8 rounded-[1.7rem] border border-white/80 bg-white/45 p-3 shadow-[0_18px_50px_rgba(70,50,20,0.08)] backdrop-blur-xl">
@@ -250,12 +240,8 @@ export function LoginScreen() {
                 <Method label="Fortsätt med Google" onClick={() => void onGoogle()} icon={<GoogleMark />} disabled={busy} />
                 <Method label="Fortsätt med e-post" onClick={() => setStep("email")} icon={<MailMark />} disabled={busy} />
                 <Method label="Fortsätt med mobilnummer" onClick={() => setStep("phone")} icon={<PhoneMark />} disabled={busy} />
-                <Method label="Fortsätt med Cursor" onClick={() => void onCursor()} icon={<CursorMark />} disabled={busy} />
               </div>
             </div>
-            {staticHost ? (
-              <p className="mt-4 text-center text-xs text-[#8a847e]">GitHub Pages-läge: koder sparas lokalt i din webbläsare.</p>
-            ) : null}
           </>
         ) : null}
 
@@ -266,8 +252,8 @@ export function LoginScreen() {
             </h1>
             <p className="mx-auto mt-3 max-w-[18rem] text-center text-sm leading-snug text-[#6e6964]">
               {step === "email"
-                ? "Vi skickar en engångskod. Du måste bekräfta innan du loggas in."
-                : `Ange koden vi skickade till ${email}.`}
+                ? "Vi skapar en engångskod. Du måste bekräfta innan du loggas in."
+                : `Ange koden för ${email}.`}
             </p>
             <div className="mt-5 space-y-3">
               {step === "email" ? (
@@ -280,10 +266,12 @@ export function LoginScreen() {
               )}
             </div>
             {hint ? <p className="mt-3 text-center text-sm text-[#6e6964]">{hint}</p> : null}
-            {localInboxCode ? (
-              <p className="mt-2 rounded-xl bg-[#f6f1ea] px-3 py-2 text-center text-sm text-[#2a211c]">
-                Lokal inkorg: <span className="font-semibold tracking-widest">{localInboxCode}</span>
-              </p>
+            {deliveryCode ? (
+              <div className="mt-3 rounded-2xl border border-[#efeae4] bg-[#fbf8f4] px-4 py-3 text-center">
+                <p className="text-xs font-medium tracking-wide text-[#8a847e] uppercase">Engångskod</p>
+                <p className="mt-1 font-semibold tracking-[0.35em] text-[#2a211c]">{deliveryCode}</p>
+                <p className="mt-1 text-xs text-[#8a847e]">Giltig i 10 minuter · max 5 försök</p>
+              </div>
             ) : null}
             <button
               type="button"
@@ -302,7 +290,7 @@ export function LoginScreen() {
               {step === "phone" ? "Mobilnummer" : "SMS-kod"}
             </h1>
             <p className="mx-auto mt-3 max-w-[18rem] text-center text-sm leading-snug text-[#6e6964]">
-              {step === "phone" ? "Vi skickar en SMS-kod som du anger för att logga in." : `Ange koden vi skickade till ${phone}.`}
+              {step === "phone" ? "Vi skapar en SMS-kod som du anger för att logga in." : `Ange koden för ${phone}.`}
             </p>
             <div className="mt-5 space-y-3">
               {step === "phone" ? (
@@ -315,10 +303,12 @@ export function LoginScreen() {
               )}
             </div>
             {hint ? <p className="mt-3 text-center text-sm text-[#6e6964]">{hint}</p> : null}
-            {localInboxCode ? (
-              <p className="mt-2 rounded-xl bg-[#f6f1ea] px-3 py-2 text-center text-sm text-[#2a211c]">
-                Lokal inkorg: <span className="font-semibold tracking-widest">{localInboxCode}</span>
-              </p>
+            {deliveryCode ? (
+              <div className="mt-3 rounded-2xl border border-[#efeae4] bg-[#fbf8f4] px-4 py-3 text-center">
+                <p className="text-xs font-medium tracking-wide text-[#8a847e] uppercase">Engångskod</p>
+                <p className="mt-1 font-semibold tracking-[0.35em] text-[#2a211c]">{deliveryCode}</p>
+                <p className="mt-1 text-xs text-[#8a847e]">Giltig i 10 minuter · max 5 försök</p>
+              </div>
             ) : null}
             <button
               type="button"
@@ -415,14 +405,6 @@ function PhoneMark() {
     <svg viewBox="0 0 24 24" className="size-5" aria-hidden="true">
       <rect x="7" y="2.5" width="10" height="19" rx="2.5" fill="none" stroke="#2a211c" strokeWidth="1.6" />
       <circle cx="12" cy="18.2" r="0.8" fill="#2a211c" />
-    </svg>
-  );
-}
-
-function CursorMark() {
-  return (
-    <svg viewBox="0 0 24 24" className="size-5" aria-hidden="true">
-      <path d="M5 4l14 8-6 2-2 6-6-16z" fill="none" stroke="#2a211c" strokeWidth="1.6" strokeLinejoin="round" />
     </svg>
   );
 }

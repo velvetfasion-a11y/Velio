@@ -14,6 +14,7 @@ import { cn } from "@/lib/cn";
 import { AppHeader } from "@/components/velio/header";
 import { CityMap } from "@/components/velio/map";
 import { Avatar, BottomSheet, Btn, FullScreen } from "@/components/velio/ui";
+import { asset } from "@/lib/velio/asset";
 
 const EMPTY_CHAT: ChatMsg[] = [];
 
@@ -83,7 +84,7 @@ export function ProviderSheet() {
   return (
     <div className="sheet-in absolute inset-0 z-30 overflow-y-auto bg-cream">
       <section className="relative overflow-hidden">
-        <img src="/velio/hero-bookings.jpg" alt="" className="absolute inset-0 h-full w-full scale-105 object-cover object-center blur-[2px]" />
+        <img src={asset("/velio/hero-bookings.jpg")} alt="" className="absolute inset-0 h-full w-full scale-105 object-cover object-center blur-[2px]" />
         <div className="absolute inset-0 bg-gradient-to-b from-ink/25 via-ink/10 to-cream" />
         <div className="relative text-paper">
           <AppHeader tone="glass" />
@@ -297,7 +298,7 @@ export function ChatSheet() {
         </button>
         <div className="mt-2 rounded-[1.2rem] border border-[#efeae4] bg-white/80 p-2.5">
           <div className="flex gap-3">
-            <img src={service?.id === "stad" ? "/velio/tile-stad.jpg" : `/velio/${service?.id ?? "stad"}.jpg`} alt="" className="size-16 rounded-xl object-cover" />
+            <img src={service?.id === "stad" ? asset("/velio/tile-stad.jpg") : asset(`/velio/${service?.id ?? "stad"}.jpg`)} alt="" className="size-16 rounded-xl object-cover" />
             <div className="min-w-0 flex-1">
               <div className="flex items-start justify-between gap-2">
                 <p className="font-semibold">{jobTitle}</p>
@@ -930,7 +931,7 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
       <div ref={thread} className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
         <div className="rounded-[1.2rem] border border-[#efeae4] bg-white p-2.5">
           <div className="flex items-center gap-3">
-          <img src="/velio/tile-stad.jpg" alt="" className="size-16 rounded-xl object-cover" />
+          <img src={asset("/velio/tile-stad.jpg")} alt="" className="size-16 rounded-xl object-cover" />
           <div className="min-w-0 flex-1">
             <p className="font-semibold">Städning</p>
             <p className="mt-0.5 flex items-center gap-1 text-sm text-[#5c564f]"><MapPin className="size-3.5" /> Södermalm</p>
@@ -1357,7 +1358,7 @@ function ChatCardView({
             <p className="text-[15px] text-muted">Beräknad ankomst</p>
             <p className="text-[15px] font-medium">{card.eta}</p>
             <div className="relative mt-3 h-36 overflow-hidden rounded-2xl">
-              <img src="/velio/map-stockholm.jpg" alt="" className="h-full w-full object-cover" />
+              <img src={asset("/velio/map-stockholm.jpg")} alt="" className="h-full w-full object-cover" />
               <MapPin className="absolute top-1/2 left-1/2 size-8 -translate-x-1/2 -translate-y-full fill-[#2a211c] text-[#2a211c]" />
             </div>
           </div>

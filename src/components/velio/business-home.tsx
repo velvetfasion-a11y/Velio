@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowLeftRight, Briefcase, Calendar, Check, ChevronLeft, Che
 import { useVelio } from "@/lib/velio/store";
 import { AppHeader } from "@/components/velio/header";
 import { cn } from "@/lib/cn";
+import { asset } from "@/lib/velio/asset";
 
 type Offer = {
   id: string;
@@ -17,13 +18,13 @@ type Offer = {
 };
 
 const seedOffers: Offer[] = [
-  { id: "o1", title: "Hemstädning", place: "Södermalm, Stockholm", when: "Idag, 14:00 – 16:00", tag: "Städning", price: "1 200 kr", image: "/velio/tile-stad.jpg", status: "new" },
-  { id: "o2", title: "Flyttstädning", place: "Solna, Stockholm", when: "Imorgon, 10:00 – 14:00", tag: "Städning", price: "2 800 kr", image: "/velio/tile-flytt.jpg", status: "new" },
-  { id: "o3", title: "Renovering – Målning", place: "Vasastan, Stockholm", when: "Tors 20 nov, 08:00 – 17:00", tag: "Renovering", price: "5 500 kr", image: "/velio/tile-ren.jpg", status: "new" },
-  { id: "o4", title: "Trädgårdsskötsel", place: "Djursholm", when: "Fre 21 nov, 13:00 – 17:00", tag: "Trädgård", price: "2 000 kr", image: "/velio/tile-trad.jpg", status: "new" },
-  { id: "o5", title: "Elektriker", place: "Lidingö", when: "Mån 24 nov, 09:00 – 12:00", tag: "Elektriker", price: "3 200 kr", image: "/velio/tile-el.jpg", status: "new" },
-  { id: "o6", title: "Hemstädning", place: "Östermalm", when: "Idag, 14:00 – 16:00", tag: "Städning", price: "1 200 kr", image: "/velio/stad.jpg", status: "active" },
-  { id: "o7", title: "Flyttstädning", place: "Kungsholmen", when: "Imorgon, 10:00 – 14:00", tag: "Städning", price: "2 800 kr", image: "/velio/clean.jpg", status: "active" },
+  { id: "o1", title: "Hemstädning", place: "Södermalm, Stockholm", when: "Idag, 14:00 – 16:00", tag: "Städning", price: "1 200 kr", image: asset("/velio/tile-stad.jpg"), status: "new" },
+  { id: "o2", title: "Flyttstädning", place: "Solna, Stockholm", when: "Imorgon, 10:00 – 14:00", tag: "Städning", price: "2 800 kr", image: asset("/velio/tile-flytt.jpg"), status: "new" },
+  { id: "o3", title: "Renovering – Målning", place: "Vasastan, Stockholm", when: "Tors 20 nov, 08:00 – 17:00", tag: "Renovering", price: "5 500 kr", image: asset("/velio/tile-ren.jpg"), status: "new" },
+  { id: "o4", title: "Trädgårdsskötsel", place: "Djursholm", when: "Fre 21 nov, 13:00 – 17:00", tag: "Trädgård", price: "2 000 kr", image: asset("/velio/tile-trad.jpg"), status: "new" },
+  { id: "o5", title: "Elektriker", place: "Lidingö", when: "Mån 24 nov, 09:00 – 12:00", tag: "Elektriker", price: "3 200 kr", image: asset("/velio/tile-el.jpg"), status: "new" },
+  { id: "o6", title: "Hemstädning", place: "Östermalm", when: "Idag, 14:00 – 16:00", tag: "Städning", price: "1 200 kr", image: asset("/velio/stad.jpg"), status: "active" },
+  { id: "o7", title: "Flyttstädning", place: "Kungsholmen", when: "Imorgon, 10:00 – 14:00", tag: "Städning", price: "2 800 kr", image: asset("/velio/clean.jpg"), status: "active" },
 ];
 
 const dayLabels = ["Mån", "Tis", "Ons", "Tor", "Fre", "Lör", "Sön"];
@@ -102,7 +103,7 @@ export function BusinessHome() {
           when: job.when,
           tag: job.ownerName || "Kund",
           price: `${job.price.toLocaleString("sv-SE")} kr`,
-          image: job.serviceId === "ren" ? "/velio/tile-ren.jpg" : job.serviceId === "el" ? "/velio/tile-el.jpg" : job.serviceId === "trad" ? "/velio/tile-trad.jpg" : "/velio/tile-stad.jpg",
+          image: job.serviceId === "ren" ? asset("/velio/tile-ren.jpg") : job.serviceId === "el" ? asset("/velio/tile-el.jpg") : job.serviceId === "trad" ? asset("/velio/tile-trad.jpg") : asset("/velio/tile-stad.jpg"),
           status: "new" as const,
           ownerId: job.ownerId,
         }))}
@@ -156,7 +157,7 @@ export function BusinessHome() {
       <AppHeader />
       <div className="px-4">
       <div className="mt-1 flex items-center gap-3">
-        <img src="/velio/profile.jpg" alt="" className="size-14 shrink-0 rounded-full object-cover object-[center_20%]" />
+        <img src={asset("/velio/profile.jpg")} alt="" className="size-14 shrink-0 rounded-full object-cover object-[center_20%]" />
         <div className="min-w-0 flex-1">
           <h1 className="font-serif text-[1.65rem] leading-none">Hej {first}</h1>
           <p className="mt-1 text-sm text-[#5c564f]">Arbetsläge · VELIO Business</p>
@@ -176,7 +177,7 @@ export function BusinessHome() {
       </div>
 
       <button type="button" onClick={() => showToast("Inget saldo att ta ut ännu")} className="relative mt-4 block w-full overflow-hidden rounded-[1.35rem] text-left text-white">
-        <img src="/velio/business-home.jpg" alt="" className="absolute inset-0 h-full w-full object-cover" />
+        <img src={asset("/velio/business-home.jpg")} alt="" className="absolute inset-0 h-full w-full object-cover" />
         <div className="absolute inset-0 bg-gradient-to-r from-[#3a2a1c]/85 via-[#3a2a1c]/45 to-transparent" />
         <div className="relative px-5 py-6">
           <p className="text-lg">VELIO-saldo</p>

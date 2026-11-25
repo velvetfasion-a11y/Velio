@@ -1,4 +1,4 @@
-/** Client-only auth for the GitHub Pages static build (no server APIs). */
+/** Client-only auth fallback when the app is served as a static site (no API routes). */
 
 export type LocalAccount = {
   id: string;
@@ -15,9 +15,10 @@ export type LocalAccount = {
   passwordHash?: string;
 };
 
-const ACCOUNTS_KEY = "velio_local_accounts_v1";
-const SESSION_KEY = "velio_local_session_v1";
-const OTP_KEY = "velio_local_otp_v1";
+const ACCOUNTS_KEY = "velio_local_accounts_v2";
+const SESSION_KEY = "velio_local_session_v2";
+const OTP_KEY = "velio_local_otp_v2";
+const OTP_ATTEMPTS_KEY = "velio_local_otp_attempts_v2";
 
 function readAccounts(): LocalAccount[] {
   try {
@@ -59,6 +60,37 @@ export function clearLocalSession() {
   localStorage.removeItem(SESSION_KEY);
 }
 
+function readAttempts(challengeId: string): number {
+  try {
+    const raw = JSON.parse(localStorage.getItem(OTP_ATTEMPTS_KEY) || "{}") as Record<string, number>;
+    return raw[challengeId] || 0;
+  } catch {
+    return 0;
+  }
+}
+
+function bumpAttempts(challengeId: string): number {
+  let raw: Record<string, number> = {};
+  try {
+    raw = JSON.parse(localStorage.getItem(OTP_ATTEMPTS_KEY) || "{}") as Record<string, number>;
+  } catch {
+    raw = {};
+  }
+  raw[challengeId] = (raw[challengeId] || 0) + 1;
+  localStorage.setItem(OTP_ATTEMPTS_KEY, JSON.stringify(raw));
+  return raw[challengeId];
+}
+
+function clearAttempts(challengeId: string) {
+  try {
+    const raw = JSON.parse(localStorage.getItem(OTP_ATTEMPTS_KEY) || "{}") as Record<string, number>;
+    delete raw[challengeId];
+    localStorage.setItem(OTP_ATTEMPTS_KEY, JSON.stringify(raw));
+  } catch {
+    /* ignore */
+  }
+}
+
 export async function localStartEmailOtp(email: string, name?: string) {
   const code = String(Math.floor(100000 + Math.random() * 900000));
   const challengeId = uid();
@@ -74,12 +106,11 @@ export async function localStartEmailOtp(email: string, name?: string) {
       expiresAt: Date.now() + 10 * 60_000,
     }),
   );
-  // Static demo: show code only in this browser's sessionStorage inbox (never a remote API).
-  sessionStorage.setItem(`velio_inbox_${challengeId}`, code);
+  sessionStorage.setItem(`velio_secure_code_${challengeId}`, code);
   return {
     challengeId,
-    message: "Öppna din lokala inkorg i appen och ange koden.",
-    localInboxCode: code,
+    message: "Engångskod skapad. Ange koden inom 10 minuter för att logga in.",
+    deliveryCode: code,
   };
 }
 
@@ -100,8 +131,14 @@ export async function localVerifyEmailOtp(input: {
   };
   if (otp.challengeId !== input.challengeId || otp.kind !== "email") throw new Error("Ogiltig kod");
   if (otp.expiresAt < Date.now()) throw new Error("Koden har gått ut");
-  if ((await hash(input.code.trim())) !== otp.codeHash) throw new Error("Fel kod");
+  if (readAttempts(input.challengeId) >= 5) throw new Error("För många försök. Begär en ny kod.");
+  if ((await hash(input.code.trim())) !== otp.codeHash) {
+    bumpAttempts(input.challengeId);
+    throw new Error("Fel kod");
+  }
   localStorage.removeItem(OTP_KEY);
+  clearAttempts(input.challengeId);
+  sessionStorage.removeItem(`velio_secure_code_${input.challengeId}`);
 
   const accounts = readAccounts();
   let account = accounts.find((a) => a.email === otp.target);
@@ -121,7 +158,7 @@ export async function localVerifyEmailOtp(input: {
     };
     accounts.push(account);
   } else {
-    account = { ...account, emailVerified: true };
+    account = { ...account, emailVerified: true, name: input.name?.trim() || account.name };
     const idx = accounts.findIndex((a) => a.id === account!.id);
     accounts[idx] = account;
   }
@@ -145,11 +182,11 @@ export async function localStartSmsOtp(phone: string, name?: string) {
       expiresAt: Date.now() + 10 * 60_000,
     }),
   );
-  sessionStorage.setItem(`velio_inbox_${challengeId}`, code);
+  sessionStorage.setItem(`velio_secure_code_${challengeId}`, code);
   return {
     challengeId,
-    message: "Koden finns i din lokala SMS-inkorg i appen.",
-    localInboxCode: code,
+    message: "Engångskod skapad. Ange koden inom 10 minuter för att logga in.",
+    deliveryCode: code,
   };
 }
 
@@ -170,8 +207,14 @@ export async function localVerifySmsOtp(input: {
   };
   if (otp.challengeId !== input.challengeId || otp.kind !== "sms") throw new Error("Ogiltig kod");
   if (otp.expiresAt < Date.now()) throw new Error("Koden har gått ut");
-  if ((await hash(input.code.trim())) !== otp.codeHash) throw new Error("Fel kod");
+  if (readAttempts(input.challengeId) >= 5) throw new Error("För många försök. Begär en ny kod.");
+  if ((await hash(input.code.trim())) !== otp.codeHash) {
+    bumpAttempts(input.challengeId);
+    throw new Error("Fel kod");
+  }
   localStorage.removeItem(OTP_KEY);
+  clearAttempts(input.challengeId);
+  sessionStorage.removeItem(`velio_secure_code_${input.challengeId}`);
 
   const accounts = readAccounts();
   let account = accounts.find((a) => a.phone === otp.target);
@@ -191,7 +234,7 @@ export async function localVerifySmsOtp(input: {
     };
     accounts.push(account);
   } else {
-    account = { ...account, phoneVerified: true };
+    account = { ...account, phoneVerified: true, name: input.name?.trim() || account.name };
     const idx = accounts.findIndex((a) => a.id === account!.id);
     accounts[idx] = account;
   }
@@ -200,7 +243,7 @@ export async function localVerifySmsOtp(input: {
   return account;
 }
 
-export function localGoogleSignIn(email: string, name: string): LocalAccount {
+export function localGoogleSignIn(email: string, name: string, providerId?: string): LocalAccount {
   const accounts = readAccounts();
   let account = accounts.find((a) => a.email === email.toLowerCase());
   if (!account) {
@@ -210,7 +253,7 @@ export function localGoogleSignIn(email: string, name: string): LocalAccount {
       name,
       email: email.toLowerCase(),
       phone: "",
-      providerId: null,
+      providerId: providerId || null,
       accountMode: "customer",
       emailVerified: true,
       phoneVerified: false,
@@ -218,13 +261,23 @@ export function localGoogleSignIn(email: string, name: string): LocalAccount {
       idMethod: null,
     };
     accounts.push(account);
+  } else {
+    account = {
+      ...account,
+      provider: "google",
+      name: name || account.name,
+      providerId: providerId || account.providerId,
+      emailVerified: true,
+    };
+    const idx = accounts.findIndex((a) => a.id === account!.id);
+    accounts[idx] = account;
   }
   writeAccounts(accounts);
   localStorage.setItem(SESSION_KEY, account.id);
   return account;
 }
 
-export function localVerifyId(method: "bankid" | "passport" | "cursor"): LocalAccount {
+export function localVerifyId(method: "bankid" | "passport"): LocalAccount {
   const account = getLocalSessionAccount();
   if (!account) throw new Error("Inte inloggad");
   const accounts = readAccounts();

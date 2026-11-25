@@ -28,6 +28,7 @@ import { useVelio } from "@/lib/velio/store";
 import { AppHeader } from "@/components/velio/header";
 import { cn } from "@/lib/cn";
 import { CityMap } from "@/components/velio/map";
+import { asset } from "@/lib/velio/asset";
 
 const intros: Record<ServiceId, string> = {
   sak: "Larm, bevakning och trygghet – aktivera professionella utförare nära dig.",
@@ -43,14 +44,14 @@ const intros: Record<ServiceId, string> = {
 };
 
 const heroes: Partial<Record<ServiceId, string>> = {
-  sak: "/velio/hero-sak.jpg",
-  el: "/velio/el.jpg",
-  stad: "/velio/stad.jpg",
-  trad: "/velio/trad.jpg",
-  rep: "/velio/rep.jpg",
-  ren: "/velio/ren.jpg",
-  per: "/velio/per.jpg",
-  til: "/velio/til.jpg",
+  sak: asset("/velio/hero-sak.jpg"),
+  el: asset("/velio/el.jpg"),
+  stad: asset("/velio/stad.jpg"),
+  trad: asset("/velio/trad.jpg"),
+  rep: asset("/velio/rep.jpg"),
+  ren: asset("/velio/ren.jpg"),
+  per: asset("/velio/per.jpg"),
+  til: asset("/velio/til.jpg"),
 };
 
 const fallbackTags: Record<ServiceId, string[]> = {
@@ -128,7 +129,7 @@ export function ServiceScreen() {
   const areas = Object.keys(areaLayout);
 
   if (!service) return null;
-  const hero = heroes[service.id] ?? "/velio/hero.jpg";
+  const hero = heroes[service.id] ?? asset("/velio/hero.jpg");
 
   const book = (id: string) => {
     useVelio.setState({ providerId: id, sheet: "book" });

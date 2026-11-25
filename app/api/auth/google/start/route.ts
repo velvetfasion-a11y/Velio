@@ -9,7 +9,7 @@ export async function GET(request: Request) {
       {
         error: "google_not_configured",
         message:
-          "Google-inloggning kräver GOOGLE_CLIENT_ID och GOOGLE_CLIENT_SECRET. Lägg till dem i Cursor Secrets.",
+          "Google-inloggning är inte aktiverad ännu.",
       },
       { status: 503, headers: { "cache-control": "private, no-store" } },
     );

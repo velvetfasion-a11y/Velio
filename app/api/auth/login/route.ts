@@ -6,7 +6,7 @@ const noStore = { "cache-control": "private, no-store" };
 
 /**
  * Session probe / refresh only. New sessions are created exclusively by
- * Google OAuth, verified email OTP, verified SMS OTP, or Cursor identity.
+ * Google OAuth, verified email OTP, or verified SMS OTP.
  */
 export async function POST(request: Request) {
   const account = await getAccountBySession(request);
@@ -14,7 +14,7 @@ export async function POST(request: Request) {
     return Response.json(
       {
         error: "use_verified_login",
-        message: "Logga in med Google, e-postkod, SMS-kod eller Cursor.",
+        message: "Logga in med Google, e-postkod eller SMS-kod.",
       },
       { status: 401, headers: noStore },
     );

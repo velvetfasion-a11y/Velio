@@ -4,8 +4,8 @@ Boka elektriker, städning, trädgård och andra hemtjänster nära dig i Stockh
 
 ## Auth & database
 
-- **Inloggning:** Cursor-identitet (riktig session när appen publiceras som privat/team). Lokalt används en simulerad användare.
-- **Databas:** Postgres via Cursor (`DATABASE_URL`), typiskt Neon i produktion. Lokalt används PGlite i minnet.
+- **Inloggning:** Google OAuth, e-post med engångskod, eller SMS. Business kräver BankID eller pass.
+- **Databas:** Postgres (`DATABASE_URL`) i produktion. Lokalt används PGlite i minnet.
 
 ## Development
 

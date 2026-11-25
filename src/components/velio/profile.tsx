@@ -28,6 +28,7 @@ import { VerifyIdScreen } from "@/components/velio/verify-id";
 import { useVelio, type Booking } from "@/lib/velio/store";
 import { cn } from "@/lib/cn";
 import { Avatar, Btn, Field, ScreenHeader } from "@/components/velio/ui";
+import { asset } from "@/lib/velio/asset";
 
 const faqs = [
   {
@@ -177,10 +178,10 @@ export function ProfileScreens() {
   if (screen === "posted") {
     const mine = posted.filter((job) => !accountId || job.ownerId === accountId);
     const images: Record<string, string> = {
-      stad: "/velio/tile-stad.jpg",
-      ren: "/velio/tile-ren.jpg",
-      el: "/velio/tile-el.jpg",
-      trad: "/velio/tile-trad.jpg",
+      stad: asset("/velio/tile-stad.jpg"),
+      ren: asset("/velio/tile-ren.jpg"),
+      el: asset("/velio/tile-el.jpg"),
+      trad: asset("/velio/tile-trad.jpg"),
     };
     return (
       <div className="px-4 pt-4">
@@ -232,7 +233,7 @@ export function ProfileScreens() {
       <div className="px-4 pt-4">
         <ScreenHeader title="Velio Business" onBack={() => go("profile")} />
         <div className="relative overflow-hidden rounded-[1.35rem]">
-          <img src="/velio/business.jpg" alt="" className="h-52 w-full object-cover" />
+          <img src={asset("/velio/business.jpg")} alt="" className="h-52 w-full object-cover" />
           <div className="absolute inset-0 bg-gradient-to-r from-black/55 via-black/25 to-transparent" />
           <div className="absolute inset-0 flex flex-col justify-center px-5 text-white">
             <p className="text-[11px] tracking-[0.28em] text-[#e6d3a1]">VELIO BUSINESS</p>
@@ -482,7 +483,7 @@ export function ProfileScreens() {
       </div>
 
       <button type="button" onClick={() => go("business")} className="relative mt-4 block w-full overflow-hidden rounded-[1.4rem] text-left text-white">
-        <img src="/velio/business-home.jpg" alt="" className="absolute inset-0 h-full w-full object-cover object-[70%_center]" />
+        <img src={asset("/velio/business-home.jpg")} alt="" className="absolute inset-0 h-full w-full object-cover object-[70%_center]" />
         <div className="absolute inset-0 bg-gradient-to-r from-[#3a2a1c]/92 via-[#3a2a1c]/72 to-[#3a2a1c]/10" />
         <div className="relative max-w-[16.5rem] px-5 py-5">
           <p className="font-serif text-[1.85rem] leading-none">VELIO Business</p>
@@ -557,7 +558,7 @@ function ModeSwitch({
       <h2 className="font-serif text-[2.35rem] leading-none font-medium">Min profil</h2>
       <div className="mt-5 flex items-center gap-4">
         <div className="relative shrink-0">
-          <img src="/velio/profile.jpg" alt="" className="size-[6.6rem] rounded-full object-cover object-[center_20%] ring-[3px] ring-white" />
+          <img src={asset("/velio/profile.jpg")} alt="" className="size-[6.6rem] rounded-full object-cover object-[center_20%] ring-[3px] ring-white" />
           <button type="button" aria-label="Redigera bild" onClick={onEdit} className="absolute right-0 bottom-0 grid size-8 place-items-center rounded-full bg-white shadow">
             <Pencil className="size-3.5" />
           </button>

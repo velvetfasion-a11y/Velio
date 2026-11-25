@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { areaLayout, type Provider } from "@/lib/velio/data";
+import { asset } from "@/lib/velio/asset";
 
 const labels = [
   { name: "Vasastan", x: 28, y: 10 },
@@ -156,7 +157,7 @@ export function CityMap({
           transform: `translate(-50%, -50%) translate(${view.x}px, ${view.y}px) scale(${view.scale})`,
         }}
       >
-        <img src="/velio/map-stockholm.jpg" alt="" draggable={false} className="h-full w-full object-cover" />
+        <img src={asset("/velio/map-stockholm.jpg")} alt="" draggable={false} className="h-full w-full object-cover" />
         {labels.map((label) => (
           <span
             key={label.name}

@@ -25,7 +25,7 @@ export async function POST(request: Request) {
       {
         error: "bankid_not_configured",
         message:
-          "BankID kräver BANKID_API_URL och BANKID_API_KEY. Använd Cursor-identitet eller skicka pass för granskning.",
+          "BankID är inte aktiverat ännu. Skicka pass för manuell granskning under tiden.",
       },
       { status: 503, headers: noStore },
     );

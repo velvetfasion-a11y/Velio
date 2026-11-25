@@ -38,6 +38,7 @@ import { useVelio } from "@/lib/velio/store";
 import { AppHeader } from "@/components/velio/header";
 import { cn } from "@/lib/cn";
 import { BottomSheet, Btn } from "@/components/velio/ui";
+import { asset } from "@/lib/velio/asset";
 
 const icons: Record<ServiceIcon, LucideIcon> = {
   zap: Zap,
@@ -53,20 +54,20 @@ const icons: Record<ServiceIcon, LucideIcon> = {
 };
 
 const popular: { id: ServiceId; label: string; icon: LucideIcon; image: string }[] = [
-  { id: "stad", label: "Städning", icon: SprayCan, image: "/velio/stad.jpg" },
-  { id: "ren", label: "Renovering", icon: Paintbrush, image: "/velio/ren.jpg" },
-  { id: "el", label: "Elektriker", icon: Lightbulb, image: "/velio/el.jpg" },
-  { id: "trad", label: "Trädgård", icon: Flower2, image: "/velio/trad.jpg" },
-  { id: "rep", label: "Reparationer", icon: Wrench, image: "/velio/rep.jpg" },
-  { id: "per", label: "Personal", icon: Users, image: "/velio/per.jpg" },
-  { id: "sak", label: "Säkerhet", icon: Shield, image: "/velio/sak.jpg" },
-  { id: "til", label: "Tillsyn & Service", icon: ClipboardList, image: "/velio/til.jpg" },
+  { id: "stad", label: "Städning", icon: SprayCan, image: asset("/velio/stad.jpg") },
+  { id: "ren", label: "Renovering", icon: Paintbrush, image: asset("/velio/ren.jpg") },
+  { id: "el", label: "Elektriker", icon: Lightbulb, image: asset("/velio/el.jpg") },
+  { id: "trad", label: "Trädgård", icon: Flower2, image: asset("/velio/trad.jpg") },
+  { id: "rep", label: "Reparationer", icon: Wrench, image: asset("/velio/rep.jpg") },
+  { id: "per", label: "Personal", icon: Users, image: asset("/velio/per.jpg") },
+  { id: "sak", label: "Säkerhet", icon: Shield, image: asset("/velio/sak.jpg") },
+  { id: "til", label: "Tillsyn & Service", icon: ClipboardList, image: asset("/velio/til.jpg") },
 ];
 
 const featured = [
-  { id: "ren-ali", photo: "/velio/ali.jpg?v=3" },
-  { id: "st-cleanpro", photo: "/velio/clean.jpg?v=3" },
-  { id: "tr-gron", photo: "/velio/garden.jpg?v=3" },
+  { id: "ren-ali", photo: asset("/velio/ali.jpg?v=3") },
+  { id: "st-cleanpro", photo: asset("/velio/clean.jpg?v=3") },
+  { id: "tr-gron", photo: asset("/velio/garden.jpg?v=3") },
 ];
 
 const moreProviders = ["el-erik", "st-sofia", "tr-johan"];
@@ -125,7 +126,7 @@ export function Home() {
   return (
     <div className="bg-cream">
       <section className="relative overflow-hidden text-paper">
-        <img src="/velio/hero.jpg" alt="" className="absolute inset-0 h-full w-full object-cover object-[center_20%]" />
+        <img src={asset("/velio/hero.jpg")} alt="" className="absolute inset-0 h-full w-full object-cover object-[center_20%]" />
         <div className="absolute inset-0 bg-gradient-to-b from-ink/35 via-ink/10 to-cream" />
         <div className="relative pb-2">
           <AppHeader tone="glass" />
@@ -196,7 +197,7 @@ export function Home() {
           onClick={() => setSheet("job")}
           className="relative block h-36 w-full overflow-hidden rounded-[1.4rem] bg-ink text-left text-paper"
         >
-          <img src="/velio/notebook.jpg" alt="" className="absolute top-0 right-0 h-full w-[62%] object-cover" />
+          <img src={asset("/velio/notebook.jpg")} alt="" className="absolute top-0 right-0 h-full w-[62%] object-cover" />
           <div className="absolute inset-0 bg-gradient-to-r from-ink via-ink/88 to-ink/10" />
           <div className="relative flex h-full max-w-[15rem] flex-col justify-center px-5">
             <div className="font-serif text-[1.45rem] leading-none font-medium">Behöver du hjälp redan idag?</div>
@@ -480,10 +481,10 @@ function JobSheet() {
   const [files, setFiles] = useState<string[]>([]);
   const [done, setDone] = useState(false);
   const featured: { id: ServiceId; name: string; image: string }[] = [
-    { id: "stad", name: "Städning", image: "/velio/tile-stad.jpg" },
-    { id: "ren", name: "Renovering", image: "/velio/tile-ren.jpg" },
-    { id: "el", name: "Elektriker", image: "/velio/tile-el.jpg" },
-    { id: "trad", name: "Trädgård", image: "/velio/tile-trad.jpg" },
+    { id: "stad", name: "Städning", image: asset("/velio/tile-stad.jpg") },
+    { id: "ren", name: "Renovering", image: asset("/velio/tile-ren.jpg") },
+    { id: "el", name: "Elektriker", image: asset("/velio/tile-el.jpg") },
+    { id: "trad", name: "Trädgård", image: asset("/velio/tile-trad.jpg") },
   ];
   const extra = services.filter((service) => !featured.some((item) => item.id === service.id));
   const hours = Array.from({ length: 14 }, (_, index) => `${String(index + 7).padStart(2, "0")}:00`);
@@ -497,7 +498,7 @@ function JobSheet() {
   return (
     <div className="absolute inset-0 z-40 overflow-y-auto bg-[#f7f2eb] pb-8">
       <div className="relative px-4 pt-4">
-        <img src="/velio/post-hero.jpg" alt="" className="pointer-events-none absolute top-0 right-0 h-36 w-[58%] object-cover" />
+        <img src={asset("/velio/post-hero.jpg")} alt="" className="pointer-events-none absolute top-0 right-0 h-36 w-[58%] object-cover" />
         <div className="pointer-events-none absolute top-0 right-0 h-36 w-[58%] bg-gradient-to-l from-transparent to-[#f7f2eb]" />
         <div className="relative flex items-center">
           <button type="button" aria-label="Tillbaka" onClick={closeSheet} className="grid size-9 place-items-center">

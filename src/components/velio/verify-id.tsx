@@ -1,7 +1,6 @@
 import { useState } from "react";
 import {
   completeBankIdVerification,
-  loginWithCursor,
   startBankIdVerification,
   submitPassportVerification,
 } from "@/lib/velio/auth-api";
@@ -9,12 +8,11 @@ import { isStaticHost, localMePayload, localVerifyId } from "@/lib/velio/local-a
 import { useVelio } from "@/lib/velio/store";
 import { ScreenHeader } from "@/components/velio/ui";
 
-type Method = "choose" | "bankid" | "passport" | "cursor";
+type Method = "choose" | "bankid" | "passport";
 
 export function VerifyIdScreen() {
   const go = useVelio((state) => state.go);
   const applyAccountFlags = useVelio((state) => state.applyAccountFlags);
-  const applyMe = useVelio((state) => state.applyMe);
   const showToast = useVelio((state) => state.showToast);
   const profile = useVelio((state) => state.profile);
   const [method, setMethod] = useState<Method>("choose");
@@ -95,46 +93,15 @@ export function VerifyIdScreen() {
     }
   };
 
-  const finishCursor = async () => {
-    if (busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      if (staticHost) {
-        const account = localVerifyId("cursor");
-        applyMe(localMePayload(account));
-        showToast("Cursor-identitet bekräftad — Business aktiverat");
-        go("business");
-        return;
-      }
-      const me = await loginWithCursor();
-      if (!me.authenticated) throw new Error("Kunde inte verifiera Cursor-identitet");
-      applyMe(me);
-      showToast("Cursor-identitet bekräftad — Business aktiverat");
-      go("business");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Verifiering misslyckades");
-    } finally {
-      setBusy(false);
-    }
-  };
-
   return (
     <div className="px-5 pt-4 pb-8">
       <ScreenHeader title="Verifiera dig" onBack={() => go("profile")} />
       <p className="mt-2 text-sm leading-relaxed text-[#6e6964]">
-        För VELIO Business krävs BankID (när det är konfigurerat), Cursor-identitet, eller pass för manuell granskning.
+        För VELIO Business krävs BankID eller pass för manuell granskning.
       </p>
 
       {method === "choose" ? (
         <div className="mt-6 space-y-3">
-          <button
-            type="button"
-            onClick={() => setMethod("cursor")}
-            className="flex h-14 w-full items-center justify-center rounded-full bg-[#1c1917] text-[15px] font-semibold text-white"
-          >
-            Verifiera med Cursor
-          </button>
           <button
             type="button"
             onClick={() => setMethod("bankid")}
@@ -148,23 +115,6 @@ export function VerifyIdScreen() {
             className="flex h-14 w-full items-center justify-center rounded-full border border-[#e6dfd6] bg-white text-[15px] font-semibold text-[#2a211c]"
           >
             Skicka pass för granskning
-          </button>
-        </div>
-      ) : null}
-
-      {method === "cursor" ? (
-        <div className="mt-5 space-y-3">
-          <button type="button" className="text-sm font-medium text-[#6e5636]" onClick={() => setMethod("choose")}>
-            ← Byt metod
-          </button>
-          <p className="text-sm text-[#5c564f]">Använder din inloggade Cursor-identitet som ID-bevis för den här appen.</p>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void finishCursor()}
-            className="h-12 w-full rounded-full bg-[#1c1917] text-[15px] font-semibold text-white disabled:opacity-60"
-          >
-            {busy ? "Verifierar…" : "Bekräfta Cursor-identitet"}
           </button>
         </div>
       ) : null}

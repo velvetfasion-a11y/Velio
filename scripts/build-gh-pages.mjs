@@ -22,11 +22,13 @@ function run(cmd, args, env = {}) {
 let moved = false;
 try {
   await rm(join(root, "out"), { recursive: true, force: true });
+  await rm(join(root, ".next"), { recursive: true, force: true });
   await rename(apiDir, stashDir);
   moved = true;
   await run("npx", ["next", "build"], {
     GITHUB_PAGES: "1",
     NEXT_PUBLIC_STATIC: "1",
+    NEXT_PUBLIC_BASE_PATH: "/Velio",
   });
   const outDir = join(root, "out");
   await writeFile(join(outDir, ".nojekyll"), "");

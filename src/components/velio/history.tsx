@@ -4,24 +4,25 @@ import { kr, serviceById, type ServiceId } from "@/lib/velio/data";
 import { useVelio, bookingStatusLabel, type Booking } from "@/lib/velio/store";
 import { AppHeader } from "@/components/velio/header";
 import { cn } from "@/lib/cn";
+import { asset } from "@/lib/velio/asset";
 
 const again: { id: ServiceId; label: string; image: string; icon: LucideIcon }[] = [
-  { id: "el", label: "Elektriker", image: "/velio/el.jpg", icon: Zap },
-  { id: "stad", label: "Städning", image: "/velio/stad.jpg", icon: Sparkles },
-  { id: "trad", label: "Trädgård", image: "/velio/trad.jpg", icon: Leaf },
-  { id: "rep", label: "Reparationer", image: "/velio/rep.jpg", icon: Wrench },
-  { id: "sak", label: "Säkerhet", image: "/velio/sak.jpg", icon: Shield },
+  { id: "el", label: "Elektriker", image: asset("/velio/el.jpg"), icon: Zap },
+  { id: "stad", label: "Städning", image: asset("/velio/stad.jpg"), icon: Sparkles },
+  { id: "trad", label: "Trädgård", image: asset("/velio/trad.jpg"), icon: Leaf },
+  { id: "rep", label: "Reparationer", image: asset("/velio/rep.jpg"), icon: Wrench },
+  { id: "sak", label: "Säkerhet", image: asset("/velio/sak.jpg"), icon: Shield },
 ];
 
 const thumbs: Partial<Record<ServiceId, string>> = {
-  el: "/velio/el.jpg",
-  stad: "/velio/stad.jpg",
-  trad: "/velio/trad.jpg",
-  rep: "/velio/rep.jpg",
-  sak: "/velio/sak.jpg",
-  ren: "/velio/ren.jpg",
-  per: "/velio/per.jpg",
-  til: "/velio/til.jpg",
+  el: asset("/velio/el.jpg"),
+  stad: asset("/velio/stad.jpg"),
+  trad: asset("/velio/trad.jpg"),
+  rep: asset("/velio/rep.jpg"),
+  sak: asset("/velio/sak.jpg"),
+  ren: asset("/velio/ren.jpg"),
+  per: asset("/velio/per.jpg"),
+  til: asset("/velio/til.jpg"),
 };
 
 export function HistoryScreen() {
