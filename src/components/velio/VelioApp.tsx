@@ -25,7 +25,7 @@ import {
 } from "@/components/velio/flows";
 import { Toast } from "@/components/velio/ui";
 
-const profileScreens: Screen[] = ["profile", "edit", "payments", "bookings", "posted", "business", "settings", "help"];
+const profileScreens: Screen[] = ["profile", "edit", "payments", "bookings", "posted", "business", "verify-id", "settings", "help"];
 
 export function VelioApp() {
   const screen = useVelio((state) => state.screen);

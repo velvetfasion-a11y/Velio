@@ -1,81 +1,156 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ArrowLeft } from "lucide-react";
 import { useVelio } from "@/lib/velio/store";
-import { listAccountsRemote, type AccountDto, type AuthProvider } from "@/lib/velio/auth-api";
-import { cn } from "@/lib/cn";
+import {
+  fetchAuthCapabilities,
+  startEmailOtp,
+  startSmsOtp,
+  verifyEmailOtp,
+  verifySmsOtp,
+} from "@/lib/velio/auth-api";
 
-type Step = "methods" | "pick" | "create";
-
-const providerLabel: Record<AuthProvider, string> = {
-  bankid: "BankID",
-  google: "Google",
-  apple: "Apple",
-  phone: "mobilnummer",
-};
+type Step = "methods" | "email" | "email-code" | "phone" | "phone-code";
 
 export function LoginScreen() {
-  const loginWithAccountId = useVelio((state) => state.loginWithAccountId);
-  const createAccount = useVelio((state) => state.createAccount);
+  const applyMe = useVelio((state) => state.applyMe);
   const authError = useVelio((state) => state.authError);
+  const setAuthError = useVelio((state) => state.setAuthError);
   const [busy, setBusy] = useState(false);
   const [step, setStep] = useState<Step>("methods");
-  const [provider, setProvider] = useState<AuthProvider>("bankid");
-  const [accounts, setAccounts] = useState<AccountDto[]>([]);
-  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [mode, setMode] = useState<"customer" | "business">("customer");
+  const [name, setName] = useState("");
+  const [code, setCode] = useState("");
+  const [challengeId, setChallengeId] = useState("");
+  const [sampleCode, setSampleCode] = useState<string | null>(null);
+  const [hint, setHint] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [googleReady, setGoogleReady] = useState(true);
 
-  const openProvider = async (next: AuthProvider) => {
-    if (busy) return;
-    setBusy(true);
-    setLocalError(null);
-    setProvider(next);
-    try {
-      const list = await listAccountsRemote(next);
-      setAccounts(list);
-      setStep(list.length ? "pick" : "create");
-    } catch {
-      setLocalError("Kunde inte hämta konton just nu.");
-    } finally {
-      setBusy(false);
+  useEffect(() => {
+    void fetchAuthCapabilities().then((caps) => setGoogleReady(caps.google));
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const err = params.get("authError");
+      if (err) {
+        setLocalError(err);
+        params.delete("authError");
+        const next = `${window.location.pathname}${params.toString() ? `?${params}` : ""}`;
+        window.history.replaceState({}, "", next);
+      }
     }
+  }, []);
+
+  const back = () => {
+    setLocalError(null);
+    setHint(null);
+    setSampleCode(null);
+    setCode("");
+    if (step === "email-code") setStep("email");
+    else if (step === "phone-code") setStep("phone");
+    else setStep("methods");
   };
 
-  const openCreate = (next?: AuthProvider) => {
-    if (next) setProvider(next);
-    setLocalError(null);
-    setStep("create");
-  };
-
-  const onPick = async (accountId: string) => {
-    if (busy) return;
-    setBusy(true);
-    setLocalError(null);
-    try {
-      await loginWithAccountId(provider, accountId);
-    } finally {
-      setBusy(false);
+  const onGoogle = async () => {
+    if (googleReady) {
+      window.location.href = "/api/auth/google/start";
+      return;
     }
-  };
-
-  const onCreate = async () => {
     if (busy) return;
-    if (name.trim().length < 2) return setLocalError("Ange ditt namn");
-    if (!email.includes("@")) return setLocalError("Ange en giltig e-postadress");
-    if (phone.trim().length < 6) return setLocalError("Ange ett telefonnummer");
     setBusy(true);
     setLocalError(null);
     try {
-      const ok = await createAccount({
-        provider,
-        name: name.trim(),
-        email: email.trim(),
-        phone: phone.trim(),
-        accountMode: mode,
+      const response = await fetch("/api/auth/google/sample", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: "demo.google@velio.local", name: "Google Demo" }),
       });
-      if (!ok) setLocalError("Kontot kunde inte skapas.");
+      if (!response.ok) throw new Error("Sample Google-inloggning misslyckades");
+      const me = await fetch("/api/me", { credentials: "same-origin", cache: "no-store" }).then((r) => r.json());
+      if (!me.authenticated) throw new Error("Kunde inte skapa session");
+      applyMe(me);
+      setHint("Google OAuth-secrets saknas — inloggad med sample-konto. Lägg till secrets för riktig Google.");
+    } catch (error) {
+      setLocalError(error instanceof Error ? error.message : "Google misslyckades");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const sendEmail = async () => {
+    if (busy) return;
+    if (!email.includes("@")) return setLocalError("Ange en giltig e-postadress");
+    setBusy(true);
+    setLocalError(null);
+    try {
+      const result = await startEmailOtp(email.trim(), name.trim() || undefined);
+      setChallengeId(result.challengeId);
+      setSampleCode(result.sampleCode ?? null);
+      setHint(result.message ?? "Kolla din inkorg.");
+      setStep("email-code");
+    } catch (error) {
+      setLocalError(error instanceof Error ? error.message : "Kunde inte skicka kod");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const confirmEmail = async () => {
+    if (busy) return;
+    if (code.trim().length < 4) return setLocalError("Ange koden från e-posten");
+    setBusy(true);
+    setLocalError(null);
+    setAuthError(null);
+    try {
+      const me = await verifyEmailOtp({
+        challengeId,
+        code: code.trim(),
+        name: name.trim() || undefined,
+      });
+      if (!me.authenticated) throw new Error("Inloggningen misslyckades");
+      applyMe(me);
+    } catch (error) {
+      setLocalError(error instanceof Error ? error.message : "Fel kod");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const sendSms = async () => {
+    if (busy) return;
+    if (phone.trim().length < 6) return setLocalError("Ange ett giltigt mobilnummer");
+    setBusy(true);
+    setLocalError(null);
+    try {
+      const result = await startSmsOtp(phone.trim(), name.trim() || undefined);
+      setChallengeId(result.challengeId);
+      setSampleCode(result.sampleCode ?? null);
+      setHint(result.message ?? "Kolla ditt SMS.");
+      setStep("phone-code");
+    } catch (error) {
+      setLocalError(error instanceof Error ? error.message : "Kunde inte skicka SMS");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const confirmSms = async () => {
+    if (busy) return;
+    if (code.trim().length < 4) return setLocalError("Ange koden från SMS");
+    setBusy(true);
+    setLocalError(null);
+    setAuthError(null);
+    try {
+      const me = await verifySmsOtp({
+        challengeId,
+        code: code.trim(),
+        name: name.trim() || undefined,
+      });
+      if (!me.authenticated) throw new Error("Inloggningen misslyckades");
+      applyMe(me);
+    } catch (error) {
+      setLocalError(error instanceof Error ? error.message : "Fel kod");
     } finally {
       setBusy(false);
     }
@@ -89,15 +164,7 @@ export function LoginScreen() {
 
       <div className="relative flex flex-1 flex-col justify-center px-6 pb-8">
         {step !== "methods" ? (
-          <button
-            type="button"
-            aria-label="Tillbaka"
-            onClick={() => {
-              setLocalError(null);
-              setStep(step === "create" && accounts.length ? "pick" : "methods");
-            }}
-            className="mb-2 grid size-9 place-items-center self-start"
-          >
+          <button type="button" aria-label="Tillbaka" onClick={back} className="mb-2 grid size-9 place-items-center self-start">
             <ArrowLeft className="size-5 text-[#2a211c]" />
           </button>
         ) : null}
@@ -107,127 +174,88 @@ export function LoginScreen() {
         {step === "methods" ? (
           <>
             <h1 className="mt-8 text-center font-serif text-[2.7rem] leading-none font-medium text-[#2a211c]">Logga in</h1>
-            <p className="mx-auto mt-3 max-w-[16rem] text-center text-sm leading-snug text-[#6e6964]">
-              Välj metod. Sedan väljer eller skapar du din profil.
+            <p className="mx-auto mt-3 max-w-[17rem] text-center text-sm leading-snug text-[#6e6964]">
+              Google, e-post med kod eller mobil med SMS. Business kräver BankID eller pass.
             </p>
 
             <div className="mt-8 rounded-[1.7rem] border border-white/80 bg-white/45 p-3 shadow-[0_18px_50px_rgba(70,50,20,0.08)] backdrop-blur-xl">
               <div className="space-y-2.5">
-                <Method label="Fortsätt med BankID" onClick={() => void openProvider("bankid")} icon={<BankIdMark />} disabled={busy} />
-                <Method label="Fortsätt med Google" onClick={() => void openProvider("google")} icon={<GoogleMark />} disabled={busy} />
-                <Method label="Fortsätt med Apple" onClick={() => void openProvider("apple")} icon={<AppleMark />} disabled={busy} />
-                <Method label="Fortsätt med mobilnummer" onClick={() => void openProvider("phone")} icon={<PhoneMark />} disabled={busy} />
+                <Method label="Fortsätt med Google" onClick={onGoogle} icon={<GoogleMark />} disabled={busy} />
+                <Method label="Fortsätt med e-post" onClick={() => setStep("email")} icon={<MailMark />} disabled={busy} />
+                <Method label="Fortsätt med mobilnummer" onClick={() => setStep("phone")} icon={<PhoneMark />} disabled={busy} />
               </div>
             </div>
-
-            <div className="mt-6 flex items-center gap-3 text-xs tracking-wide text-[#8a847e]">
-              <span className="h-px flex-1 bg-[#e6e1db]" />
-              eller
-              <span className="h-px flex-1 bg-[#e6e1db]" />
-            </div>
-
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => openCreate("bankid")}
-              className="mt-4 h-12 w-full rounded-full border border-white/90 bg-white/70 text-[15px] font-semibold text-[#2a211c] shadow-sm backdrop-blur-md disabled:opacity-60"
-            >
-              Skapa konto
-            </button>
           </>
         ) : null}
 
-        {step === "pick" ? (
+        {step === "email" || step === "email-code" ? (
           <>
-            <h1 className="mt-4 text-center font-serif text-[2.2rem] leading-none font-medium text-[#2a211c]">Välj profil</h1>
+            <h1 className="mt-4 text-center font-serif text-[2.2rem] leading-none font-medium text-[#2a211c]">
+              {step === "email" ? "E-post" : "Bekräfta e-post"}
+            </h1>
             <p className="mx-auto mt-3 max-w-[18rem] text-center text-sm leading-snug text-[#6e6964]">
-              Konton via {providerLabel[provider]}. Välj din profil eller skapa en ny.
+              {step === "email"
+                ? "Vi skickar en engångskod. Du måste bekräfta innan du loggas in."
+                : `Ange koden vi skickade till ${email}.`}
             </p>
-            <div className="mt-6 space-y-2">
-              {accounts.map((account) => (
-                <button
-                  key={account.id}
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void onPick(account.id)}
-                  className="flex w-full items-center gap-3 rounded-[1.2rem] border border-white/90 bg-white/75 px-4 py-3 text-left disabled:opacity-60"
-                >
-                  <span className="grid size-11 shrink-0 place-items-center rounded-full bg-[#f3ece3] text-sm font-semibold text-[#2a211c]">
-                    {initials(account.name)}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate font-semibold text-[#2a211c]">{account.name}</span>
-                    <span className="block truncate text-sm text-[#6e6964]">
-                      {account.accountMode === "business" ? "Business" : "Kund"} · {account.email || account.phone}
-                    </span>
-                  </span>
-                </button>
-              ))}
+            <div className="mt-5 space-y-3">
+              {step === "email" ? (
+                <>
+                  <Field label="Namn (valfritt)" value={name} onChange={setName} placeholder="För- och efternamn" />
+                  <Field label="E-post" value={email} onChange={setEmail} placeholder="namn@mail.se" type="email" />
+                </>
+              ) : (
+                <Field label="Verifieringskod" value={code} onChange={setCode} placeholder="6 siffror" />
+              )}
             </div>
+            {hint ? <p className="mt-3 text-center text-sm text-[#6e6964]">{hint}</p> : null}
+            {sampleCode ? (
+              <p className="mt-2 rounded-xl bg-[#f6f1ea] px-3 py-2 text-center text-sm text-[#2a211c]">
+                Sample-kod (lokalt): <span className="font-semibold tracking-widest">{sampleCode}</span>
+              </p>
+            ) : null}
             <button
               type="button"
               disabled={busy}
-              onClick={() => openCreate(provider)}
-              className="mt-4 h-12 w-full rounded-full bg-[#6e5636] text-[15px] font-semibold text-white disabled:opacity-60"
-            >
-              {busy ? "Öppnar…" : "Skapa ny profil"}
-            </button>
-          </>
-        ) : null}
-
-        {step === "create" ? (
-          <>
-            <h1 className="mt-4 text-center font-serif text-[2.2rem] leading-none font-medium text-[#2a211c]">Skapa profil</h1>
-            <p className="mx-auto mt-3 max-w-[18rem] text-center text-sm leading-snug text-[#6e6964]">
-              Ny användare via {providerLabel[provider]}. Du kan lägga upp jobb och chatta direkt.
-            </p>
-
-            <div className="mt-5 flex rounded-full bg-[#f6f1ea] p-1 text-sm">
-              <button
-                type="button"
-                onClick={() => setMode("customer")}
-                className={cn("flex-1 rounded-full py-2 font-semibold", mode === "customer" ? "bg-[#6e5636] text-white" : "text-[#5c564f]")}
-              >
-                Kund
-              </button>
-              <button
-                type="button"
-                onClick={() => setMode("business")}
-                className={cn("flex-1 rounded-full py-2 font-semibold", mode === "business" ? "bg-[#6e5636] text-white" : "text-[#5c564f]")}
-              >
-                Utförare
-              </button>
-            </div>
-
-            <div className="mt-4 space-y-3">
-              <Field label="Namn" value={name} onChange={setName} placeholder="För- och efternamn" />
-              <Field label="E-post" value={email} onChange={setEmail} placeholder="namn@mail.se" type="email" />
-              <Field label="Telefon" value={phone} onChange={setPhone} placeholder="+46 70 …" />
-            </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-2">
-              {(["bankid", "google", "apple", "phone"] as AuthProvider[]).map((item) => (
-                <button
-                  key={item}
-                  type="button"
-                  onClick={() => setProvider(item)}
-                  className={cn(
-                    "rounded-full border px-3 py-2 text-sm font-medium capitalize",
-                    provider === item ? "border-[#6e5636] bg-[#6e5636] text-white" : "border-[#e6dfd6] bg-white/70 text-[#2a211c]",
-                  )}
-                >
-                  {providerLabel[item]}
-                </button>
-              ))}
-            </div>
-
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void onCreate()}
+              onClick={() => void (step === "email" ? sendEmail() : confirmEmail())}
               className="mt-5 h-12 w-full rounded-full bg-[#6e5636] text-[15px] font-semibold text-white disabled:opacity-60"
             >
-              {busy ? "Skapar konto…" : "Skapa konto"}
+              {busy ? "Vänta…" : step === "email" ? "Skicka kod" : "Bekräfta och logga in"}
+            </button>
+          </>
+        ) : null}
+
+        {step === "phone" || step === "phone-code" ? (
+          <>
+            <h1 className="mt-4 text-center font-serif text-[2.2rem] leading-none font-medium text-[#2a211c]">
+              {step === "phone" ? "Mobilnummer" : "SMS-kod"}
+            </h1>
+            <p className="mx-auto mt-3 max-w-[18rem] text-center text-sm leading-snug text-[#6e6964]">
+              {step === "phone" ? "Vi skickar en SMS-kod som du anger för att logga in." : `Ange koden vi skickade till ${phone}.`}
+            </p>
+            <div className="mt-5 space-y-3">
+              {step === "phone" ? (
+                <>
+                  <Field label="Namn (valfritt)" value={name} onChange={setName} placeholder="För- och efternamn" />
+                  <Field label="Mobilnummer" value={phone} onChange={setPhone} placeholder="+46 70 …" />
+                </>
+              ) : (
+                <Field label="SMS-kod" value={code} onChange={setCode} placeholder="6 siffror" />
+              )}
+            </div>
+            {hint ? <p className="mt-3 text-center text-sm text-[#6e6964]">{hint}</p> : null}
+            {sampleCode ? (
+              <p className="mt-2 rounded-xl bg-[#f6f1ea] px-3 py-2 text-center text-sm text-[#2a211c]">
+                Sample-kod (lokalt): <span className="font-semibold tracking-widest">{sampleCode}</span>
+              </p>
+            ) : null}
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void (step === "phone" ? sendSms() : confirmSms())}
+              className="mt-5 h-12 w-full rounded-full bg-[#6e5636] text-[15px] font-semibold text-white disabled:opacity-60"
+            >
+              {busy ? "Vänta…" : step === "phone" ? "Skicka SMS" : "Bekräfta och logga in"}
             </button>
           </>
         ) : null}
@@ -267,15 +295,6 @@ function Field({
   );
 }
 
-function initials(name: string) {
-  return name
-    .split(" ")
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-}
-
 function Method({
   label,
   icon,
@@ -300,21 +319,6 @@ function Method({
   );
 }
 
-function BankIdMark() {
-  return (
-    <svg viewBox="0 0 24 24" className="size-6" aria-hidden="true">
-      <rect x="2" y="2" width="20" height="20" rx="6" fill="#F7C948" />
-      <path
-        d="M8 12.2c1.2-2.4 2.2-3.6 4-3.6 1.6 0 2.4 1 2.4 2.3 0 2.6-6.2 1.2-6.2 4.2 0 1 .8 1.7 2 1.7 1.5 0 2.6-1 3.6-2.6"
-        fill="none"
-        stroke="#1a1a1a"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
 function GoogleMark() {
   return (
     <svg viewBox="0 0 24 24" className="size-5" aria-hidden="true">
@@ -326,10 +330,11 @@ function GoogleMark() {
   );
 }
 
-function AppleMark() {
+function MailMark() {
   return (
-    <svg viewBox="0 0 24 24" className="size-5 fill-[#2a211c]" aria-hidden="true">
-      <path d="M16.4 12.6c0-2.2 1.8-3.2 1.9-3.3-1-1.5-2.6-1.7-3.2-1.7-1.3-.1-2.6.8-3.3.8s-1.7-.8-2.9-.7c-1.5.1-2.8.9-3.6 2.2-1.5 2.7-.4 6.6 1.1 8.8.7 1.1 1.6 2.3 2.7 2.2 1.1 0 1.5-.7 2.8-.7s1.6.7 2.8.7 1.9-1.1 2.6-2.2c.8-1.2 1.2-2.4 1.2-2.4s-2.3-.9-2.1-3.7zM14.7 6.4c.6-.7 1-1.7.9-2.7-.9.1-1.9.6-2.5 1.3-.6.6-1 1.6-.9 2.6 1 .1 1.9-.5 2.5-1.2z" />
+    <svg viewBox="0 0 24 24" className="size-5" aria-hidden="true">
+      <rect x="3" y="5" width="18" height="14" rx="2" fill="none" stroke="#2a211c" strokeWidth="1.6" />
+      <path d="M4 7l8 6 8-6" fill="none" stroke="#2a211c" strokeWidth="1.6" strokeLinecap="round" />
     </svg>
   );
 }

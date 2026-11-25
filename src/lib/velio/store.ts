@@ -18,9 +18,11 @@ import {
   logoutRemote,
   openConversation,
   updateProfileRemote,
+  type AccountDto,
   type AuthProvider,
   type ConversationDto,
   type JobDto,
+  type MeResponse,
 } from "@/lib/velio/auth-api";
 import { chatDtoToMsg, previewMessageText, resolveTakeRequestStatuses } from "@/lib/velio/chat-codec";
 
@@ -42,6 +44,7 @@ export type Screen =
   | "bookings"
   | "posted"
   | "business"
+  | "verify-id"
   | "settings"
   | "help";
 
@@ -245,6 +248,8 @@ type VelioState = {
   listing: Listing | null;
   businessForm: BusinessForm | null;
   accountMode: "customer" | "business";
+  idVerified: boolean;
+  idMethod: string | null;
   profile: Profile;
   cards: PayCard[];
   cart: CartItem[];
@@ -266,6 +271,9 @@ type VelioState = {
   setArea: (area: string | null) => void;
   showToast: (toast: string) => void;
   bootstrapAuth: () => Promise<void>;
+  applyMe: (me: Extract<MeResponse, { authenticated: true }>) => void;
+  setAuthError: (error: string | null) => void;
+  applyAccountFlags: (account: AccountDto) => void;
   loginWithProvider: (provider: AuthProvider) => Promise<void>;
   loginWithAccountId: (provider: AuthProvider, accountId: string) => Promise<void>;
   createAccount: (input: {
@@ -460,6 +468,8 @@ export const useVelio = create<VelioState>()(
       listing: null,
       businessForm: null,
       accountMode: "customer",
+      idVerified: false,
+      idMethod: null,
       profile: {
         name: "Anna Karlsson",
         phone: "+46 70 123 45 67",
@@ -553,27 +563,13 @@ export const useVelio = create<VelioState>()(
               loggedIn: false,
               accountId: null,
               authProvider: null,
+              idVerified: false,
+              idMethod: null,
             });
             return;
           }
-          const mapped = applyConversations(me.conversations, get().chats, get().peers);
-          set({
-            authReady: true,
-            authError: null,
-            loggedIn: true,
-            accountId: me.account.id,
-            authProvider: me.account.provider,
-            profile: {
-              name: me.account.name,
-              phone: me.account.phone,
-              email: me.account.email,
-            },
-            accountMode: me.account.accountMode,
-            posted: jobsToPosted(me.jobs),
-            conversationByProvider: mapped.conversationByProvider,
-            chats: mapped.chats,
-            peers: mapped.peers,
-          });
+          get().applyMe(me);
+          set({ authReady: true });
         } catch {
           set({
             authReady: true,
@@ -581,6 +577,55 @@ export const useVelio = create<VelioState>()(
             loggedIn: false,
           });
         }
+      },
+      setAuthError: (error) => set({ authError: error }),
+      applyAccountFlags: (account) => {
+        set({
+          accountMode: account.accountMode,
+          idVerified: Boolean(account.idVerified),
+          idMethod: account.idMethod ?? null,
+          profile: {
+            name: account.name,
+            phone: account.phone || get().profile.phone,
+            email: account.email,
+          },
+        });
+      },
+      applyMe: (me) => {
+        const wasLoggedIn = get().loggedIn;
+        const mapped = applyConversations(me.conversations, wasLoggedIn ? get().chats : {}, wasLoggedIn ? get().peers : {});
+        set({
+          authError: null,
+          loggedIn: true,
+          loginIntro: true,
+          sheet: null,
+          screen: wasLoggedIn ? get().screen : "home",
+          accountId: me.account.id,
+          authProvider: me.account.provider,
+          profile: {
+            name: me.account.name,
+            phone: me.account.phone,
+            email: me.account.email,
+          },
+          accountMode: me.account.accountMode,
+          idVerified: Boolean(me.account.idVerified),
+          idMethod: me.account.idMethod ?? null,
+          posted: jobsToPosted(me.jobs),
+          conversationByProvider: mapped.conversationByProvider,
+          chats: mapped.chats,
+          peers: mapped.peers,
+          ...(wasLoggedIn
+            ? {}
+            : {
+                bookings: [],
+                cart: [],
+                cards: [],
+                activeBookingId: null,
+                listing: null,
+                businessForm: null,
+              }),
+        });
+        if (!wasLoggedIn) get().showToast(`Inloggad som ${me.account.name}`);
       },
       loginWithAccountId: async (provider, accountId) => {
         const me = await loginWithAccount(provider, accountId);
@@ -591,33 +636,7 @@ export const useVelio = create<VelioState>()(
           });
           return;
         }
-        const mapped = applyConversations(me.conversations, {}, {});
-        set({
-          authError: null,
-          loggedIn: true,
-          loginIntro: true,
-          sheet: null,
-          screen: "home",
-          accountId: me.account.id,
-          authProvider: me.account.provider,
-          profile: {
-            name: me.account.name,
-            phone: me.account.phone,
-            email: me.account.email,
-          },
-          accountMode: me.account.accountMode,
-          posted: jobsToPosted(me.jobs),
-          conversationByProvider: mapped.conversationByProvider,
-          chats: mapped.chats,
-          peers: mapped.peers,
-          bookings: [],
-          cart: [],
-          cards: [],
-          activeBookingId: null,
-          listing: null,
-          businessForm: null,
-        });
-        get().showToast(`Inloggad som ${me.account.name}`);
+        get().applyMe(me);
       },
       createAccount: async (input) => {
         const me = await createAccountRemote(input);
@@ -628,33 +647,7 @@ export const useVelio = create<VelioState>()(
           });
           return false;
         }
-        const mapped = applyConversations(me.conversations, {}, {});
-        set({
-          authError: null,
-          loggedIn: true,
-          loginIntro: true,
-          sheet: null,
-          screen: "home",
-          accountId: me.account.id,
-          authProvider: me.account.provider,
-          profile: {
-            name: me.account.name,
-            phone: me.account.phone,
-            email: me.account.email,
-          },
-          accountMode: me.account.accountMode,
-          posted: jobsToPosted(me.jobs),
-          conversationByProvider: mapped.conversationByProvider,
-          chats: mapped.chats,
-          peers: mapped.peers,
-          bookings: [],
-          cart: [],
-          cards: [],
-          activeBookingId: null,
-          listing: null,
-          businessForm: null,
-        });
-        get().showToast(`Konto skapat — hej ${me.account.name}`);
+        get().applyMe(me);
         return true;
       },
       loginWithProvider: async (provider) => {
@@ -712,10 +705,12 @@ export const useVelio = create<VelioState>()(
             email: me.account.email,
           },
           accountMode: me.account.accountMode,
+          idVerified: Boolean(me.account.idVerified),
+          idMethod: me.account.idMethod ?? null,
         });
       },
       login: () => {
-        void get().loginWithProvider("bankid");
+        set({ screen: "profile", sheet: null });
       },
       logout: () => {
         void logoutRemote();
@@ -736,6 +731,8 @@ export const useVelio = create<VelioState>()(
           listing: null,
           businessForm: null,
           accountMode: "customer",
+          idVerified: false,
+          idMethod: null,
         });
       },
       allowLocation: () => {
@@ -1047,20 +1044,47 @@ export const useVelio = create<VelioState>()(
         get().showToast(tip > 0 ? `Tack! ${kr(tip)} i dricks är skickat.` : "Tack för betyget");
       },
       finishOnboard: (listing) => {
+        if (!get().idVerified) {
+          set({ listing, sheet: null, screen: "verify-id" });
+          get().showToast("Verifiera dig med BankID eller pass först");
+          return;
+        }
         set({ listing, accountMode: "business", sheet: null, screen: "business" });
-        void updateProfileRemote({ accountMode: "business" }).then((saved) => {
-          if (saved) set({ accountMode: saved.accountMode });
-        });
+        void updateProfileRemote({ accountMode: "business" })
+          .then((saved) => {
+            if (saved) set({ accountMode: saved.accountMode, idVerified: Boolean(saved.idVerified) });
+          })
+          .catch(() => {
+            set({ screen: "verify-id" });
+          });
         get().showToast("Profil skickad. Granskas inom 24 timmar.");
       },
       saveBusinessForm: (businessForm) => {
         set({ businessForm });
       },
       setAccountMode: (accountMode) => {
+        if (accountMode === "business" && !get().idVerified) {
+          set({ screen: "verify-id" });
+          get().showToast("BankID eller pass krävs för VELIO Business");
+          return;
+        }
         set({ accountMode });
-        void updateProfileRemote({ accountMode }).then((saved) => {
-          if (saved) set({ accountMode: saved.accountMode });
-        });
+        void updateProfileRemote({ accountMode })
+          .then((saved) => {
+            if (saved) {
+              set({
+                accountMode: saved.accountMode,
+                idVerified: Boolean(saved.idVerified),
+                idMethod: saved.idMethod ?? null,
+              });
+            }
+          })
+          .catch((error: unknown) => {
+            if (error instanceof Error && error.message === "id_verification_required") {
+              set({ accountMode: "customer", screen: "verify-id" });
+              get().showToast("Verifiera dig med BankID eller pass");
+            }
+          });
       },
       addPosted: (job) => {
         void (async () => {

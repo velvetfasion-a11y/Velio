@@ -2,7 +2,7 @@ import type { ServiceId } from "@/lib/velio/data";
 import type { ChatCard } from "@/lib/velio/store";
 import { encodeCardMessage } from "@/lib/velio/chat-codec";
 
-export type AuthProvider = "bankid" | "google" | "apple" | "phone";
+export type AuthProvider = "bankid" | "google" | "apple" | "phone" | "email";
 
 export type AccountDto = {
   id: string;
@@ -12,6 +12,10 @@ export type AccountDto = {
   phone: string;
   providerId: string | null;
   accountMode: "customer" | "business";
+  emailVerified?: boolean;
+  phoneVerified?: boolean;
+  idVerified?: boolean;
+  idMethod?: string | null;
 };
 
 export type JobDto = {
@@ -64,6 +68,17 @@ export async function fetchMe(): Promise<MeResponse> {
   return json<MeResponse>(response);
 }
 
+export async function fetchAuthCapabilities(): Promise<{
+  google: boolean;
+  email: boolean;
+  sms: boolean;
+  sampleFallback: boolean;
+}> {
+  const response = await fetch("/api/auth/capabilities", { credentials: "same-origin", cache: "no-store" });
+  if (!response.ok) return { google: false, email: false, sms: false, sampleFallback: true };
+  return json(response);
+}
+
 export async function listAccountsRemote(provider?: AuthProvider): Promise<AccountDto[]> {
   const query = provider ? `?provider=${encodeURIComponent(provider)}` : "";
   const response = await fetch(`/api/auth/accounts${query}`, {
@@ -103,6 +118,127 @@ export async function createAccountRemote(input: {
   return fetchMe();
 }
 
+export async function startEmailOtp(email: string, name?: string) {
+  const response = await fetch("/api/auth/email/start", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email, name }),
+  });
+  const data = await json<{
+    challengeId?: string;
+    sample?: boolean;
+    sampleCode?: string;
+    message?: string;
+    error?: string;
+  }>(response);
+  if (!response.ok) throw new Error(data.message || data.error || "Kunde inte skicka e-postkod");
+  return data as { challengeId: string; sample?: boolean; sampleCode?: string; message?: string };
+}
+
+export async function verifyEmailOtp(input: {
+  challengeId: string;
+  code: string;
+  name?: string;
+  phone?: string;
+}): Promise<MeResponse> {
+  const response = await fetch("/api/auth/email/verify", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    const data = await json<{ message?: string }>(response);
+    throw new Error(data.message || "Fel verifieringskod");
+  }
+  return fetchMe();
+}
+
+export async function startSmsOtp(phone: string, name?: string) {
+  const response = await fetch("/api/auth/sms/start", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ phone, name }),
+  });
+  const data = await json<{
+    challengeId?: string;
+    sample?: boolean;
+    sampleCode?: string;
+    message?: string;
+    error?: string;
+  }>(response);
+  if (!response.ok) throw new Error(data.message || data.error || "Kunde inte skicka SMS");
+  return data as { challengeId: string; sample?: boolean; sampleCode?: string; message?: string };
+}
+
+export async function verifySmsOtp(input: {
+  challengeId: string;
+  code: string;
+  name?: string;
+  email?: string;
+}): Promise<MeResponse> {
+  const response = await fetch("/api/auth/sms/verify", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    const data = await json<{ message?: string }>(response);
+    throw new Error(data.message || "Fel SMS-kod");
+  }
+  return fetchMe();
+}
+
+export async function startBankIdVerification(personalNumber?: string) {
+  const response = await fetch("/api/auth/id/bankid/start", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ personalNumber }),
+  });
+  const data = await json<{
+    challengeId?: string;
+    orderRef?: string;
+    message?: string;
+    error?: string;
+  }>(response);
+  if (!response.ok) throw new Error(data.message || data.error || "Kunde inte starta BankID");
+  return data as { challengeId: string; orderRef: string; message?: string };
+}
+
+export async function completeBankIdVerification(challengeId: string, activateBusiness = true) {
+  const response = await fetch("/api/auth/id/bankid/complete", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ challengeId, activateBusiness }),
+  });
+  const data = await json<{ account?: AccountDto; message?: string; error?: string }>(response);
+  if (!response.ok) throw new Error(data.message || data.error || "BankID misslyckades");
+  return data.account!;
+}
+
+export async function submitPassportVerification(input: {
+  passportNumber: string;
+  country: string;
+  fullName: string;
+  expiry: string;
+  activateBusiness?: boolean;
+}) {
+  const response = await fetch("/api/auth/id/passport", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const data = await json<{ account?: AccountDto; message?: string; error?: string }>(response);
+  if (!response.ok) throw new Error(data.message || data.error || "Passverifiering misslyckades");
+  return data.account!;
+}
+
 /** @deprecated Prefer loginWithAccount — kept for single-account shortcuts. */
 export async function loginWithProvider(provider: AuthProvider): Promise<MeResponse> {
   const accounts = await listAccountsRemote(provider);
@@ -122,7 +258,13 @@ export async function updateProfileRemote(input: {
     headers: { "content-type": "application/json" },
     body: JSON.stringify(input),
   });
-  if (!response.ok) return null;
+  if (!response.ok) {
+    if (response.status === 403) {
+      const data = await json<{ error?: string }>(response);
+      if (data.error === "id_verification_required") throw new Error("id_verification_required");
+    }
+    return null;
+  }
   const data = await json<{ account: AccountDto }>(response);
   return data.account ?? null;
 }

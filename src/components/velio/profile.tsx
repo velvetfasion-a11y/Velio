@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { initialsOf, kr, serviceById } from "@/lib/velio/data";
 import { HistoryCard } from "@/components/velio/history";
+import { VerifyIdScreen } from "@/components/velio/verify-id";
 import { useVelio, type Booking } from "@/lib/velio/store";
 import { cn } from "@/lib/cn";
 import { Avatar, Btn, Field, ScreenHeader } from "@/components/velio/ui";
@@ -35,7 +36,7 @@ const faqs = [
   },
   {
     q: "Är utförarna kontrollerade?",
-    a: "I den skarpa tjänsten verifieras varje utförare med BankID. Här är inloggningen en demo.",
+    a: "Utförare måste verifiera sig med BankID eller pass innan VELIO Business aktiveras.",
   },
   {
     q: "Kan jag avboka?",
@@ -76,6 +77,8 @@ export function ProfileScreens() {
   const openReceipt = useVelio((state) => state.openReceipt);
   const listing = useVelio((state) => state.listing);
   const accountMode = useVelio((state) => state.accountMode);
+  const idVerified = useVelio((state) => state.idVerified);
+  const idMethod = useVelio((state) => state.idMethod);
   const setAccountMode = useVelio((state) => state.setAccountMode);
   const setSheet = useVelio((state) => state.setSheet);
   const notifications = useVelio((state) => state.notifications);
@@ -204,10 +207,16 @@ export function ProfileScreens() {
     );
   }
 
+  if (screen === "verify-id") {
+    return <VerifyIdScreen />;
+  }
+
   if (screen === "business") {
     const listed = listing ? serviceById(listing.serviceId) : null;
+    const verifyLabel =
+      idMethod === "passport" ? "Verifierad\nmed pass" : "Verifierad\nmed BankID";
     const points = [
-      { icon: ShieldCheck, label: "Verifierad\nmed BankID" },
+      { icon: ShieldCheck, label: verifyLabel },
       { icon: Layers, label: "Få uppdrag\ndirekt i appen" },
       { icon: TrendingUp, label: "Bygg ditt\nyrke & företag" },
     ];
@@ -225,6 +234,20 @@ export function ProfileScreens() {
             </p>
           </div>
         </div>
+        {!idVerified ? (
+          <div className="mt-5 rounded-[1.2rem] border border-[#efeae4] bg-[#fbf8f4] p-4">
+            <p className="text-sm leading-relaxed text-[#5c564f]">
+              Business kräver identifiering. Verifiera dig med BankID eller pass innan du lägger upp jobb.
+            </p>
+            <button
+              type="button"
+              onClick={() => go("verify-id")}
+              className="mt-3 h-11 w-full rounded-full bg-[#6e5636] text-sm font-semibold text-white"
+            >
+              Verifiera nu
+            </button>
+          </div>
+        ) : null}
         <div className="mt-6 grid grid-cols-3">
           {points.map((item, index) => {
             const Icon = item.icon;
@@ -243,11 +266,11 @@ export function ProfileScreens() {
         ) : null}
         <button
           type="button"
-          onClick={() => setSheet("onboard")}
+          onClick={() => (idVerified ? setSheet("onboard") : go("verify-id"))}
           className="mt-6 flex h-14 w-full items-center justify-center gap-3 rounded-full bg-[#1c1917] text-base font-semibold text-white"
         >
           <Briefcase className="size-5" strokeWidth={1.6} />
-          {listing ? "Uppdatera jobb" : "Lägg upp ditt jobb"}
+          {!idVerified ? "Verifiera för att fortsätta" : listing ? "Uppdatera jobb" : "Lägg upp ditt jobb"}
         </button>
       </div>
     );
@@ -342,24 +365,29 @@ export function ProfileScreens() {
         <div className="font-display text-4xl font-bold tracking-tight">VELIO</div>
         <h2 className="mt-3 font-display text-2xl font-semibold">Välkommen</h2>
         <p className="mt-2 mb-6 max-w-xs text-sm leading-relaxed text-muted">
-          Logga in med BankID för att boka eller erbjuda tjänster. Alla utförare verifieras.
+          Logga in med Google, e-post eller mobil. Utförare verifieras med BankID eller pass.
         </p>
         <Btn variant="bank" onClick={() => setSheet("bankid")}>
-          <Shield className="size-4" /> Logga in med BankID
+          <Shield className="size-4" /> Logga in
         </Btn>
       </div>
     );
   }
 
   const email = profile.email;
-  const verifyLabel =
-    authProvider === "google"
-      ? "Verifierad med Google"
-      : authProvider === "apple"
-        ? "Verifierad med Apple"
+  const verifyLabel = idVerified
+    ? idMethod === "passport"
+      ? "ID verifierat med pass"
+      : "ID verifierat med BankID"
+    : authProvider === "google"
+      ? "Inloggad med Google"
+      : authProvider === "email"
+        ? "E-post bekräftad"
         : authProvider === "phone"
-          ? "Verifierad med mobil"
-          : "Verifierad med BankID";
+          ? "Mobil bekräftad"
+          : authProvider === "apple"
+            ? "Inloggad med Apple"
+            : "Konto aktivt";
   const roleLabel = accountMode === "business" ? "Utförare" : "Kund";
   const quick = [
     { icon: Calendar, label: "Bokningar", badge: bookings.length, onClick: () => go("bookings") },
@@ -380,7 +408,14 @@ export function ProfileScreens() {
   return (
     <div className="bg-cream px-4 pt-4 pb-4">
       {listing ? (
-        <ModeSwitch name={profile.name} mode={accountMode} onMode={setAccountMode} onEdit={() => go("edit")} />
+        <ModeSwitch
+          name={profile.name}
+          mode={accountMode}
+          idVerified={idVerified}
+          idMethod={idMethod}
+          onMode={setAccountMode}
+          onEdit={() => go("edit")}
+        />
       ) : (
       <section className="relative overflow-hidden rounded-[1.4rem] border border-[#efeae4] bg-white/80 px-4 py-4">
         <svg viewBox="0 0 180 220" className="pointer-events-none absolute top-0 right-0 h-full w-36 text-[#f6f1ea]" aria-hidden="true">
@@ -483,19 +518,32 @@ export function ProfileScreens() {
 function ModeSwitch({
   name,
   mode,
+  idVerified,
+  idMethod,
   onMode,
   onEdit,
 }: {
   name: string;
   mode: "customer" | "business";
+  idVerified: boolean;
+  idMethod: string | null;
   onMode: (mode: "customer" | "business") => void;
   onEdit: () => void;
 }) {
   const go = useVelio((state) => state.go);
   const pick = (next: "customer" | "business") => {
+    if (next === "business" && !idVerified) {
+      go("verify-id");
+      return;
+    }
     onMode(next);
     go("home");
   };
+  const badge = idVerified
+    ? idMethod === "passport"
+      ? "Verifierad med pass"
+      : "Verifierad med BankID"
+    : "Konto aktivt";
   return (
     <div>
       <h2 className="font-serif text-[2.35rem] leading-none font-medium">Min profil</h2>
@@ -511,7 +559,7 @@ function ModeSwitch({
           <p className="mt-1 text-sm">Medlem sedan nov 2026</p>
           <span className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-[#e7f3e4] px-3 py-1 text-sm text-[#2f7a3a]">
             <span className="grid size-4 place-items-center rounded-full bg-[#2f7a3a] text-[10px] text-white">✓</span>
-            Verifierat konto
+            {badge}
           </span>
         </div>
       </div>
@@ -527,7 +575,13 @@ function ModeSwitch({
           >
             <ArrowLeftRight className="size-4" />
           </button>
-          <ModeCard active={mode === "business"} icon={Briefcase} title="VELIO Business" text="Erbjud tjänster och ta emot uppdrag" onClick={() => pick("business")} />
+          <ModeCard
+            active={mode === "business"}
+            icon={Briefcase}
+            title="VELIO Business"
+            text={idVerified ? "Erbjud tjänster och ta emot uppdrag" : "Kräver BankID eller pass"}
+            onClick={() => pick("business")}
+          />
         </div>
       </div>
     </div>

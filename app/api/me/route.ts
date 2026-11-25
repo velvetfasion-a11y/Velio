@@ -1,29 +1,9 @@
-import { getAccountBySession, updateAccount } from "@/lib/velio/session";
+import { accountPublic, getAccountBySession, updateAccount } from "@/lib/velio/session";
 import { listConversations, listJobs } from "@/lib/velio/sync-db";
 
 export const dynamic = "force-dynamic";
 
 const noStore = { "cache-control": "private, no-store" };
-
-function accountPayload(account: {
-  id: string;
-  provider: string;
-  name: string;
-  email: string;
-  phone: string;
-  providerId: string | null;
-  accountMode: "customer" | "business";
-}) {
-  return {
-    id: account.id,
-    provider: account.provider,
-    name: account.name,
-    email: account.email,
-    phone: account.phone,
-    providerId: account.providerId,
-    accountMode: account.accountMode,
-  };
-}
 
 export async function GET(request: Request) {
   const account = await getAccountBySession(request);
@@ -36,7 +16,7 @@ export async function GET(request: Request) {
   return Response.json(
     {
       authenticated: true,
-      account: accountPayload(account),
+      account: accountPublic(account),
       jobs,
       conversations: conversations.map((item) => ({
         id: item.id,
@@ -70,15 +50,26 @@ export async function PATCH(request: Request) {
   }
 
   try {
+    if (body.accountMode === "business" && !account.idVerified) {
+      return Response.json(
+        {
+          error: "id_verification_required",
+          message: "Verifiera dig med BankID eller pass innan du aktiverar VELIO Business.",
+        },
+        { status: 403, headers: noStore },
+      );
+    }
+
     const updated = await updateAccount(account.id, {
       name: body.name,
       email: body.email,
       phone: body.phone,
       accountMode: body.accountMode,
     });
-    return Response.json({ account: accountPayload(updated) }, { headers: noStore });
+    return Response.json({ account: accountPublic(updated) }, { headers: noStore });
   } catch (error) {
     const message = error instanceof Error ? error.message : "update_failed";
-    return Response.json({ error: message }, { status: 400, headers: noStore });
+    const status = message === "id_verification_required" ? 403 : 400;
+    return Response.json({ error: message }, { status, headers: noStore });
   }
 }

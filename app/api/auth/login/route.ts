@@ -1,4 +1,5 @@
 import {
+  accountPublic,
   createAccount,
   loginWithAccountId,
   sessionCookie,
@@ -8,27 +9,7 @@ import {
 export const dynamic = "force-dynamic";
 
 const noStore = { "cache-control": "private, no-store" };
-const providers = new Set<AuthProvider>(["bankid", "google", "apple", "phone"]);
-
-function accountJson(account: {
-  id: string;
-  provider: string;
-  name: string;
-  email: string;
-  phone: string;
-  providerId: string | null;
-  accountMode: "customer" | "business";
-}) {
-  return {
-    id: account.id,
-    provider: account.provider,
-    name: account.name,
-    email: account.email,
-    phone: account.phone,
-    providerId: account.providerId,
-    accountMode: account.accountMode,
-  };
-}
+const providers = new Set<AuthProvider>(["bankid", "google", "apple", "phone", "email"]);
 
 export async function POST(request: Request) {
   let body: {
@@ -52,13 +33,24 @@ export async function POST(request: Request) {
   }
 
   try {
+    // Creating business accounts requires prior ID verification via dedicated endpoints.
+    if (body.create && body.accountMode === "business") {
+      return Response.json(
+        {
+          error: "id_verification_required",
+          message: "VELIO Business kräver BankID eller passverifiering innan kontot aktiveras.",
+        },
+        { status: 403, headers: noStore },
+      );
+    }
+
     const result = body.create
       ? await createAccount({
           provider,
           name: body.name ?? "",
           email: body.email ?? "",
           phone: body.phone ?? "",
-          accountMode: body.accountMode,
+          accountMode: "customer",
         })
       : body.accountId
         ? await loginWithAccountId(body.accountId)
@@ -71,7 +63,7 @@ export async function POST(request: Request) {
     return Response.json(
       {
         authenticated: true,
-        account: accountJson(result.account),
+        account: accountPublic(result.account),
       },
       {
         headers: {
@@ -83,7 +75,10 @@ export async function POST(request: Request) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "login_failed";
     const status =
-      message.startsWith("invalid_") || message === "unknown_account" || message === "unknown_provider"
+      message.startsWith("invalid_") ||
+      message === "unknown_account" ||
+      message === "unknown_provider" ||
+      message === "id_verification_required"
         ? 400
         : 500;
     return Response.json({ error: message }, { status, headers: noStore });
