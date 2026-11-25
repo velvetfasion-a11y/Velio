@@ -34,7 +34,7 @@ export async function reverseGeocode(lat: number, lng: number): Promise<string> 
     url.searchParams.set("latitude", String(lat));
     url.searchParams.set("longitude", String(lng));
     url.searchParams.set("localityLanguage", "sv");
-    const response = await fetch(url.toString());
+    const response = await fetch(url.toString(), { signal: AbortSignal.timeout(5000) });
     if (response.ok) {
       const data = (await response.json()) as Parameters<typeof fromBigDataCloud>[0];
       const label = fromBigDataCloud(data);
@@ -51,7 +51,10 @@ export async function reverseGeocode(lat: number, lng: number): Promise<string> 
     url.searchParams.set("format", "json");
     url.searchParams.set("accept-language", "sv");
     url.searchParams.set("zoom", "16");
-    const response = await fetch(url.toString(), { headers: { Accept: "application/json" } });
+    const response = await fetch(url.toString(), {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(5000),
+    });
     if (!response.ok) return fallback;
     const data = (await response.json()) as {
       address?: Record<string, string>;
@@ -75,30 +78,54 @@ export async function reverseGeocode(lat: number, lng: number): Promise<string> 
   }
 }
 
-function getPosition(options: PositionOptions): Promise<GeolocationPosition> {
+function readPosition(options: PositionOptions & { waitMs: number }): Promise<GeolocationPosition> {
   return new Promise((resolve, reject) => {
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       reject(Object.assign(new Error("unsupported"), { code: 0 }));
       return;
     }
-    navigator.geolocation.getCurrentPosition(resolve, reject, options);
+    let settled = false;
+    let watchId = -1;
+    const finish = (ok: boolean, value: GeolocationPosition | GeolocationPositionError | Error) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      if (watchId >= 0) navigator.geolocation.clearWatch(watchId);
+      if (ok) resolve(value as GeolocationPosition);
+      else reject(value);
+    };
+    // Own timer only. Passing timeout to WebKit starts the clock before the person taps Allow,
+    // so the prompt dies and the page looks like location never worked.
+    const timer = window.setTimeout(() => {
+      finish(false, Object.assign(new Error("timeout"), { code: 3 }));
+    }, options.waitMs);
+    const { enableHighAccuracy, maximumAge } = options;
+    watchId = navigator.geolocation.watchPosition(
+      (position) => finish(true, position),
+      (error) => {
+        const code = Number(error?.code ?? 0);
+        if (code === 1 || code === 2) finish(false, error);
+      },
+      { enableHighAccuracy, maximumAge },
+    );
   });
 }
 
 export async function resolveCurrentLocation(): Promise<UserLocation> {
   let position: GeolocationPosition;
   try {
-    position = await getPosition({
-      enableHighAccuracy: true,
-      timeout: 12000,
-      maximumAge: 15_000,
-    });
-  } catch {
-    // Retry without high accuracy — works more often on tablets/Wi‑Fi.
-    position = await getPosition({
+    position = await readPosition({
       enableHighAccuracy: false,
-      timeout: 20000,
-      maximumAge: 60_000,
+      maximumAge: 600_000,
+      waitMs: 30_000,
+    });
+  } catch (error) {
+    const code = error && typeof error === "object" && "code" in error ? Number((error as { code: number }).code) : 0;
+    if (code === 1 || code === 0 || code === 2) throw error;
+    position = await readPosition({
+      enableHighAccuracy: true,
+      maximumAge: 0,
+      waitMs: 20_000,
     });
   }
 

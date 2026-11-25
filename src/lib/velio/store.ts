@@ -286,6 +286,8 @@ type VelioState = {
   locationOn: boolean;
   userLocation: UserLocation | null;
   locationBusy: boolean;
+  locationError: string | null;
+  onboardFocus: "place" | null;
   notifications: boolean;
   appNotifications: AppNotification[];
   search: string;
@@ -467,6 +469,8 @@ function applyConversations(
   return { conversationByProvider, chats: nextChats, peers: nextPeers };
 }
 
+let locationRequest = 0;
+
 export const useVelio = create<VelioState>()(
   persist(
     (set, get) => ({
@@ -484,6 +488,8 @@ export const useVelio = create<VelioState>()(
       locationOn: false,
       userLocation: null,
       locationBusy: false,
+      locationError: null,
+      onboardFocus: null,
       notifications: true,
       appNotifications: seedNotifications,
       search: "",
@@ -880,28 +886,38 @@ export const useVelio = create<VelioState>()(
         });
       },
       allowLocation: async () => {
-        if (get().locationBusy) return;
-        set({ locationBusy: true, sheet: null });
+        const request = ++locationRequest;
+        set({ locationBusy: true, locationError: null, sheet: "location" });
         try {
           const userLocation = await resolveCurrentLocation();
+          if (request !== locationRequest) return;
           set({
             locationOn: true,
             userLocation,
             locationBusy: false,
+            locationError: null,
             sheet: null,
           });
           get().showToast(`Plats: ${userLocation.label}`);
         } catch (error) {
-          set({ locationBusy: false, sheet: "location" });
+          if (request !== locationRequest) return;
           const code = error && typeof error === "object" && "code" in error ? Number((error as GeolocationPositionError).code) : 0;
-          if (code === 1) get().showToast("Tillåt plats i webbläsarens fråga, annars fungerar det inte");
-          else if (code === 3) get().showToast("GPS tog för lång tid — öppna inställningar och försök igen");
-          else if (String(error).includes("unsupported")) get().showToast("Den här enheten har ingen platstjänst");
-          else get().showToast("Kunde inte hämta GPS. Kontrollera att platstjänster är på.");
+          const locationError =
+            code === 1
+              ? "Plats är blockerad för den här sidan. I Safari: tryck aA i adressfältet, välj Webbplatsinställningar och slå på Plats. Tryck sedan Dela plats igen."
+              : code === 2
+                ? "Telefonen hittade ingen plats. Slå på platstjänster och prova igen, eller lägg in önskad plats i arbetsinformationen."
+                : code === 3
+                  ? "Telefonen hann inte svara. Slå på platstjänster och tryck Dela plats igen."
+                  : code === 0 || String(error).includes("unsupported")
+                    ? "Den här enheten har ingen platstjänst. Lägg in önskad plats i arbetsinformationen."
+                    : "Ingen plats kom fram. Slå på platstjänster för VELIO och tryck Dela plats igen.";
+          set({ locationBusy: false, locationError, sheet: "location" });
         }
       },
       clearLocation: () => {
-        set({ locationOn: false, userLocation: null, sheet: null });
+        locationRequest += 1;
+        set({ locationOn: false, userLocation: null, locationError: null, locationBusy: false, sheet: null });
         get().showToast("Platsdelning avstängd");
       },
       setNotifications: (notifications) => {

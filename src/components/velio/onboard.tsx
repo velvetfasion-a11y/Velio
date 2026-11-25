@@ -58,7 +58,11 @@ export function OnboardSheet() {
     return null;
   };
   const initialServices = tradesOf(saved) ?? tradesOf(listing) ?? [];
-  const [step, setStep] = useState(1);
+  const startedAtPlace = useRef(useVelio.getState().onboardFocus === "place").current;
+  const [step, setStep] = useState(startedAtPlace ? 3 : 1);
+  useEffect(() => {
+    if (useVelio.getState().onboardFocus) useVelio.setState({ onboardFocus: null });
+  }, []);
   const [serviceIds, setServiceIds] = useState<ServiceId[]>(initialServices);
   const [otherOn, setOtherOn] = useState(Boolean(saved?.otherTrade || listing?.otherTrade));
   const [otherTrade, setOtherTrade] = useState(saved?.otherTrade || listing?.otherTrade || "");
@@ -195,7 +199,7 @@ export function OnboardSheet() {
 
   return (
     <div className="sheet-in absolute inset-0 z-40 flex flex-col bg-[#f6f1ea]">
-      <AppHeader onBack={() => (step === 1 ? closeSheet() : setStep(step - 1))} />
+      <AppHeader onBack={() => (step === 1 || (startedAtPlace && step === 3) ? closeSheet() : setStep(step - 1))} />
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-3 pb-4">
         <h2 className="mb-3 text-xl font-semibold">Velio Business</h2>
         <div className="relative overflow-hidden rounded-[1.2rem]">

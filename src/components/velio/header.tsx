@@ -4,7 +4,6 @@ import { useVelio } from "@/lib/velio/store";
 
 export function PlaceLink({ tone = "cream" }: { tone?: "cream" | "glass" }) {
   const setSheet = useVelio((state) => state.setSheet);
-  const allowLocation = useVelio((state) => state.allowLocation);
   const locationOn = useVelio((state) => state.locationOn);
   const locationBusy = useVelio((state) => state.locationBusy);
   const userLocation = useVelio((state) => state.userLocation);
@@ -16,14 +15,7 @@ export function PlaceLink({ tone = "cream" }: { tone?: "cream" | "glass" }) {
       : "Dela plats";
 
   const onPlaceClick = () => {
-    if (locationOn) {
-      setSheet("location");
-      return;
-    }
-    void allowLocation().then(() => {
-      const state = useVelio.getState();
-      if (!state.locationOn) setSheet("location");
-    });
+    setSheet("location");
   };
 
   return (
