@@ -5,7 +5,7 @@ import { Elements, ExpressCheckoutElement, PaymentElement, useElements, useStrip
 import { loadStripe, type Appearance } from "@stripe/stripe-js";
 import { Check, ChevronRight } from "lucide-react";
 import { createPaymentIntent } from "@/lib/stripe/api";
-import { downloadInvoicePdf, saveInvoiceBuyer } from "@/lib/invoices";
+import { downloadInvoicePdf } from "@/lib/invoices";
 import {
   paymentReturnUrl,
   paymentsMode,
@@ -64,8 +64,6 @@ export function PaymentSheet({
   const [method, setMethod] = useState<Method>("apple");
   const [picker, setPicker] = useState(false);
   const [error, setError] = useState("");
-  const [companyName, setCompanyName] = useState("");
-  const [orgNr, setOrgNr] = useState("");
   const [pdfNote, setPdfNote] = useState("");
   const [drag, setDrag] = useState(0);
   const [clientSecret, setClientSecret] = useState("");
@@ -206,16 +204,15 @@ export function PaymentSheet({
         {phase === "success" ? (
           <Success
             order={order}
-            companyName={companyName}
-            orgNr={orgNr}
+            method={methodLabel[method]}
             note={pdfNote}
             onPdf={() => {
               if (!paymentIntentId) {
-                setPdfNote("PDF:en skapas när en betalning är registrerad.");
+                setPdfNote("PDF:en skapas när betalningen är registrerad.");
                 return;
               }
-              void downloadInvoicePdf(paymentIntentId, "faktura.pdf").catch((reason: unknown) => {
-                setPdfNote(reason instanceof Error ? reason.message : "Fakturan kunde inte hämtas");
+              void downloadInvoicePdf(paymentIntentId, "kvitto.pdf").catch((reason: unknown) => {
+                setPdfNote(reason instanceof Error ? reason.message : "Kvittot kunde inte hämtas");
               });
             }}
             onClose={onClose}
@@ -249,25 +246,7 @@ export function PaymentSheet({
               {showTestBadge() ? <span className="mt-2 text-[10px] tracking-wide text-[#A39890]">Testläge</span> : null}
             </div>
             <p className="mt-3 text-[15px] text-[#5C534C]">{detail}</p>
-            <p className="mt-1 text-[12px] text-[#8A8178]">Serviceavgift VELIO läggs till. Moms står på fakturan.</p>
-            <div className="mt-4 grid grid-cols-2 gap-2">
-              <input
-                value={companyName}
-                onChange={(event) => setCompanyName(event.target.value)}
-                onBlur={() => void saveInvoiceBuyer(order.offerId, { companyName, orgNr }).catch(() => undefined)}
-                placeholder="Företag, valfritt"
-                aria-label="Företagsnamn"
-                className="h-11 rounded-xl border border-[#E6E1DB] px-3 text-[14px] outline-none"
-              />
-              <input
-                value={orgNr}
-                onChange={(event) => setOrgNr(event.target.value)}
-                onBlur={() => void saveInvoiceBuyer(order.offerId, { companyName, orgNr }).catch(() => undefined)}
-                placeholder="Org.nr"
-                aria-label="Organisationsnummer"
-                className="h-11 rounded-xl border border-[#E6E1DB] px-3 text-[14px] outline-none"
-              />
-            </div>
+            <p className="mt-1 text-[12px] text-[#8A8178]">Serviceavgift VELIO läggs till. Du får ett kvitto.</p>
 
             <div className="mt-6 grid grid-cols-2 gap-2.5">
               {live && clientSecret ? (
@@ -551,15 +530,13 @@ function GoogleMark() {
 
 function Success({
   order,
-  companyName,
-  orgNr,
+  method,
   note,
   onPdf,
   onClose,
 }: {
   order: CheckoutOrder;
-  companyName: string;
-  orgNr: string;
+  method: string;
   note: string;
   onPdf: () => void;
   onClose: () => void;
@@ -588,11 +565,14 @@ function Success({
           <span>Totalt</span>
           <span>{sek(total)}</span>
         </div>
-        {companyName || orgNr ? <p className="mt-2 text-[12px] text-[#8A8178]">{[companyName, orgNr].filter(Boolean).join(" · ")}</p> : null}
-        <p className="mt-2 text-[12px] text-[#8A8178]">Moms specificeras på fakturan. Saknas uppgifter är den ett utkast.</p>
+        <div className="mt-3 flex justify-between text-[14px] text-[#5C534C]">
+          <span>Betalsätt</span>
+          <span>{method}</span>
+        </div>
+        <p className="mt-3 text-[13px] font-semibold text-[#1A1A1A]">Betald</p>
       </div>
       <button type="button" onClick={onPdf} className="mt-4 h-[52px] w-full rounded-[14px] bg-[#1A1A1A] text-[16px] font-semibold text-white active:scale-[0.98]">
-        Ladda ner faktura (PDF)
+        Ladda ner kvitto
       </button>
       {note ? <p className="mt-3 text-center text-[13px] text-[#6E6560]">{note}</p> : null}
       <button type="button" onClick={onClose} className="mt-3 h-11 text-[15px] text-[#5C534C]">

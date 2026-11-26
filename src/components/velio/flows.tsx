@@ -10,7 +10,7 @@ import { BookingChangeCard, FinalPriceMessage, OnTheWayCard, TimeConfirmationCar
 import { cn } from "@/lib/cn";
 import { AppHeader, PlaceLink } from "@/components/velio/header";
 import { CityMap } from "@/components/velio/osm-map";
-import { Avatar, BottomSheet, Btn, FullScreen } from "@/components/velio/ui";
+import { BottomSheet, Btn, FullScreen } from "@/components/velio/ui";
 import { asset } from "@/lib/velio/asset";
 import { openCallSheet } from "@/components/velio/call-host";
 import { openSupportSheet } from "@/components/velio/support-sheet";
@@ -2733,40 +2733,42 @@ export function ReceiptSheet() {
   const booking = bookings.find((item) => item.id === receiptId);
   const showToast = useVelio((state) => state.showToast);
   if (!booking) return null;
+  const directory = useVelio((state) => state.directory);
   const service = serviceById(booking.serviceId);
-  const provider = providerById(booking.providerId);
+  const provider = providerById(booking.providerId) ?? directory.find((item) => item.id === booking.providerId);
+
+  const work = booking.cost;
+  const fee = Math.round(work * 0.1);
+  const total = work + fee;
+  const paid = booking.status === "done";
 
   return (
     <FullScreen title="Kvitto" onBack={closeSheet}>
       <div className="space-y-3 bg-soft px-5 py-5">
-        <div className="flex items-center justify-between rounded-2xl bg-paper p-4">
-          <div>
-            <div className="font-display text-xl font-semibold">{service?.name}</div>
-            <div className="text-sm text-muted">{provider?.name}</div>
+        <div className="rounded-[1.4rem] border border-line bg-paper px-5 py-5">
+          <p className="font-serif text-[1.8rem] tracking-[0.22em] text-brown">VELIO</p>
+          <p className="mt-4 text-xs font-semibold tracking-wide text-muted">KVITTO</p>
+          <div className="mt-3 space-y-2 text-[15px]">
+            <p className="flex justify-between"><span className="text-muted">Nummer</span><span>{booking.id.slice(0, 8).toUpperCase()}</span></p>
+            <p className="flex justify-between"><span className="text-muted">Datum</span><span>{booking.whenLabel}</span></p>
+            <p className="flex justify-between"><span className="text-muted">Status</span><span className="font-semibold">{paid ? "Betald" : bookingStatusLabel(booking.status)}</span></p>
           </div>
-          <Avatar text={provider?.initials ?? "—"} />
+          <div className="mt-4 border-t border-line pt-3 text-[15px]">
+            <p className="font-semibold">Uppdrag</p>
+            <p className="mt-1">{service?.name || "Uppdrag"}</p>
+            <p className="text-muted">{booking.whenLabel}</p>
+            <p className="text-muted">{booking.location}</p>
+            <p className="mt-2"><span className="text-muted">Utförare </span>{provider?.name || "Utförare"}</p>
+          </div>
+          <div className="mt-4 space-y-1.5 border-t border-line pt-3 text-[15px]">
+            <p className="flex justify-between"><span>Jobbpris</span><span>{kr(work)}</span></p>
+            <p className="flex justify-between text-muted"><span>Serviceavgift VELIO</span><span>{kr(fee)}</span></p>
+            <p className="flex justify-between border-t border-line pt-2 font-semibold"><span>Totalt</span><span>{kr(total)}</span></p>
+          </div>
+          <p className="mt-3 text-sm text-muted">Betalsätt Kort</p>
         </div>
-        <div className="rounded-2xl bg-paper px-4">
-          <Row label="Plats" value={booking.location} />
-          <Row label="Tid" value={booking.whenLabel} />
-          {booking.holdKr ? (
-            <Row label={booking.status === "done" ? "Draget" : "Reserverat"} value={kr(booking.holdKr)} />
-          ) : (
-            <Row label="Kostnad" value={kr(booking.cost)} />
-          )}
-          {booking.tip != null ? <Row label="Dricks" value={kr(booking.tip)} /> : null}
-          <Row
-            label="Status"
-            value={bookingStatusLabel(booking.status)}
-          />
-          {booking.rating != null ? (
-            <Row label="Betyg" value={`${ratingLabel(booking.rating)} ★`} last />
-          ) : (
-            <Row label="Betyg" value="Inte satt" last />
-          )}
-        </div>
-        <Btn onClick={() => showToast("Fakturan skapas när betalningen är registrerad. Den ligger under Historik.")}>
-          <FileText className="size-4" /> Ladda ner faktura (PDF)
+        <Btn onClick={() => showToast("Kvittot sparas när betalningen är registrerad. Det ligger under Historik.")}>
+          <FileText className="size-4" /> Ladda ner kvitto
         </Btn>
         <Btn onClick={() => rebook(booking.id)}>Boka om</Btn>
         <Btn

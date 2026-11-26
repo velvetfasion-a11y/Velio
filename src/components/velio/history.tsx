@@ -79,14 +79,14 @@ function InvoiceRow({ invoice }: { invoice: VelioInvoice }) {
       <div className="min-w-0 flex-1">
         <p className="font-semibold">{invoice.number || "Kvitto"}</p>
         <p className="text-[13px] text-muted">{invoice.title}</p>
-        <p className="text-[13px] text-muted">{kr(invoice.totalSek)}{invoice.status === "draft" ? " · Utkast" : ""}</p>
+        <p className="text-[13px] text-muted">{kr(invoice.totalSek)} · Betald</p>
       </div>
       <button
         type="button"
-        onClick={() => void downloadInvoicePdf(invoice.id, `${invoice.number || "faktura"}.pdf`).catch((reason: unknown) => showToast(reason instanceof Error ? reason.message : "Fakturan kunde inte hämtas"))}
+        onClick={() => void downloadInvoicePdf(invoice.id, `${invoice.number || "kvitto"}.pdf`).catch((reason: unknown) => showToast(reason instanceof Error ? reason.message : "Kvittot kunde inte hämtas"))}
         className="shrink-0 rounded-full bg-[#1A1A1A] px-3 py-2 text-[13px] font-semibold text-white"
       >
-        Ladda ner faktura (PDF)
+        Ladda ner kvitto
       </button>
     </article>
   );
