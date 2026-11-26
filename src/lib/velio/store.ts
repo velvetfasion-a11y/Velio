@@ -224,6 +224,7 @@ export type SavedAddress = {
 export type PostedJob = {
   id: string;
   serviceId: ServiceId;
+  subcategoryId?: string;
   text: string;
   when: string;
   address: string;

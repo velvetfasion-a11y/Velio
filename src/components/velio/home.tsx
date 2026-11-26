@@ -4,33 +4,33 @@ import {
   BadgeCheck,
   Calculator,
   Check,
-  Clock,
   ClipboardList,
+  Clock,
+  Drill,
+  Droplets,
   Eye,
-  Flower2,
   Hammer,
   Heart,
   KeyRound,
+  Laptop,
   Leaf,
-  Lightbulb,
   MapPin,
   Navigation,
-  Paintbrush,
   Paperclip,
   Search,
   Shield,
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
-  SprayCan,
   Star,
+  Truck,
   UserRound,
   Users,
   Wrench,
   Zap,
   type LucideIcon,
 } from "lucide-react";
-import { coordsForArea, distanceKm, greetingName, providerById, providerTradeNames, ratingLabel, serviceById, services, type ServiceIcon, type ServiceId } from "@/lib/velio/data";
+import { coordsForArea, distanceKm, greetingName, providerById, providerTradeNames, ratingLabel, resolveServiceId, serviceById, services, subcategoryById, type ServiceIcon, type ServiceId } from "@/lib/velio/data";
 import { useVelio } from "@/lib/velio/store";
 import { AppHeader } from "@/components/velio/header";
 import { cn } from "@/lib/cn";
@@ -47,21 +47,29 @@ const icons: Record<ServiceIcon, LucideIcon> = {
   shield: Shield,
   hammer: Hammer,
   user: UserRound,
+  users: Users,
   calculator: Calculator,
   key: KeyRound,
   eye: Eye,
+  truck: Truck,
+  drill: Drill,
+  droplets: Droplets,
+  heart: Heart,
+  laptop: Laptop,
 };
 
-const popular: { id: ServiceId; label: string; icon: LucideIcon; image: string }[] = [
-  { id: "stad", label: "Städning", icon: SprayCan, image: asset("/velio/stad.jpg") },
-  { id: "ren", label: "Renovering", icon: Paintbrush, image: asset("/velio/ren.jpg") },
-  { id: "el", label: "Elektriker", icon: Lightbulb, image: asset("/velio/el.jpg") },
-  { id: "trad", label: "Trädgård", icon: Flower2, image: asset("/velio/trad.jpg") },
-  { id: "rep", label: "Reparationer", icon: Wrench, image: asset("/velio/rep.jpg") },
-  { id: "per", label: "Personal", icon: Users, image: asset("/velio/per.jpg") },
-  { id: "sak", label: "Säkerhet", icon: Shield, image: asset("/velio/sak.jpg") },
-  { id: "til", label: "Tillsyn & Service", icon: ClipboardList, image: asset("/velio/til.jpg") },
-];
+const popular = services
+  .filter((service) => service.popular)
+  .map((service) => ({ id: service.id, label: service.name, icon: icons[service.icon], image: service.image }));
+
+function matchesService(query: string, id: ServiceId) {
+  const service = serviceById(id);
+  if (!service) return false;
+  const hay = [service.name, service.desc, service.intro, ...service.subcategories.flatMap((item) => [item.name, item.desc])]
+    .join(" ")
+    .toLowerCase();
+  return hay.includes(query);
+}
 
 export function ServiceIcon({ name, className }: { name: ServiceIcon; className?: string }) {
   const Icon = icons[name];
@@ -72,9 +80,7 @@ export function CategoryGrid({ compact = false, filter = true }: { compact?: boo
   const openService = useVelio((state) => state.openService);
   const search = useVelio((state) => state.search);
   const query = filter ? search.trim().toLowerCase() : "";
-  const visible = services.filter(
-    (service) => !query || service.name.toLowerCase().includes(query) || service.desc.toLowerCase().includes(query),
-  );
+  const visible = services.filter((service) => !query || matchesService(query, service.id));
 
   if (!visible.length) {
     return <p className="mb-6 text-sm text-muted">Inga tjänster matchar “{search.trim()}”.</p>;
@@ -115,8 +121,8 @@ export function Home() {
   const firstName = greetingName(profile.name);
   const [showAll, setShowAll] = useState(false);
   const query = search.trim().toLowerCase();
-  const cards = popular.filter((item) => !query || item.label.toLowerCase().includes(query));
-  const extra = services.filter((service) => !popular.some((item) => item.id === service.id));
+  const cards = popular.filter((item) => !query || matchesService(query, item.id));
+  const extra = services.filter((service) => !service.popular);
   const activeAddress = addresses.find((item) => item.id === activeAddressId) ?? null;
   const origin =
     activeAddress?.lat != null && activeAddress.lng != null
@@ -202,17 +208,15 @@ export function Home() {
             ))}
             {showAll
               ? extra
-                  .filter((service) => !query || service.name.toLowerCase().includes(query))
+                  .filter((service) => !query || matchesService(query, service.id))
                   .map((service) => (
-                    <button
+                    <PhotoTile
                       key={service.id}
-                      type="button"
+                      label={service.name}
+                      image={service.image}
+                      icon={icons[service.icon]}
                       onClick={() => openService(service.id)}
-                      className="flex aspect-[4/5] flex-col items-start justify-end rounded-2xl bg-sand p-2 text-left"
-                    >
-                      <ServiceIcon name={service.icon} className="mb-2 size-6" />
-                      <span className="text-sm leading-tight font-semibold">{service.name}</span>
-                    </button>
+                    />
                   ))
               : null}
           </div>
@@ -366,7 +370,9 @@ export function SearchScreen() {
   const openService = useVelio((state) => state.openService);
   const openProvider = useVelio((state) => state.openProvider);
   const query = search.trim().toLowerCase();
-  const matched = popular.filter((item) => !query || item.label.toLowerCase().includes(query));
+  const matched = services
+    .filter((service) => !query || matchesService(query, service.id))
+    .map((service) => ({ id: service.id, label: service.name, icon: icons[service.icon], image: service.image }));
 
   return (
     <div className="bg-cream px-4 pt-4">
@@ -620,6 +626,7 @@ function JobSheet() {
   const saveJobDraft = useVelio((state) => state.saveJobDraft);
   const jobDraft = useVelio((state) => state.jobDraft);
   const [serviceId, setServiceId] = useState<ServiceId>("stad");
+  const [subcategoryId, setSubcategoryId] = useState<string | null>(null);
   const [text, setText] = useState("");
   const [whenMode, setWhenMode] = useState<WhenMode>("day");
   const [startDate, setStartDate] = useState<Date | null>(null);
@@ -644,6 +651,7 @@ function JobSheet() {
     saveJobDraft({
       step,
       serviceId,
+      subcategoryId,
       text,
       whenMode,
       start: startDate ? startDate.toISOString() : null,
@@ -654,12 +662,13 @@ function JobSheet() {
       budget,
       quotes,
     });
-  }, [step, serviceId, text, whenMode, startDate, endDate, timeWindow, clock, pickedAddress, budget, quotes, saveJobDraft]);
+  }, [step, serviceId, subcategoryId, text, whenMode, startDate, endDate, timeWindow, clock, pickedAddress, budget, quotes, saveJobDraft]);
   const resumeJob = () => {
     const draft = jobDraft;
     if (!draft) return;
     if (typeof draft.step === "number") setStep(draft.step);
-    if (typeof draft.serviceId === "string") setServiceId(draft.serviceId as ServiceId);
+    if (typeof draft.serviceId === "string") setServiceId((resolveServiceId(draft.serviceId)?.id ?? "stad") as ServiceId);
+    if (typeof draft.subcategoryId === "string") setSubcategoryId(draft.subcategoryId);
     if (typeof draft.text === "string") setText(draft.text);
     if (typeof draft.whenMode === "string") setWhenMode(draft.whenMode as WhenMode);
     if (typeof draft.start === "string") setStartDate(new Date(draft.start));
@@ -758,6 +767,7 @@ function JobSheet() {
   };
 
   const advance = () => {
+    if (step === 1 && !subcategoryId) return showToast("Välj vad som ska göras");
     if (step === 1 && text.trim().length < 8) return showToast("Beskriv uppdraget lite till");
     if (step === 2) {
       if (whenMode === "range" && startDate && !endDate) return showToast("Välj även ett slutdatum");
@@ -776,6 +786,7 @@ function JobSheet() {
     const attached = files.length ? `\n\nBifogat: ${files.join(", ")}` : "";
     addPosted({
       serviceId,
+      subcategoryId: subcategoryId ?? undefined,
       text: `${text.trim()}${attached}`,
       when: chosenWhen,
       address: pickedAddress.label,
@@ -833,24 +844,22 @@ function JobSheet() {
             }}
           >
             {services.map((service) => {
-              const photo = popular.find((item) => item.id === service.id);
               const selected = serviceId === service.id;
               return (
                 <button
                   key={service.id}
                   type="button"
                   aria-pressed={selected}
-                  onClick={() => setServiceId(service.id)}
+                  onClick={() => {
+                    setServiceId(service.id);
+                    setSubcategoryId(null);
+                  }}
                   className={cn(
                     "relative h-full min-h-0 overflow-hidden rounded-2xl border-2 text-left text-paper",
                     selected ? "border-brown" : "border-transparent",
                   )}
                 >
-                  {photo ? (
-                    <img src={photo.image} alt="" className="absolute inset-0 h-full w-full object-cover" />
-                  ) : (
-                    <span className="absolute inset-0 bg-sand" />
-                  )}
+                  <img src={service.image} alt="" className="absolute inset-0 h-full w-full object-cover" />
                   <span className={cn("absolute inset-0", selected ? "bg-brown/40" : "bg-gradient-to-t from-ink/80 via-ink/15 to-transparent")} />
                   {selected ? (
                     <span className="absolute top-1 right-1 grid size-5 place-items-center rounded-full bg-paper text-brown">
@@ -858,7 +867,6 @@ function JobSheet() {
                     </span>
                   ) : null}
                   <span className="scrim-text absolute inset-x-1.5 bottom-1 text-[clamp(0.62rem,2.1dvh,0.95rem)] leading-tight font-semibold">
-                    {photo ? null : <ServiceIcon name={service.icon} className="mb-0.5 size-4" />}
                     {service.name}
                   </span>
                 </button>
@@ -869,6 +877,37 @@ function JobSheet() {
 
         {step === 1 ? (
         <section className="rounded-[1.3rem] border border-line bg-paper/80 backdrop-blur-xl p-3">
+          <p className="mb-2 text-sm font-semibold">Vad ska göras?</p>
+          <div className="mb-3 flex flex-wrap gap-2">
+            {(serviceById(serviceId)?.subcategories ?? []).map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                aria-pressed={subcategoryId === item.id}
+                onClick={() => {
+                  setSubcategoryId(item.id);
+                  if (text.trim().length < 8) setText(item.desc);
+                }}
+                className={cn("rounded-full border px-3 py-1.5 text-sm", subcategoryId === item.id ? "border-brown bg-brown text-paper" : "border-line bg-paper")}
+              >
+                {item.name}
+              </button>
+            ))}
+            <button
+              type="button"
+              aria-pressed={subcategoryId === "ovrigt"}
+              onClick={() => setSubcategoryId("ovrigt")}
+              className={cn("rounded-full border px-3 py-1.5 text-sm", subcategoryId === "ovrigt" ? "border-brown bg-brown text-paper" : "border-line bg-paper")}
+            >
+              Övrigt
+            </button>
+          </div>
+          {subcategoryById(serviceId, subcategoryId)?.taxRelief ? (
+            <p className="mb-3 text-xs text-muted">
+              {subcategoryById(serviceId, subcategoryId)?.taxRelief.label}. {subcategoryById(serviceId, subcategoryId)?.taxRelief.note}{" "}
+              <a className="underline" href={subcategoryById(serviceId, subcategoryId)?.taxRelief.source}>Skatteverket</a>
+            </p>
+          ) : null}
           <div className="mb-2 flex items-start gap-2">
             <ClipboardList className="mt-0.5 size-5" />
             <div>

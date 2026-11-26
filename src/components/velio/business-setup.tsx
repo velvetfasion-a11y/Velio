@@ -16,49 +16,21 @@ const RadiusMap = dynamic(() => import("@/components/velio/radius-map").then((mo
 });
 import { cn } from "@/lib/cn";
 
-const presets: Record<ServiceId, { name: string; hours: string; price: number }[]> = {
-  stad: [
-    { name: "Hemstädning", hours: "2–4 timmar", price: 650 },
-    { name: "Flyttstäd", hours: "En dag", price: 2490 },
-    { name: "Fönsterputs", hours: "1–2 timmar", price: 490 },
-  ],
-  el: [
-    { name: "Felsökning", hours: "1 timme", price: 750 },
-    { name: "Byte av uttag", hours: "Efter överenskommelse", price: 890 },
-  ],
-  trad: [
-    { name: "Gräsklippning", hours: "1–2 timmar", price: 450 },
-    { name: "Häckklippning", hours: "Halvdag", price: 980 },
-  ],
-  rep: [
-    { name: "Småfix hemma", hours: "1 timme", price: 550 },
-    { name: "Montering", hours: "1–2 timmar", price: 690 },
-  ],
-  sak: [
-    { name: "Låsbyte", hours: "1 timme", price: 890 },
-    { name: "Bevakning", hours: "Pass", price: 420 },
-  ],
-  ren: [
-    { name: "Målning av rum", hours: "En dag", price: 3200 },
-    { name: "Tapetsering", hours: "En dag", price: 2800 },
-  ],
-  per: [
-    { name: "Extra personal", hours: "Halvdag", price: 1600 },
-    { name: "Heldag", hours: "8 timmar", price: 2900 },
-  ],
-  eko: [
-    { name: "Löpande bokföring", hours: "Per månad", price: 1490 },
-    { name: "Deklaration", hours: "En gång", price: 2200 },
-  ],
-  ank: [
-    { name: "Inflyttning", hours: "Halvdag", price: 1800 },
-    { name: "Välkomststäd", hours: "2–3 timmar", price: 790 },
-  ],
-  til: [
-    { name: "Tillsyn av hem", hours: "Besök", price: 350 },
-    { name: "Vattna och vädra", hours: "Besök", price: 290 },
-  ],
-};
+function presetPrice(min?: number, max?: number) {
+  if (min == null || max == null) return 500;
+  return Math.round((min + max) / 2);
+}
+
+const presets: Record<ServiceId, { name: string; hours: string; price: number }[]> = Object.fromEntries(
+  services.map((service) => [
+    service.id,
+    service.subcategories.slice(0, 3).map((item) => ({
+      name: item.name,
+      hours: "Efter överenskommelse",
+      price: presetPrice(item.priceEstimate?.min ?? service.priceEstimate?.min, item.priceEstimate?.max ?? service.priceEstimate?.max),
+    })),
+  ]),
+) as Record<ServiceId, { name: string; hours: string; price: number }[]>;
 
 type Offer = { name: string; hours: string; price: number; on: boolean };
 type Step = "welcome" | "identity" | "doc" | "org" | "person" | "company" | "trades" | "price" | "area" | "photo" | "work" | "preview";

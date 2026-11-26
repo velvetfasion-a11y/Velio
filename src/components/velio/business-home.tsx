@@ -23,11 +23,7 @@ type Offer = {
 const seedOffers: Offer[] = [];
 
 function jobImage(serviceId: string) {
-  if (serviceId === "el") return asset("/velio/tile-el.jpg");
-  if (serviceId === "trad") return asset("/velio/tile-trad.jpg");
-  if (serviceId === "ren") return asset("/velio/tile-ren.jpg");
-  if (serviceId === "stad") return asset("/velio/tile-stad.jpg");
-  return asset("/velio/hero.jpg");
+  return serviceById(serviceId)?.imageThumb ?? asset("/velio/categories/stad-thumb.webp");
 }
 
 const dayLabels = ["Mån", "Tis", "Ons", "Tor", "Fre", "Lör", "Sön"];

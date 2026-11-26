@@ -14,19 +14,6 @@ import { MISSED_CALL_TEXT } from "@/lib/calls/ice";
 
 const EMPTY_CHAT: ChatMsg[] = [];
 
-const serviceLine: Record<string, string> = {
-  sak: "Säkerhet & bevakning",
-  el: "El & installation",
-  stad: "Städning",
-  trad: "Trädgård & skötsel",
-  rep: "Reparationer",
-  ren: "Renovering",
-  per: "Personal",
-  eko: "Ekonomi",
-  ank: "Ankomstservice",
-  til: "Tillsyn & service",
-};
-
 const tagIcon: Record<string, LucideIcon> = {
   Bevakning: Shield,
   Larm: Bell,
@@ -98,7 +85,7 @@ export function ProviderSheet() {
               </p>
             ) : null}
             <p className="mt-1 text-sm text-muted">
-              {providerTradeNames(provider).join(" · ") || serviceLine[provider.serviceId] || service?.name}
+              {providerTradeNames(provider).join(" · ") || service?.name}
               {provider.place || provider.area ? ` · ${provider.place ?? provider.area}` : ""}
             </p>
           </div>
@@ -354,7 +341,7 @@ export function ChatSheet() {
         </button>
         <div className="mt-2 mb-2 rounded-[1.2rem] border border-line bg-paper p-2.5 shadow-soft">
           <div className="flex gap-3">
-            <img src={service?.id === "stad" ? asset("/velio/tile-stad.jpg") : asset(`/velio/${service?.id ?? "stad"}.jpg`)} alt="" className="size-16 rounded-xl object-cover" />
+            <img src={service?.imageThumb ?? asset("/velio/categories/stad-thumb.webp")} alt="" className="size-16 rounded-xl object-cover" />
             <div className="min-w-0 flex-1">
               <div className="flex items-start justify-between gap-2">
                 <p className="font-semibold">{jobTitle}</p>
@@ -1014,7 +1001,7 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
       <div ref={thread} className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
         <div className="rounded-[1.2rem] border border-line bg-white p-2.5">
           <div className="flex items-center gap-3">
-          <img src={asset("/velio/tile-stad.jpg")} alt="" className="size-16 rounded-xl object-cover" />
+          <img src={asset("/velio/categories/stad-thumb.webp")} alt="" className="size-16 rounded-xl object-cover" />
           <div className="min-w-0 flex-1">
             <p className="font-semibold">Städning</p>
             <p className="mt-0.5 flex items-center gap-1 text-sm text-muted"><MapPin className="size-3.5" /> Södermalm</p>

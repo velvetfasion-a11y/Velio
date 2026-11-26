@@ -24,7 +24,9 @@ import { errorCode, takeSignupName } from "@/lib/firebase/auth";
 import { chooseDisplayName } from "@/lib/firebase/display-name";
 import { setCloudActive, setPreferCustomer, prefersCustomer } from "@/lib/firebase/session";
 import {
+  deprecatedServiceMap,
   initialsOf,
+  resolveServiceId,
   serviceById,
   services,
   setProviders,
@@ -110,7 +112,7 @@ function whenStamp(value: unknown) {
 }
 
 function serviceIdOf(value: string): ServiceId {
-  return services.some((service) => service.id === value) ? (value as ServiceId) : services[0].id;
+  return resolveServiceId(value)?.id ?? services[0].id;
 }
 
 function parseOffers(text: string) {
@@ -222,10 +224,14 @@ function emitDirectory(list: Provider[]) {
 
 function jobFromDoc(id: string, data: DocumentData): PostedJob {
   const schedule = data.schedule && typeof data.schedule === "object" ? (data.schedule as Record<string, unknown>) : {};
-  const serviceId = serviceIdOf(asString(schedule.serviceId));
+  const rawService = asString(schedule.serviceId);
+  const serviceId = serviceIdOf(rawService);
+  const storedSub = asString(schedule.subcategoryId);
+  const subcategoryId = storedSub || deprecatedServiceMap[rawService]?.subcategoryId || undefined;
   return {
     id,
     serviceId,
+    ...(subcategoryId ? { subcategoryId } : {}),
     text: asString(data.description) || asString(data.title),
     when: asString(schedule.when),
     address: asString(data.locationLabel),
@@ -641,6 +647,7 @@ export async function deleteWorkerProfile() {
 
 export async function createCloudJob(input: {
   serviceId: ServiceId;
+  subcategoryId?: string;
   text: string;
   when: string;
   address: string;
@@ -648,7 +655,8 @@ export async function createCloudJob(input: {
   price: number;
 }) {
   const uid = uidOrThrow();
-  const serviceName = serviceById(input.serviceId)?.name ?? "Uppdrag";
+  const service = resolveServiceId(input.serviceId);
+  const serviceName = service?.name ?? "Uppdrag";
   const payload: Record<string, unknown> = {
     ownerId: uid,
     title: serviceName.slice(0, 120),
@@ -656,7 +664,8 @@ export async function createCloudJob(input: {
     status: "open",
     schedule: {
       when: input.when.slice(0, 300),
-      serviceId: input.serviceId,
+      serviceId: service?.id ?? input.serviceId,
+      ...(input.subcategoryId ? { subcategoryId: input.subcategoryId.slice(0, 40) } : {}),
       rate: input.rate,
     },
     createdAt: serverTimestamp(),

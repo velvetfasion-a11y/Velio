@@ -429,12 +429,6 @@ export function ProfileScreens() {
 
   if (screen === "posted") {
     const mine = posted.filter((job) => !accountId || job.ownerId === accountId);
-    const images: Record<string, string> = {
-      stad: asset("/velio/tile-stad.jpg"),
-      ren: asset("/velio/tile-ren.jpg"),
-      el: asset("/velio/tile-el.jpg"),
-      trad: asset("/velio/tile-trad.jpg"),
-    };
     return (
       <div className="px-4 pt-4">
         <ScreenHeader title="Mina uppdrag" />
@@ -444,7 +438,7 @@ export function ProfileScreens() {
               const service = serviceById(job.serviceId);
               return (
                 <article key={job.id} className="flex gap-3 rounded-[1.3rem] border border-line bg-paper/80 backdrop-blur-xl p-3">
-                  <img src={images[job.serviceId] || `/velio/${job.serviceId}.jpg`} alt="" className="size-16 rounded-xl object-cover" />
+                  <img src={service?.imageThumb ?? asset("/velio/categories/stad-thumb.webp")} alt="" className="size-16 rounded-xl object-cover" />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-2">
                       <p className="font-semibold">{service?.name}</p>
@@ -880,6 +874,11 @@ export function ProfileScreens() {
             );
           })}
         </div>
+        <h2 className="mt-5 mb-2 px-1 text-xs font-semibold tracking-wide text-muted">BILDKÄLLOR</h2>
+        <a href={asset("/krediter/")} className="mb-5 flex items-center justify-between rounded-[1.4rem] border border-line bg-white px-4 py-3.5 text-[15px]">
+          Fotografer och licenser
+          <ChevronRight className="size-4 text-muted" />
+        </a>
         <h2 className="mt-5 mb-2 px-1 text-xs font-semibold tracking-wide text-muted">KONTAKTA OSS</h2>
         <div className="rounded-[1.4rem] border border-line bg-white px-4 py-4">
           <label className="block">
