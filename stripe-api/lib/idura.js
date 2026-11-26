@@ -1,10 +1,8 @@
 import { createHash, createPublicKey, createVerify } from "node:crypto";
-import { createRequire } from "node:module";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "./firebase.js";
 
-const require = createRequire(import.meta.url);
-const QRCode = require("qrcode");
+import QRCode from "qrcode";
 
 const hintSv = {
   outstandingTransaction: "Starta BankID-appen.",
