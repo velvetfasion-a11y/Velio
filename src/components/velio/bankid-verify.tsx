@@ -97,7 +97,7 @@ export function BankIdVerify({ onVerified }: { onVerified?: (name: string) => vo
       setPhase("wait");
     } catch (reason) {
       const message = reason instanceof Error ? reason.message : "BankID kunde inte startas";
-      if (message.includes("kommer snart")) {
+      if (/kommer snart|failed to fetch|networkerror|load failed/i.test(message)) {
         setPhase("soon");
         return;
       }
@@ -106,7 +106,7 @@ export function BankIdVerify({ onVerified }: { onVerified?: (name: string) => vo
     }
   };
 
-  const statusLabel = idVerified ? "Verifierad" : idStatus === "pending" || phase === "wait" ? "Väntar" : phase === "failed" || idStatus === "canceled" ? "Försök igen" : "";
+  const statusLabel = idVerified ? "Verifierad" : idStatus === "pending" || phase === "wait" ? "Väntar" : "";
 
   return (
     <div className="mt-4 space-y-3">
