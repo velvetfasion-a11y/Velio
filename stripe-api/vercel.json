@@ -5,5 +5,15 @@
       "path": "/api/cron/release-payouts",
       "schedule": "15 4 * * *"
     }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/support/:a/:b/:c",
+      "destination": "/api/support/multi?p=:a/:b/:c"
+    },
+    {
+      "source": "/api/support/:a/:b",
+      "destination": "/api/support/multi?p=:a/:b"
+    }
   ]
 }

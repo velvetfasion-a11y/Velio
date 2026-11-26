@@ -5,7 +5,7 @@ import { upsertAlert } from "../../lib/alerts.js";
 import { cancelJobForUser } from "../../lib/cancel-job.js";
 
 function parts(req) {
-  const value = req.query.path;
+  const value = req.query.p || req.query.path;
   if (Array.isArray(value)) return value;
   return String(value || "").split("/").filter(Boolean);
 }
