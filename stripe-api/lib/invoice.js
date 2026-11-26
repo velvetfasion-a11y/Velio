@@ -76,8 +76,9 @@ function workerVat(user) {
 export function buildInvoice({ intent, job, buyer, workerUser, business, draft, now = new Date() }) {
   const seller = sellerConfig();
   const totalOre = Math.round(Number(intent.amount) || 0);
-  const feeOre = Math.round(totalOre * 0.1);
-  const workOre = totalOre - feeOre;
+  const extra = intent.metadata?.feeModel === "extra";
+  const workOre = extra ? Number(intent.metadata.workOre) || 0 : totalOre - Math.round(totalOre * 0.1);
+  const feeOre = extra ? Number(intent.metadata.feeOre) || 0 : Math.round(totalOre * 0.1);
   const workerRate = workerVat(workerUser);
   const workVat = splitInclusive(workOre, workerRate.rate);
   const feeVat = splitInclusive(feeOre, seller.vatRate);
@@ -112,8 +113,8 @@ export function buildInvoice({ intent, job, buyer, workerUser, business, draft, 
     },
     {
       seller: "velio",
-      title: "Serviceavgift",
-      detail: "VELIO, 10 % av det kunden betalar",
+      title: "Serviceavgift VELIO",
+      detail: "Tillägg utöver utförarens pris",
       amountOre: feeOre,
       ...feeVat,
     },

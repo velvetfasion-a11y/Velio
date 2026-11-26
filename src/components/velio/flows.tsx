@@ -129,18 +129,29 @@ export function ProviderSheet() {
 
         {provider.offers?.length ? (
           <div className="mt-4 border-t border-line pt-4">
-            <h3 className="text-lg font-semibold">Tjänster</h3>
-            <div className="mt-2 space-y-2">
-              {provider.offers.slice(0, 10).map((offer) => (
-                <div key={`${offer.name}-${offer.price}`} className="flex items-baseline justify-between gap-3 text-sm">
-                  <span>
-                    <span className="font-medium">{offer.name}</span>
-                    {offer.hours ? <span className="text-muted"> · {offer.hours}</span> : null}
-                  </span>
-                  <span className="shrink-0">fr. {kr(offer.price)}</span>
-                </div>
+            <h3 className="text-lg font-semibold">Boka en tjänst</h3>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              {provider.offers.slice(0, 8).map((offer) => (
+                <button
+                  key={`${offer.name}-${offer.price}`}
+                  type="button"
+                  onClick={() => {
+                    useVelio.getState().setBookOffer({ name: offer.name, price: offer.price });
+                  }}
+                  className="rounded-2xl border border-line bg-paper px-3 py-3 text-left"
+                >
+                  <span className="block font-semibold leading-tight">{offer.name}</span>
+                  <span className="mt-1 block text-sm text-muted">fr. {kr(offer.price)}</span>
+                </button>
               ))}
             </div>
+            <button
+              type="button"
+              onClick={() => useVelio.getState().setBookOffer(null)}
+              className="mt-2 h-11 w-full rounded-full border border-line text-sm font-semibold"
+            >
+              Beskriv ditt jobb
+            </button>
             {provider.qualifications?.length ? (
               <div className="mt-3 flex flex-wrap gap-2">
                 {provider.qualifications.map((item) => (
@@ -182,9 +193,6 @@ export function ProviderSheet() {
             <p className="mt-1 text-muted">Angivet av utföraren. VELIO har inte kontrollerat bolaget.</p>
             {provider.companyName ? <p className="mt-2">{provider.companyName}</p> : null}
             {provider.orgNumber ? <p>Org.nr {provider.orgNumber}</p> : null}
-            {provider.fTax ? (
-              <p>F-skatt: {provider.fTax === "yes" ? "Ja, enligt utföraren" : provider.fTax === "no" ? "Nej" : "Osäker"}</p>
-            ) : null}
           </div>
         ) : null}
       </div>
@@ -207,7 +215,7 @@ export function ProviderSheet() {
               <MessageCircle className="size-5" />
               Meddelande
             </button>
-            <button type="button" onClick={() => setSheet("book")} className="h-12 flex-[1.4] rounded-full bg-brown text-base font-semibold text-paper">
+            <button type="button" onClick={() => useVelio.getState().setBookOffer(null)} className="h-12 flex-[1.4] rounded-full bg-brown text-base font-semibold text-paper">
               Boka
             </button>
           </div>
@@ -1836,6 +1844,8 @@ export function BookSheet() {
   const addresses = useVelio((state) => state.addresses);
   const go = useVelio((state) => state.go);
   const provider = providerById(providerId);
+  const bookOffer = useVelio((state) => state.bookOffer);
+  const [note, setNote] = useState("");
   const [when, setWhen] = useState<(typeof whenOptions)[number]>(whenOptions[0]);
   const primary = addresses.find((item) => item.primary) ?? addresses[0];
   const [placeId, setPlaceId] = useState(primary?.id ?? "");
@@ -1852,14 +1862,22 @@ export function BookSheet() {
         onClick={(event) => event.stopPropagation()}
       >
         <div className="mx-auto mb-4 h-[3px] w-9 rounded-full bg-line" />
-        <h2 className="font-serif text-[1.85rem] leading-none font-semibold tracking-tight">{service?.name ?? "Boka"}</h2>
+        <h2 className="font-serif text-[1.85rem] leading-none font-semibold tracking-tight">{bookOffer?.name ?? "Beskriv ditt jobb"}</h2>
         <p className="mt-1.5 text-[15px] text-muted">
           {provider.name} · {provider.area}
         </p>
+        {bookOffer ? null : (
+          <textarea
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+            placeholder="Beskriv vad du behöver hjälp med"
+            className="mt-4 h-24 w-full rounded-2xl border border-line px-3 py-3 text-sm outline-none"
+          />
+        )}
         <div className="mt-4 rounded-[1.15rem] bg-sand px-4 py-3.5">
           <div className="flex items-center justify-between">
-            <span className="text-[15px] font-bold">Minimibelopp</span>
-            <span className="text-[17px] font-bold tracking-tight">{kr(provider.price)}</span>
+            <span className="text-[15px] font-bold">{bookOffer ? "Från" : "Minimibelopp"}</span>
+            <span className="text-[17px] font-bold tracking-tight">fr. {kr(bookOffer?.price || provider.price)}</span>
           </div>
           <p className="mt-2.5 text-[14.5px] leading-[1.45] text-ink">
             Beloppet reserveras på ditt kort. Inget dras om arbetet inte utförs — pengarna släpps automatiskt tillbaka. Förfrågan skickas till {first}, och ni kan chatta vidare om {subject(provider.name)} accepterar uppdraget.

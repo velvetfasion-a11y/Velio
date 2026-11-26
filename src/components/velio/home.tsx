@@ -653,7 +653,7 @@ function JobSheet() {
   const [locating, setLocating] = useState(false);
   const [files, setFiles] = useState<string[]>([]);
   const [budget, setBudget] = useState("");
-  const [quotes, setQuotes] = useState(false);
+  const [quotes, setQuotes] = useState<boolean | null>(null);
   const [step, setStep] = useState(0);
   const [done, setDone] = useState(false);
   const [keyboard, setKeyboard] = useState(0);
@@ -790,6 +790,7 @@ function JobSheet() {
       if (!chosenWhen) return showToast("Välj datum, intervall, senast-datum eller flexibel");
     }
     if (step === 3 && !pickedAddress) return showToast("Välj en adress i listan, eller använd din plats");
+    if (step === 4 && quotes == null && !budget) return showToast("Skriv en budget eller välj att få offerter");
     if (step === 4 && budget && !/^\d+$/.test(budget)) return showToast("Skriv budget i hela kronor, eller hoppa över");
     setStep((current) => Math.min(5, current + 1));
   };
@@ -799,7 +800,7 @@ function JobSheet() {
     if (text.trim().length < 8) return showToast(needsDetail ? "Beskriv vad du behöver hjälp med" : "Beskriv uppdraget lite till");
     if (!chosenWhen) return showToast("Välj när uppdraget ska göras");
     if (!pickedAddress) return showToast("Välj en adress");
-    const price = !quotes && budget ? Number(budget) : 0;
+    const price = quotes === false && budget ? Number(budget) : 0;
     const attached = files.length ? `\n\nBifogat: ${files.join(", ")}` : "";
     addPosted({
       serviceId,
@@ -1070,9 +1071,9 @@ function JobSheet() {
           <section className="rounded-[1.3rem] border border-line bg-paper p-3 shadow-soft">
             <button
               type="button"
-              aria-pressed={quotes}
+              aria-pressed={quotes === true}
               onClick={() => {
-                setQuotes(true);
+                setQuotes((value) => (value === true ? null : true));
                 setBudget("");
               }}
               className={cn(
@@ -1093,8 +1094,9 @@ function JobSheet() {
                 inputMode="numeric"
                 value={budget}
                 onChange={(event) => {
-                  setBudget(event.target.value.replace(/\D/g, "").slice(0, 6));
-                  setQuotes(false);
+                  const next = event.target.value.replace(/\D/g, "").slice(0, 6);
+                  setBudget(next);
+                  setQuotes(next ? false : null);
                 }}
                 onFocus={(event) => event.currentTarget.scrollIntoView({ block: "center" })}
                 placeholder="Eller skriv en budget"
@@ -1115,7 +1117,7 @@ function JobSheet() {
             <ReviewRow label="Beskrivning" value={text.trim()} />
             <ReviewRow label="När" value={chosenWhen || "—"} />
             <ReviewRow label="Plats" value={pickedAddress?.label || "—"} />
-            <ReviewRow label="Budget" value={!quotes && budget ? `${budget} kr` : "Offerter, ingen budget"} />
+            <ReviewRow label="Budget" value={quotes === false && budget ? `${budget} kr` : quotes === true ? "Offerter, ingen budget" : "Inte valt"} />
             <ReviewRow label="Bilder" value={files.length ? files.join(", ") : "Inga"} />
           </section>
         ) : null}
@@ -1210,7 +1212,6 @@ function JobCalendar({
                 past && "text-muted/35",
                 between && "bg-wheat text-ink",
                 selected && "bg-brown text-paper",
-                isToday && !selected && "ring-2 ring-brown",
               )}
             >
               <span className="leading-none">{day}</span>

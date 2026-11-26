@@ -249,7 +249,7 @@ export function PaymentSheet({
               {showTestBadge() ? <span className="mt-2 text-[10px] tracking-wide text-[#A39890]">Testläge</span> : null}
             </div>
             <p className="mt-3 text-[15px] text-[#5C534C]">{detail}</p>
-            <p className="mt-1 text-[12px] text-[#8A8178]">Inkl. moms och serviceavgift</p>
+            <p className="mt-1 text-[12px] text-[#8A8178]">Serviceavgift VELIO läggs till. Moms står på fakturan.</p>
             <div className="mt-4 grid grid-cols-2 gap-2">
               <input
                 value={companyName}
@@ -564,8 +564,9 @@ function Success({
   onPdf: () => void;
   onClose: () => void;
 }) {
-  const fee = Math.round(order.priceSek * 0.1);
-  const work = order.priceSek - fee;
+  const work = order.priceSek;
+  const fee = Math.round(work * 0.1);
+  const total = work + fee;
   return (
     <div className="flex flex-col items-center px-6 pt-8 pb-6">
       <span className="velio-pop grid size-16 place-items-center rounded-full bg-[#1A1A1A] text-white">
@@ -580,12 +581,12 @@ function Success({
           <span>{sek(work)}</span>
         </div>
         <div className="mt-1 flex justify-between text-[14px] text-[#5C534C]">
-          <span>VELIO serviceavgift</span>
+          <span>Serviceavgift VELIO</span>
           <span>{sek(fee)}</span>
         </div>
         <div className="mt-3 flex justify-between border-t border-[#EFEBE6] pt-3 text-[16px] font-semibold">
           <span>Totalt</span>
-          <span>{sek(order.priceSek)}</span>
+          <span>{sek(total)}</span>
         </div>
         {companyName || orgNr ? <p className="mt-2 text-[12px] text-[#8A8178]">{[companyName, orgNr].filter(Boolean).join(" · ")}</p> : null}
         <p className="mt-2 text-[12px] text-[#8A8178]">Moms specificeras på fakturan. Saknas uppgifter är den ett utkast.</p>

@@ -142,13 +142,11 @@ export function describeWorker(input: {
   const prices = (input.offers ?? [])
     .map((offer) => `${offer.name}: från ${offer.price} kr${offer.hours ? ` (${offer.hours})` : ""}`)
     .join("\n");
-  const tax =
+  const privateNote =
     input.sellerKind === "private"
       ? "Kunden kan behöva hantera skatt och RUT på ett annat sätt än mot ett företag. Texten är en platshållare, inte juridisk vägledning."
-      : input.fTax
-        ? `F-skatt: ${input.fTax === "yes" ? "ja, enligt dig" : input.fTax === "no" ? "nej" : "osäker"}. Inte kontrollerat mot Skatteverket.`
-        : "";
-  return [input.desc.trim(), prices ? `Priser\n${prices}` : "", tax].filter(Boolean).join("\n\n").slice(0, 4000);
+      : "";
+  return [input.desc.trim(), prices ? `Priser\n${prices}` : "", privateNote].filter(Boolean).join("\n\n").slice(0, 4000);
 }
 
 function businessToProvider(id: string, data: DocumentData): Provider {
@@ -566,6 +564,7 @@ export async function savePrivateIdentity(input: {
   orgNumber?: string;
   nationalId?: string;
   phone?: string;
+  fTax?: "yes" | "no" | "unsure";
 }) {
   const uid = uidOrThrow();
   const patch: Record<string, unknown> = {
@@ -573,9 +572,15 @@ export async function savePrivateIdentity(input: {
     updatedAt: serverTimestamp(),
     orgNumber: input.accountType === "business" && input.orgNumber ? input.orgNumber.trim().slice(0, 32) : deleteField(),
     nationalId: input.accountType === "private" && input.nationalId ? input.nationalId.replace(/\D/g, "").slice(0, 32) : deleteField(),
+    fSkatt: input.fTax === "yes" ? true : input.fTax === "no" ? false : deleteField(),
   };
   if (input.phone) patch.phone = input.phone.trim().slice(0, 32);
-  await updateDoc(doc(db(), "users", uid), patch);
+  try {
+    await updateDoc(doc(db(), "users", uid), patch);
+  } catch {
+    const { fSkatt: _ignored, ...withoutTax } = patch;
+    await updateDoc(doc(db(), "users", uid), withoutTax);
+  }
 }
 
 export async function publishWorkerProfile(input: {
@@ -588,6 +593,7 @@ export async function publishWorkerProfile(input: {
   sellerKind: "private" | "company";
   orgNumber?: string;
   nationalId?: string;
+  fTax?: "yes" | "no" | "unsure";
 }) {
   const uid = uidOrThrow();
   const displayName = cleanName(input.displayName, cleanName(input.companyName, "VELIO"));
@@ -630,6 +636,7 @@ export async function publishWorkerProfile(input: {
     accountType: input.sellerKind === "company" ? "business" : "private",
     orgNumber: input.orgNumber,
     nationalId: input.nationalId,
+    fTax: input.fTax,
   });
   setPreferCustomer(false);
 }

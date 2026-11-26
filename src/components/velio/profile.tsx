@@ -947,6 +947,30 @@ export function ProfileScreens() {
 
   return (
     <div className="bg-cream px-4 pt-4 pb-4">
+      <div className="mb-4 grid grid-cols-2 rounded-full bg-sand p-1" role="group" aria-label="Byt mellan kund och utförare">
+        <button
+          type="button"
+          aria-pressed={accountMode === "customer"}
+          onClick={() => {
+            setAccountMode("customer");
+            go("home");
+          }}
+          className={cn("h-11 rounded-full text-sm font-semibold", accountMode === "customer" ? "bg-brown text-paper" : "text-ink")}
+        >
+          Kund
+        </button>
+        <button
+          type="button"
+          aria-pressed={accountMode === "business"}
+          onClick={() => {
+            setAccountMode("business");
+            go("home");
+          }}
+          className={cn("h-11 rounded-full text-sm font-semibold", accountMode === "business" ? "bg-brown text-paper" : "text-ink")}
+        >
+          Utförare
+        </button>
+      </div>
       {listing || own ? (
         <ModeSwitch
           name={profile.name}

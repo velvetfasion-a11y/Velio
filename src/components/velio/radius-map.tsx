@@ -1,12 +1,14 @@
 import { useEffect } from "react";
 import { Circle, MapContainer, TileLayer, useMap } from "react-leaflet";
+import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
-function SyncView({ lat, lng, km }: { lat: number; lng: number; km: number }) {
+function FitCircle({ lat, lng, km }: { lat: number; lng: number; km: number }) {
   const map = useMap();
   useEffect(() => {
-    const zoom = km >= 40 ? 10 : km >= 20 ? 11 : km >= 10 ? 12 : 13;
-    map.setView([lat, lng], zoom);
+    const bounds = L.circle([lat, lng], { radius: Math.max(1, km) * 1000 }).getBounds();
+    map.fitBounds(bounds, { padding: [18, 18], animate: false });
+    map.invalidateSize();
   }, [km, lat, lng, map]);
   return null;
 }
@@ -19,7 +21,7 @@ export function RadiusMap({ km, lat, lng }: { km: number; lat: number; lng: numb
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        <SyncView lat={lat} lng={lng} km={km} />
+        <FitCircle lat={lat} lng={lng} km={km} />
         <Circle center={[lat, lng]} radius={km * 1000} pathOptions={{ color: "#4A2C1D", weight: 2, fillColor: "#4A2C1D", fillOpacity: 0.18 }} />
       </MapContainer>
     </div>

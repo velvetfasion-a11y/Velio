@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Building2, Check, IdCard, Shield, ShieldCheck, UserRound, type LucideIcon } from "lucide-react";
 import { services, type ServiceId } from "@/lib/velio/data";
-import { formatOrg, lookupCompany, orgDigits, type CompanyRecord } from "@/lib/velio/company";
+import { formatOrg, orgDigits, searchCompanies, validOrg, type CompanyRecord } from "@/lib/velio/company";
 import { searchAddresses, type AddressHit } from "@/lib/velio/geo";
 import { formatPerson, personDigits, validatePersonnummer } from "@/lib/velio/personnummer";
 import { AddressSearch } from "@/components/velio/address-search";
@@ -37,7 +37,7 @@ type Step = "welcome" | "identity" | "doc" | "org" | "person" | "company" | "tra
 type Seller = "company" | "private" | null;
 
 function stepsFor(seller: Seller): Step[] {
-  const middle: Step[] = seller === "private" ? ["person"] : ["company"];
+  const middle: Step[] = seller === "private" ? ["person"] : [];
   return ["identity", "org", ...middle, "trades", "price", "area", "photo", "work", "preview"];
 }
 
@@ -104,7 +104,10 @@ export function BusinessSetup() {
   const [pn, setPn] = useState("");
   const [pnFromBank, setPnFromBank] = useState(false);
   const [revealPn, setRevealPn] = useState(false);
-  const [lookupBusy, setLookupBusy] = useState(false);
+  const [companyQuery, setCompanyQuery] = useState("");
+  const [companyHits, setCompanyHits] = useState<Omit<CompanyRecord, "fTax">[]>([]);
+  const [companyNote, setCompanyNote] = useState("");
+  const [companyBusy, setCompanyBusy] = useState(false);
   const [company, setCompany] = useState<CompanyRecord | null>(null);
   const [trades, setTrades] = useState<ServiceId[]>([]);
   const [offers, setOffers] = useState<Offer[]>([]);
@@ -180,7 +183,7 @@ export function BusinessSetup() {
   const resumeSetup = () => {
     const draft = setupDraft;
     if (!draft) return;
-    if (typeof draft.step === "string") setStep(draft.step as Step);
+    if (typeof draft.step === "string") setStep(draft.step === "company" ? "org" : (draft.step as Step));
     if (draft.identityVia === "bankid" || draft.identityVia === "document") setIdentityVia(draft.identityVia);
     if (draft.seller === "company" || draft.seller === "private") setSeller(draft.seller);
     if (typeof draft.org === "string") setOrg(draft.org);
@@ -211,18 +214,43 @@ export function BusinessSetup() {
     });
   };
 
-  const loadCompany = async () => {
-    setLookupBusy(true);
-    try {
-      const found = await lookupCompany(org);
-      setCompany(found);
-      setStep("company");
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : "Kunde inte slå upp numret");
-    } finally {
-      setLookupBusy(false);
+  useEffect(() => {
+    if (seller !== "company" || company) {
+      setCompanyHits([]);
+      setCompanyBusy(false);
+      return;
     }
-  };
+    const query = companyQuery.trim();
+    if (query.length < 2) {
+      setCompanyHits([]);
+      setCompanyNote("");
+      return;
+    }
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setCompanyBusy(true);
+      void searchCompanies(query, controller.signal)
+        .then((found) => {
+          if (controller.signal.aborted) return;
+          setCompanyHits(found.results);
+          setCompanyNote(found.results.length ? "" : found.message);
+        })
+        .catch((error: unknown) => {
+          if (error instanceof DOMException && error.name === "AbortError") return;
+          if (!controller.signal.aborted) {
+            setCompanyHits([]);
+            setCompanyNote("Sökningen misslyckades. Fyll i namn och adress själv.");
+          }
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setCompanyBusy(false);
+        });
+    }, 320);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [company, companyQuery, seller]);
 
   const goPrice = () => {
     if (!trades.length) return showToast("Välj minst en tjänst");
@@ -256,7 +284,11 @@ export function BusinessSetup() {
       nationalId: seller === "private" ? pn : undefined,
       ...(seller === "private" || !company
         ? {}
-        : { companyName: company.name, orgNumber: company.orgNumber, fTax: company.fTax }),
+        : {
+            companyName: company.name,
+            orgNumber: company.orgNumber,
+            ...(company.fTax ? { fTax: company.fTax } : {}),
+          }),
     };
     if (seller !== "private" && !company) return showToast("Slå upp företaget först");
     publishDemoBusiness(listing);
@@ -323,12 +355,10 @@ export function BusinessSetup() {
   const title =
     step === "identity"
       ? "Hur vill du identifiera dig?"
-      : step === "org"
+        : step === "org"
         ? "Har du ett företag?"
         : step === "person"
           ? "Ditt personnummer"
-        : step === "company"
-          ? "Stämmer företaget?"
           : step === "trades"
             ? "Vad erbjuder du?"
             : step === "price"
@@ -344,12 +374,10 @@ export function BusinessSetup() {
   const subtitle =
     step === "identity"
       ? "BankID är vägen när en leverantör är kopplad. ID-handling granskas inte i den här versionen."
-      : step === "org"
-        ? "Bolag slår upp organisationsnummer. Utan bolag använder du personnummer i stället."
+        : step === "org"
+        ? "Sök på organisationsnummer. Hittas bolaget fylls namn och adress i. Annars skriver du dem själv."
         : step === "person"
           ? "Numret behövs för att veta vem som ska få betalt. Det sparas bara på ditt privata konto, som bara du kan läsa, och visas inte på den publika profilen."
-        : step === "company"
-          ? "Uppgifterna kommer från demoregistret. F-skatt är inte kontrollerad mot Skatteverket."
           : step === "trades"
             ? "Välj upp till tre. Förslagen på nästa steg följer det du väljer."
             : step === "price"
@@ -395,16 +423,37 @@ export function BusinessSetup() {
                 <ChoiceCard icon={UserRound} title="Privatperson" subtitle="Inget företag" selected={seller === "private"} onClick={() => setSeller("private")} />
               </div>
               {seller === "company" ? (
-                <label className="block">
-                  <span className="mb-2 block text-sm font-medium text-muted">Organisationsnummer</span>
-                  <input
-                    value={formatOrg(orgDigits(org))}
-                    inputMode="numeric"
-                    placeholder="556677-8899"
-                    onChange={(event) => setOrg(orgDigits(event.target.value))}
-                    className="h-14 w-full rounded-2xl border border-line bg-paper px-4 text-lg text-ink outline-none"
-                  />
-                </label>
+                <CompanyFields
+                  company={company}
+                  query={companyQuery}
+                  hits={companyHits}
+                  note={companyNote}
+                  busy={companyBusy}
+                  onQuery={(value) => {
+                    setCompanyQuery(value);
+                    setOrg(orgDigits(value));
+                  }}
+                  onPick={(hit) => {
+                    setCompany({ ...hit, fTax: company?.fTax ?? null, source: "bolagsverket" });
+                    setOrg(orgDigits(hit.orgNumber));
+                    setCompanyHits([]);
+                    setCompanyNote("");
+                  }}
+                  onClear={() => setCompany(null)}
+                  onChange={(next) => setCompany({ ...next, source: next.source || "manual" })}
+                  onManual={() => {
+                    if (company) return;
+                    const digits = orgDigits(companyQuery);
+                    setCompany({
+                      orgNumber: validOrg(digits) ? formatOrg(digits) : "",
+                      name: digits ? "" : companyQuery.trim(),
+                      street: "",
+                      city: "",
+                      fTax: null,
+                      source: "manual",
+                    });
+                  }}
+                />
               ) : null}
             </div>
           ) : null}
@@ -443,48 +492,6 @@ export function BusinessSetup() {
                     ? "När BankID svarar fylls personnumret i här. Det är inte kopplat, så du skriver det själv. De fyra sista siffrorna döljs när fältet är klart."
                     : "De fyra sista siffrorna döljs när fältet är klart. Numret sparas bara på ditt privata konto."}
               </p>
-            </div>
-          ) : null}
-
-          {step === "company" && company ? (
-            <div className="space-y-3">
-              <p className="rounded-2xl bg-sand px-3 py-2 text-xs leading-snug">Demoregister. En Bolagsverket- eller Roaring-koppling kan ersätta det här.</p>
-              <label className="block text-sm font-medium">
-                Namn
-                <input value={company.name} onChange={(event) => setCompany({ ...company, name: event.target.value })} className="mt-1 h-14 w-full rounded-2xl border border-line bg-paper px-4 text-lg font-normal outline-none" />
-              </label>
-              <label className="block text-sm font-medium">
-                Adress
-                <input
-                  value={`${company.street}, ${company.city}`}
-                  onChange={(event) => {
-                    const [street, city] = event.target.value.split(",");
-                    setCompany({ ...company, street: (street ?? "").trim(), city: (city ?? company.city).trim() });
-                  }}
-                  className="mt-1 h-14 w-full rounded-2xl border border-line bg-paper px-4 text-lg font-normal outline-none"
-                />
-              </label>
-              <div>
-                <p className="text-sm font-medium">F-skatt</p>
-                <div className="mt-2 grid grid-cols-3 gap-2">
-                  {(
-                    [
-                      ["yes", "Ja"],
-                      ["no", "Nej"],
-                      ["unsure", "Vet inte"],
-                    ] as const
-                  ).map(([value, label]) => (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => setCompany({ ...company, fTax: value })}
-                      className={cn("h-12 rounded-full text-sm font-semibold", company.fTax === value ? "bg-brown text-paper" : "border border-line bg-paper")}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
             </div>
           ) : null}
 
@@ -528,6 +535,7 @@ export function BusinessSetup() {
                     <span className="block text-xs text-muted">{offer.hours}</span>
                   </span>
                   <label className="flex items-center gap-1 text-sm font-semibold">
+                    <span className="text-muted">fr.</span>
                     <input
                       inputMode="numeric"
                       value={offer.price}
@@ -628,7 +636,6 @@ export function BusinessSetup() {
                 ) : (
                   <>
                     <p className="mt-3 text-sm text-muted">Org.nr {company?.orgNumber}</p>
-                    <p className="text-sm text-muted">F-skatt: {company?.fTax === "yes" ? "Ja, enligt dig" : company?.fTax === "no" ? "Nej" : "Osäker"}</p>
                   </>
                 )}
                 <p className="mt-4 flex gap-2 rounded-2xl bg-sand px-3 py-3 text-sm leading-snug">
@@ -644,7 +651,6 @@ export function BusinessSetup() {
         {(step === "identity" && !identityVia) || (step === "org" && !seller) ? null : (
           <button
             type="button"
-            disabled={lookupBusy}
             onClick={() => {
               if (step === "identity") {
                 if (identityVia === "document") setStep("doc");
@@ -653,7 +659,13 @@ export function BusinessSetup() {
               }
               if (step === "org") {
                 if (seller === "private") openPrivate();
-                else void loadCompany();
+                else {
+                  const digits = orgDigits(company?.orgNumber || org);
+                  if (digits && !validOrg(digits)) return showToast("Organisationsnummer skrivs som 10 siffror");
+                  if (!company?.name.trim()) return showToast("Välj ett bolag eller skriv namnet");
+                  if (!company.fTax) return showToast("Välj F-skatt: ja, nej eller vet inte");
+                  setStep("trades");
+                }
                 return;
               }
               else if (step === "person") {
@@ -661,8 +673,7 @@ export function BusinessSetup() {
                 if (!check.ok) return showToast(check.message);
                 setRevealPn(false);
                 setStep("trades");
-              } else if (step === "company") setStep("trades");
-              else if (step === "trades") goPrice();
+              } else if (step === "trades") goPrice();
               else if (step === "price") {
                 if (!offers.some((offer) => offer.on)) return showToast("Behåll minst ett pris");
                 setStep("area");
@@ -673,10 +684,123 @@ export function BusinessSetup() {
             }}
             className="h-14 w-full rounded-full bg-brown text-base font-semibold text-paper disabled:opacity-50"
           >
-            {lookupBusy ? "Slår upp…" : step === "org" && seller === "company" ? "Hämta företag" : step === "work" && photos.length === 0 ? "Hoppa över" : step === "preview" ? "Publicera som Demo" : "Nästa"}
+            {step === "work" && photos.length === 0 ? "Hoppa över" : step === "preview" ? "Publicera som Demo" : "Nästa"}
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+function CompanyFields({
+  company,
+  query,
+  hits,
+  note,
+  busy,
+  onQuery,
+  onPick,
+  onClear,
+  onChange,
+  onManual,
+}: {
+  company: CompanyRecord | null;
+  query: string;
+  hits: Omit<CompanyRecord, "fTax">[];
+  note: string;
+  busy: boolean;
+  onQuery: (value: string) => void;
+  onPick: (hit: Omit<CompanyRecord, "fTax">) => void;
+  onClear: () => void;
+  onChange: (next: CompanyRecord) => void;
+  onManual: () => void;
+}) {
+  const tax = (
+    <div>
+      <p className="text-sm font-medium">F-skatt</p>
+      <div className="mt-2 grid grid-cols-3 gap-2">
+        {(
+          [
+            ["yes", "Ja"],
+            ["no", "Nej"],
+            ["unsure", "Vet inte"],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            aria-pressed={company?.fTax === value}
+            onClick={() => company && onChange({ ...company, fTax: value })}
+            className={cn("h-12 rounded-full text-sm font-semibold", company?.fTax === value ? "bg-brown text-paper" : "border border-line bg-paper")}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <p className="mt-2 text-xs leading-snug text-muted">Svaret sparas bara på ditt konto. Det visas inte på profilen och kontrolleras inte mot Skatteverket.</p>
+    </div>
+  );
+  if (company) {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-start justify-between gap-3 rounded-2xl bg-sand px-3 py-3">
+          <div>
+            <p className="font-semibold">{company.name || "Företag"}</p>
+            <p className="text-sm text-muted">{company.orgNumber || "Utan organisationsnummer"}</p>
+          </div>
+          <button type="button" onClick={onClear} className="text-sm font-semibold text-brown">
+            Ändra
+          </button>
+        </div>
+        <label className="block text-sm font-medium">
+          Namn
+          <input value={company.name} onChange={(event) => onChange({ ...company, name: event.target.value, source: "manual" })} className="mt-1 h-12 w-full rounded-2xl border border-line bg-paper px-4 font-normal outline-none" />
+        </label>
+        <label className="block text-sm font-medium">
+          Gatuadress
+          <input value={company.street} onChange={(event) => onChange({ ...company, street: event.target.value, source: "manual" })} className="mt-1 h-12 w-full rounded-2xl border border-line bg-paper px-4 font-normal outline-none" />
+        </label>
+        <label className="block text-sm font-medium">
+          Ort
+          <input value={company.city} onChange={(event) => onChange({ ...company, city: event.target.value, source: "manual" })} className="mt-1 h-12 w-full rounded-2xl border border-line bg-paper px-4 font-normal outline-none" />
+        </label>
+        {tax}
+      </div>
+    );
+  }
+  return (
+    <div>
+      <label className="block">
+        <span className="mb-2 block text-sm font-medium text-muted">Företag eller organisationsnummer</span>
+        <input
+          value={query}
+          placeholder="Namn eller 556677-8899"
+          aria-label="Sök företag"
+          autoComplete="off"
+          onChange={(event) => onQuery(event.target.value)}
+          className="h-14 w-full rounded-2xl border border-line bg-paper px-4 text-lg text-ink outline-none"
+        />
+      </label>
+      {busy ? <p className="mt-2 text-sm text-muted">Söker bolag…</p> : null}
+      {hits.length ? (
+        <ul className="mt-2 overflow-hidden rounded-2xl border border-line bg-paper">
+          {hits.map((hit) => (
+            <li key={hit.orgNumber} className="border-b border-line last:border-b-0">
+              <button type="button" onClick={() => onPick(hit)} className="block w-full px-3 py-3 text-left">
+                <span className="block font-semibold">{hit.name}</span>
+                <span className="block text-sm text-muted">
+                  {hit.orgNumber}
+                  {hit.city ? ` · ${hit.city}` : ""}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {note ? <p className="mt-2 text-sm text-muted">{note}</p> : null}
+      <button type="button" onClick={onManual} className="mt-3 text-sm font-semibold text-brown">
+        Fyll i namn och adress själv
+      </button>
     </div>
   );
 }

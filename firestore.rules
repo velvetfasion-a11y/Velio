@@ -350,7 +350,7 @@ service cloud.firestore {
 
     function isValidUser(data) {
       return hasRequiredFields(['uid', 'createdAt', 'updatedAt']) &&
-        hasOnlyAllowedFields(['uid', 'email', 'phone', 'displayName', 'accountType', 'orgNumber', 'nationalId', 'stripeAccountId', 'stripeOnboardingStatus', 'stripeAccountState', 'stripeRequirements', 'status', 'statusReason', 'disabledAt', 'idVerified', 'idMethod', 'emailLower', 'phoneE164', 'createdAt', 'updatedAt']) &&
+        hasOnlyAllowedFields(['uid', 'email', 'phone', 'displayName', 'accountType', 'orgNumber', 'nationalId', 'fSkatt', 'stripeAccountId', 'stripeOnboardingStatus', 'stripeAccountState', 'stripeRequirements', 'status', 'statusReason', 'disabledAt', 'idVerified', 'idMethod', 'emailLower', 'phoneE164', 'createdAt', 'updatedAt']) &&
         data.uid is string &&
         data.uid == request.auth.uid &&
         isValidTimestamp(data.createdAt) &&
@@ -362,6 +362,7 @@ service cloud.firestore {
         (!('accountType' in data) || data.accountType in ['private', 'business']) &&
         isValidOptionalString(data, 'orgNumber', 0, 32) &&
         isValidOptionalString(data, 'nationalId', 0, 32) &&
+        (!('fSkatt' in data) || data.fSkatt is bool) &&
         isValidOptionalString(data, 'stripeAccountId', 1, 64) &&
         (!('stripeOnboardingStatus' in data) || data.stripeOnboardingStatus in ['none', 'pending', 'complete']) &&
         (!('status' in data) || data.status in ['active', 'suspended', 'blocked']) &&

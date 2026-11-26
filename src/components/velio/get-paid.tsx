@@ -61,7 +61,7 @@ export function GetPaidCard() {
         {showTestBadge() ? <span className="rounded-full bg-[#F3EEE8] px-2.5 py-1 text-[11px] font-semibold text-[#6B4226]">Testläge</span> : null}
       </div>
       <p className="mt-2 text-sm leading-relaxed text-muted">
-        När ett jobb varit klart i tre timmar förs 90% över till dig. VELIO behåller serviceavgiften.
+        Du får betalt när jobbet är klart.
       </p>
       <ol className="mt-3 space-y-1 text-sm text-muted">
         <li>1. Koppla kontot</li>

@@ -50,6 +50,9 @@ export default async function handler(req, res) {
         offerId,
         workerId: offer.ownerId,
         customerId: user.uid,
+        feeModel: "extra",
+        workOre: String(workOre),
+        feeOre: String(feeOre),
         ...(safeOrgNr(req.body?.buyerOrgNr) ? { buyerOrgNr: safeOrgNr(req.body.buyerOrgNr) } : {}),
         ...(String(req.body?.buyerCompanyName || "").trim()
           ? { buyerCompanyName: String(req.body.buyerCompanyName).trim().slice(0, 120) }

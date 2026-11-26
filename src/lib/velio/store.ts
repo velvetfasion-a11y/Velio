@@ -419,6 +419,8 @@ type VelioState = {
   search: string;
   serviceId: ServiceId | null;
   providerId: string | null;
+  bookOffer: { name: string; price: number } | null;
+  setBookOffer: (offer: { name: string; price: number } | null) => void;
   receiptId: string | null;
   mapMode: boolean;
   sort: SortKey;
@@ -642,6 +644,8 @@ export const useVelio = create<VelioState>()(
       screen: "home",
       navStack: [],
       sheet: null,
+      bookOffer: null,
+      setBookOffer: (bookOffer) => set({ bookOffer, sheet: "book" }),
       loggedIn: false,
       loginIntro: false,
       authReady: false,
@@ -1714,13 +1718,15 @@ export const useVelio = create<VelioState>()(
         const provider = providerById(get().providerId);
         if (!provider) return;
         const primary = get().addresses.find((item) => item.primary) ?? get().addresses[0];
+        const chosen = get().bookOffer;
+        const price = chosen?.price || provider.price;
         const booking: Booking = {
           id: uid(),
           serviceId: provider.serviceId,
           providerId: provider.id,
-          whenLabel,
-          cost: provider.price,
-          holdKr: provider.price,
+          whenLabel: chosen ? `${chosen.name} · ${whenLabel}` : whenLabel,
+          cost: price,
+          holdKr: price,
           tip: null,
           location: location?.trim() || primary?.line || get().userLocation?.label || provider.area,
           rating: null,
@@ -1731,7 +1737,7 @@ export const useVelio = create<VelioState>()(
           activeBookingId: booking.id,
           sheet: "request",
         });
-        get().showToast(`${kr(provider.price)} reserverat. Inget dras om arbetet inte utförs.`);
+        get().showToast(`${kr(price)} reserverat. Inget dras om arbetet inte utförs.`);
         get().pushNotification({
           kind: "booking_requested",
           title: "Förfrågan skickad",
@@ -1973,6 +1979,7 @@ export const useVelio = create<VelioState>()(
               sellerKind: listing.sellerKind === "company" ? "company" : "private",
               orgNumber: listing.orgNumber,
               nationalId: listing.nationalId,
+              fTax: listing.fTax,
             });
             const where = areaSummary(listing.areas);
             const published = listingToProvider({

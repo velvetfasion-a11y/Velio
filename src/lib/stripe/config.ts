@@ -28,11 +28,11 @@ export function showTestBadge() {
   return paymentsMode() === "demo" || key.startsWith("pk_test_");
 }
 
-/** The 10% service fee is included in the offer the customer pays. */
+/** The offer is what the worker is paid. The customer also pays a 10% VELIO fee. */
 export function quoteBreakdown(priceSek: number) {
-  const total = Math.max(0, Math.round(priceSek));
-  const fee = Math.round(total * 0.1);
-  const work = total - fee;
+  const work = Math.max(0, Math.round(priceSek));
+  const fee = Math.round(work * 0.1);
+  const total = work + fee;
   return { work, fee, total };
 }
 

@@ -18,7 +18,7 @@ export default async function handler(req, res) {
         onboardingStatus: snap.data()?.stripeOnboardingStatus || "pending",
       });
     }
-    // Recipient account: VELIO charges the customer, then transfers 90% here.
+    // Recipient account: the customer pays the job plus the VELIO fee. The worker receives the job amount.
     // Express dashboard, Stripe collects KYC in the embedded onboarding.
     const account = await stripeV2("POST", "/v2/core/accounts", {
       contact_email: user.email || undefined,

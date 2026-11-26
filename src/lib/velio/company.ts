@@ -1,21 +1,20 @@
-/**
- * Company lookup seam. A Bolagsverket or Roaring client can replace
- * `lookupCompany` later. This build only has a local demoregister:
- * nothing is sent to a registry, and F-skatt is not a Skatteverket check.
- */
+import { paymentsApiBase } from "@/lib/stripe/config";
 
 export type CompanyRecord = {
   orgNumber: string;
   name: string;
   street: string;
   city: string;
-  fTax: "yes" | "no" | "unsure";
-  source: "placeholder";
+  postalCode?: string;
+  fTax: "yes" | "no" | "unsure" | null;
+  source: "bolagsverket" | "manual";
 };
 
-const samples: Record<string, Omit<CompanyRecord, "orgNumber" | "source">> = {
-  "5566778899": { name: "Lind Städ AB", street: "Götgatan 12", city: "Stockholm", fTax: "yes" },
-  "5599887766": { name: "Söder El & Service AB", street: "Folkungagatan 16", city: "Stockholm", fTax: "yes" },
+export type CompanySearch = {
+  configured: boolean;
+  nameSearch: boolean;
+  results: Omit<CompanyRecord, "fTax">[];
+  message: string;
 };
 
 export function orgDigits(value: string) {
@@ -27,17 +26,35 @@ export function formatOrg(digits: string) {
   return `${digits.slice(0, 6)}-${digits.slice(6)}`;
 }
 
-export async function lookupCompany(raw: string): Promise<CompanyRecord> {
-  const digits = orgDigits(raw);
-  if (digits.length !== 10) throw new Error("Organisationsnummer skrivs som 10 siffror.");
-  await new Promise((resolve) => setTimeout(resolve, 420));
-  const known = samples[digits];
-  const tail = Number(digits.slice(-1));
-  const fallback = {
-    name: ["Nordhem Service AB", "Mälarens Hantverk AB", "Hammarby Tillsyn AB"][tail % 3],
-    street: ["Hornsgatan 88", "Sveavägen 42", "Ringvägen 100"][tail % 3],
-    city: "Stockholm",
-    fTax: (tail % 5 === 0 ? "unsure" : "yes") as CompanyRecord["fTax"],
+export function validOrg(digits: string) {
+  if (!/^\d{10}$/.test(digits)) return false;
+  let sum = 0;
+  for (let i = 0; i < 10; i += 1) {
+    let n = Number(digits[i]);
+    if (i % 2 === 0) {
+      n *= 2;
+      if (n > 9) n -= 9;
+    }
+    sum += n;
+  }
+  return sum % 10 === 0;
+}
+
+/** Real companies from the API. An empty list means manual entry, never a fake register. */
+export async function searchCompanies(query: string, signal?: AbortSignal): Promise<CompanySearch> {
+  const base = paymentsApiBase();
+  if (!base) {
+    return { configured: false, nameSearch: false, results: [], message: "Företagssök är inte kopplat. Fyll i namn och adress själv." };
+  }
+  const response = await fetch(`${base}/api/companies/search?q=${encodeURIComponent(query)}`, { signal });
+  const data = (await response.json().catch(() => ({}))) as Partial<CompanySearch>;
+  if (!response.ok) {
+    return { configured: true, nameSearch: false, results: [], message: data.message || "Sökningen misslyckades. Fyll i uppgifterna själv." };
+  }
+  return {
+    configured: Boolean(data.configured),
+    nameSearch: Boolean(data.nameSearch),
+    results: Array.isArray(data.results) ? data.results : [],
+    message: data.message || "",
   };
-  return { orgNumber: formatOrg(digits), source: "placeholder", ...(known ?? fallback) };
 }
