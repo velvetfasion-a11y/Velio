@@ -1,7 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { FileText, Star, Bell, ArrowLeft, Heart, BadgeCheck, Shield, Calendar, MessageCircle, Clock, ChevronDown, ChevronRight, MapPin, Camera, Wrench, Phone, Ellipsis, Plus, Navigation, ClipboardCheck, Car, Check, Coins, CreditCard, Mic, Send, Briefcase, Search, Pencil, Ban, ClipboardList, Headphones, X, Lock, ShieldCheck, type LucideIcon } from "lucide-react";
 import { kr, providerById, providerDescription, providerTradeNames, ratingLabel, serviceById, sortLabels, whenOptions, type SortKey } from "@/lib/velio/data";
-import { ownBusiness, useVelio, bookingStatusLabel, type Booking, type ChatMsg } from "@/lib/velio/store";
+import { ownBusiness, useVelio, bookingStatusLabel, type Booking, type ChatCard, type ChatMsg } from "@/lib/velio/store";
+import { displayMessage } from "@/lib/velio/chat-codec";
+import { capturePosition } from "@/lib/velio/geo";
+import { etaFromArea, geocodePlace, routeEta } from "@/lib/velio/route-eta";
+import { isCloudActive } from "@/lib/firebase/session";
+import { FinalPriceMessage, OnTheWayCard, TimeConfirmationCard } from "@/components/velio/chat-cards";
 import { cn } from "@/lib/cn";
 import { AppHeader, PlaceLink } from "@/components/velio/header";
 import { CityMap } from "@/components/velio/osm-map";
@@ -13,6 +18,115 @@ import { MissedCallCard } from "@/components/velio/call-screen";
 import { MISSED_CALL_TEXT } from "@/lib/calls/ice";
 
 const EMPTY_CHAT: ChatMsg[] = [];
+
+function clockNow() {
+  return new Date().toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" });
+}
+
+function progressStep(messages: ChatMsg[]) {
+  const shown = messages.map(displayMessage);
+  const paid = shown.some((message) => message.card?.kind === "paid" || (message.card?.kind === "final_price" && message.card.status === "paid"));
+  const arrived = shown.some((message) => message.card?.kind === "on_the_way" && message.card.status === "arrived") || messages.some((message) => /framme/i.test(message.text || ""));
+  const enroute = shown.some((message) => message.card?.kind === "on_the_way" && message.card.status === "enroute") || messages.some((message) => /på väg/i.test(message.text || ""));
+  const timeSet = shown.some((message) => message.card?.kind === "time_confirmation" || message.card?.kind === "slot");
+  if (paid) return 4;
+  if (arrived) return 3;
+  if (enroute) return 2;
+  if (timeSet) return 1;
+  return 0;
+}
+
+async function linkedJobId(peerId: string) {
+  const { chatForPeer } = await import("@/lib/firebase/cloud");
+  const fromChat = chatForPeer(peerId)?.jobId;
+  if (fromChat) return fromChat;
+  const state = useVelio.getState();
+  const uid = state.accountId;
+  const offer = state.jobOffers.find(
+    (item) =>
+      item.jobId &&
+      item.status !== "declined" &&
+      item.status !== "withdrawn" &&
+      ((item.ownerId === uid && item.jobOwnerId === peerId) || (item.jobOwnerId === uid && item.ownerId === peerId)),
+  );
+  if (offer) return offer.jobId;
+  return state.posted.find((job) => job.ownerId === uid && job.status !== "completed" && job.status !== "cancelled")?.id || "";
+}
+
+async function publishCard(peerId: string, card: ChatCard, jobId?: string) {
+  if (!peerId) return;
+  useVelio.getState().appendChat(peerId, { id: `card-${Date.now()}`, from: "me", time: clockNow(), card });
+  if (!isCloudActive()) return;
+  try {
+    const { sendStructuredMessage } = await import("@/lib/firebase/cloud");
+    if (card.kind === "time_confirmation") {
+      await sendStructuredMessage(peerId, { type: "time_confirmation", date: card.date, time: card.time, place: card.place, service: card.service }, jobId);
+    } else if (card.kind === "final_price") {
+      await sendStructuredMessage(peerId, { type: "final_price", service: card.service, amount: card.amount, when: card.when, place: card.place }, jobId);
+    } else if (card.kind === "on_the_way" && card.status === "enroute") {
+      await sendStructuredMessage(
+        peerId,
+        {
+          type: "on_the_way",
+          place: card.place,
+          etaMin: card.etaMin,
+          etaMax: card.etaMax,
+          distanceM: card.distanceM,
+          approximate: card.approximate,
+          lat: card.lat,
+          lng: card.lng,
+          jobLat: card.jobLat,
+          jobLng: card.jobLng,
+        },
+        jobId,
+      );
+    }
+  } catch (error) {
+    const { cloudErrorSv } = await import("@/lib/firebase/cloud");
+    useVelio.getState().showToast(cloudErrorSv(error));
+  }
+}
+
+async function patchCard(peerId: string, messageId: string, patch: Record<string, unknown>) {
+  const state = useVelio.getState();
+  const prev = state.chats[peerId] ?? [];
+  useVelio.setState({
+    chats: {
+      ...state.chats,
+      [peerId]: prev.map((message) => (message.id === messageId && message.card ? { ...message, card: { ...message.card, ...patch } as ChatCard } : message)),
+    },
+  });
+  if (!isCloudActive() || messageId.startsWith("card-") || messageId.startsWith("local-")) return;
+  try {
+    const { patchStructuredMessage } = await import("@/lib/firebase/cloud");
+    await patchStructuredMessage(peerId, messageId, patch);
+  } catch (error) {
+    const { cloudErrorSv } = await import("@/lib/firebase/cloud");
+    useVelio.getState().showToast(cloudErrorSv(error));
+  }
+}
+
+async function cancelThread(peerId: string, reason: string) {
+  const jobId = await linkedJobId(peerId);
+  if (jobId && isCloudActive()) {
+    try {
+      const { cancelCloudJob } = await import("@/lib/stripe/api");
+      await cancelCloudJob(jobId, reason);
+      useVelio.getState().showToast("Uppdraget är avbokat");
+      return;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      if (!/finns inte|inte kopplad|Failed to fetch|NetworkError|Load failed/i.test(message)) {
+        useVelio.getState().showToast(message || "Kunde inte avboka");
+        return;
+      }
+    }
+  }
+  const booking = useVelio.getState().bookings.find((item) => item.providerId === peerId && item.status !== "done");
+  if (booking) useVelio.getState().cancelBooking(booking.id);
+  useVelio.getState().appendChat(peerId, { id: `cancel-${Date.now()}`, from: "system", time: clockNow(), card: { kind: "cancelled" } });
+  useVelio.getState().showToast("Uppdraget är avbokat. En reserverad betalning släpps.");
+}
 
 const tagIcon: Record<string, LucideIcon> = {
   Bevakning: Shield,
@@ -252,7 +366,8 @@ export function ChatSheet() {
   const service = provider ? serviceById(provider.serviceId) : null;
   const messages = providerId ? (chats[providerId] ?? []) : [];
   const [draft, setDraft] = useState("");
-  const [help, setHelp] = useState<null | "menu" | "report" | "detail" | "change" | "rebook" | "problem" | "sure">(null);
+  const [help, setHelp] = useState<null | "menu" | "report" | "detail" | "change" | "rebook" | "problem" | "sure" | "cancel">(null);
+  const [cancelReason, setCancelReason] = useState("");
   const [issue, setIssue] = useState("");
   const [note, setNote] = useState("");
   const [changeDate, setChangeDate] = useState<Date | null>(null);
@@ -365,7 +480,7 @@ export function ChatSheet() {
             </button>
           ) : (
             <div className="mt-2 grid grid-cols-2 gap-2">
-              <button type="button" onClick={() => setHelp("menu")} className="flex items-center justify-center gap-1 rounded-full border border-line bg-cream py-2.5 text-sm font-medium">
+              <button type="button" onClick={() => { setCancelReason(""); setHelp("cancel"); }} className="flex items-center justify-center gap-1 rounded-full border border-line bg-cream py-2.5 text-sm font-medium">
                 <Calendar className="size-4" /> Avboka
               </button>
               <button type="button" onClick={() => setHelp("change")} className="flex items-center justify-center gap-1 rounded-full border border-line bg-cream py-2.5 text-sm font-medium">
@@ -376,13 +491,50 @@ export function ChatSheet() {
         </div>
       </div>
       <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-        {messages.map((message) => (
+        {messages.map((raw) => {
+          const message = displayMessage(raw);
+          return (
           <div key={message.id} className="mb-3">
             {message.day ? <p className="mb-3 text-center text-xs text-muted">{message.day}</p> : null}
             {message.text === MISSED_CALL_TEXT ? (
               <MissedCallCard time={message.time} />
-            ) : message.card?.kind === "slot" ? (
-              <TimeConfirmedCard when={message.card.when} place={message.card.place} service={message.card.service} time={message.time ?? ""} />
+            ) : message.card?.kind === "time_confirmation" ? (
+              <TimeConfirmationCard
+                card={message.card}
+                mine={message.from === "me"}
+                time={message.time}
+                onAccept={() => void patchCard(provider.id, message.id, { status: "confirmed" })}
+                onPropose={() => setHelp("change")}
+              />
+            ) : message.card?.kind === "final_price" ? (
+              <FinalPriceMessage
+                card={message.card}
+                mine={message.from === "me"}
+                time={message.time}
+                onPay={() => {
+                  if (message.card?.kind !== "final_price" || message.card.status === "paid") return;
+                  const priceCard = message.card;
+                  const state = useVelio.getState();
+                  const offer = state.jobOffers.find((item) => item.jobOwnerId === state.accountId && item.ownerId === provider.id && item.status !== "declined");
+                  useVelio.setState({
+                    checkoutOpen: true,
+                    checkout: {
+                      offerId: offer?.id || "demo",
+                      jobId: offer?.jobId || "chat",
+                      jobTitle: priceCard.service,
+                      workerName: provider.name,
+                      workerId: offer?.ownerId || provider.id,
+                      whenLabel: priceCard.when,
+                      priceSek: priceCard.amount,
+                    },
+                    checkoutAfter: () => {
+                      void patchCard(provider.id, message.id, { status: "paid" });
+                    },
+                  });
+                }}
+              />
+            ) : message.card?.kind === "on_the_way" ? (
+              <OnTheWayCard card={message.card} time={message.time} />
             ) : message.card?.kind === "reschedule" ? (
               <div className="rounded-[1.2rem] border border-line bg-white px-4 py-3">
                 <p className="font-semibold">Ny förfrågan skickad</p>
@@ -406,17 +558,6 @@ export function ChatSheet() {
                 <h3 className="text-lg font-semibold">Jobbet avbokat</h3>
                 <p className="mt-2 text-[15px]">Reservera jobbet igen för att chatta med {provider.name}.</p>
               </div>
-            ) : message.card?.kind === "quote" ? (
-              <CustomerPayCard
-                amount={message.card.amount}
-                onPay={() => {
-                  if (messages.some((item) => item.card?.kind === "paid")) {
-                    showToast("Betalningen är redan gjord");
-                    return;
-                  }
-                  setSheet("pay");
-                }}
-              />
             ) : message.card?.kind === "paid" ? (
               <div className="rounded-[1.2rem] border border-line bg-white px-3 py-2.5">
                 <div className="flex items-center gap-2">
@@ -447,14 +588,15 @@ export function ChatSheet() {
                   <p className={message.from === "me" ? "mt-1 text-right text-[11px] text-paper/80" : "mt-1 text-right text-[11px] text-muted"}>
                     {message.time ? message.time : ""}
                     {message.from === "me"
-                      ? ` · ${messages.slice(messages.indexOf(message) + 1).some((later) => later.from === "them") ? "Läst" : "Skickat"}`
+                      ? ` · ${messages.slice(messages.indexOf(raw) + 1).some((later) => later.from === "them") ? "Läst" : "Skickat"}`
                       : ""}
                   </p>
                 </div>
               </div>
             )}
           </div>
-        ))}
+          );
+        })}
       </div>
       {cancelled ? (
         <p className="px-4 py-4 text-center text-[15px]">Reservera jobbet igen för att chatta med {provider.name}.</p>
@@ -557,6 +699,25 @@ export function ChatSheet() {
                 <X className="size-5" />
               </button>
             </div>
+            {help === "menu" ? (
+              <button type="button" onClick={() => { setCancelReason(""); setHelp("cancel"); }} className="mb-3 flex w-full items-center gap-3 rounded-[1.2rem] border border-line bg-white px-3 py-3 text-left">
+                <Ban className="size-5 text-red-800" strokeWidth={1.6} />
+                <span className="flex-1 text-[15px]">Avboka uppdrag</span>
+                <ChevronRight className="size-4 text-muted" />
+              </button>
+            ) : null}
+            {help === "cancel" ? (
+              <CancelJobSheet
+                locked={paid || finished}
+                reason={cancelReason}
+                onReason={setCancelReason}
+                onClose={() => setHelp(null)}
+                onConfirm={() => {
+                  void cancelThread(provider.id, cancelReason.trim());
+                  setHelp(null);
+                }}
+              />
+            ) : null}
             {help === "menu" || help === "report" ? (
               <div className="overflow-hidden rounded-[1.2rem] border border-line bg-white">
                 {issues.filter((item) => help === "menu" || item.id !== "cancel").map((item, index) => {
@@ -746,10 +907,10 @@ function ChangeWhen({
         </div>
         <div>
           <p className="text-xs font-semibold">Tid</p>
-          <div className="relative mt-1 h-28 overflow-hidden rounded-2xl bg-sand">
-            <div className="pointer-events-none absolute inset-x-1 top-1/2 z-0 h-8 -translate-y-1/2 rounded-xl bg-white" />
-            <span className="pointer-events-none absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2 text-sm font-semibold">:</span>
-            <div className="relative z-10 grid h-full grid-cols-2">
+          <div className="relative mt-1 overflow-hidden rounded-2xl bg-sand" style={{ height: WHEEL_H }}>
+            <div className="pointer-events-none absolute inset-x-1 top-1/2 z-0 -translate-y-1/2 rounded-xl bg-white" style={{ height: ITEM_H }} />
+            <span className="pointer-events-none absolute top-1/2 left-1/2 z-10 -translate-x-1/2 -translate-y-1/2 text-sm leading-none font-semibold">:</span>
+            <div className="relative z-10 grid min-h-0 grid-cols-2" style={{ height: WHEEL_H }}>
               <MiniWheel values={Array.from({ length: 24 }, (_, index) => index)} value={hour} onChange={setHour} />
               <MiniWheel values={Array.from({ length: 60 }, (_, index) => index)} value={minute} onChange={setMinute} />
             </div>
@@ -763,10 +924,13 @@ function ChangeWhen({
   );
 }
 
+const WHEEL_H = 112;
+const ITEM_H = 32;
+const WHEEL_PAD = (WHEEL_H - ITEM_H) / 2;
+
 function MiniWheel({ values, value, onChange }: { values: number[]; value: number; onChange: (value: number) => void }) {
   const ref = useRef<HTMLDivElement>(null);
   const fromUser = useRef(false);
-  const item = 32;
 
   useEffect(() => {
     const node = ref.current;
@@ -775,34 +939,37 @@ function MiniWheel({ values, value, onChange }: { values: number[]; value: numbe
       fromUser.current = false;
       return;
     }
-    node.scrollTop = Math.max(0, values.indexOf(value)) * item;
+    const index = Math.max(0, values.indexOf(value));
+    node.scrollTop = index * ITEM_H;
   }, [value, values]);
 
   return (
     <div
       ref={ref}
       onScroll={(event) => {
-        const index = Math.round(event.currentTarget.scrollTop / item);
+        const index = Math.round(event.currentTarget.scrollTop / ITEM_H);
         const next = values[Math.min(values.length - 1, Math.max(0, index))];
         if (next !== undefined && next !== value) {
           fromUser.current = true;
           onChange(next);
         }
       }}
-      className="h-full snap-y snap-mandatory overflow-y-auto overscroll-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      className="min-h-0 snap-y snap-mandatory overflow-y-auto overscroll-contain [overflow-anchor:none] [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      style={{ height: WHEEL_H, scrollSnapType: "y mandatory" }}
     >
-      <div className="h-8" />
+      <div style={{ height: WHEEL_PAD }} />
       {values.map((itemValue) => (
         <button
           key={itemValue}
           type="button"
           onClick={() => onChange(itemValue)}
-          className={cn("block h-8 w-full snap-center text-center text-sm", itemValue === value ? "font-semibold text-ink" : "text-muted")}
+          className={cn("flex w-full items-center justify-center text-sm leading-none font-semibold", itemValue === value ? "text-ink" : "text-muted")}
+          style={{ height: ITEM_H, scrollSnapAlign: "center" }}
         >
           {String(itemValue).padStart(2, "0")}
         </button>
       ))}
-      <div className="h-8" />
+      <div style={{ height: WHEEL_PAD }} />
     </div>
   );
 }
@@ -825,6 +992,9 @@ function SyncedPeerChat({
   onClose: () => void;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
+  const showToast = useVelio((state) => state.showToast);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
   const lastId = messages[messages.length - 1]?.id;
   useLayoutEffect(() => {
     const node = scroller.current;
@@ -848,6 +1018,9 @@ function SyncedPeerChat({
         <button type="button" aria-label="Ring" onClick={() => openCallSheet({ peerId, peerName })} className="grid size-9 place-items-center">
           <Phone className="size-5" />
         </button>
+        <button type="button" aria-label="Mer" onClick={() => { setCancelReason(""); setCancelOpen(true); }} className="grid size-9 place-items-center">
+          <Ellipsis className="size-5" />
+        </button>
       </div>
       <div className="flex items-center gap-3 px-4 py-2">
         <span className="grid size-12 shrink-0 place-items-center rounded-full bg-sand text-sm font-semibold">{initials}</span>
@@ -857,12 +1030,69 @@ function SyncedPeerChat({
         </div>
       </div>
       <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-        {messages.map((message) =>
-          message.text === MISSED_CALL_TEXT ? (
-            <div key={message.id} className="mt-3">
-              <MissedCallCard time={message.time} />
-            </div>
-          ) : message.card ? (
+        {messages.map((raw) => {
+          const message = displayMessage(raw);
+          if (message.text === MISSED_CALL_TEXT) {
+            return <div key={message.id} className="mt-3"><MissedCallCard time={message.time} /></div>;
+          }
+          if (message.card?.kind === "time_confirmation") {
+            return (
+              <div key={message.id} className="mt-3">
+                <TimeConfirmationCard
+                  card={message.card}
+                  mine={message.from === "me"}
+                  time={message.time}
+                  onAccept={() => void patchCard(peerId, message.id, { status: "confirmed" })}
+                  onPropose={() => showToast("Föreslå en ny tid i meddelandet")}
+                />
+              </div>
+            );
+          }
+          if (message.card?.kind === "final_price") {
+            return (
+              <div key={message.id} className="mt-3">
+                <FinalPriceMessage
+                  card={message.card}
+                  mine={message.from === "me"}
+                  time={message.time}
+                  onPay={() => {
+                    if (message.card?.kind !== "final_price") return;
+                    const priceCard = message.card;
+                    const state = useVelio.getState();
+                    const offer = state.jobOffers.find((item) => item.ownerId === peerId && item.status !== "declined");
+                    useVelio.setState({
+                      checkoutOpen: true,
+                      checkout: {
+                        offerId: offer?.id || "demo",
+                        jobId: offer?.jobId || "chat",
+                        jobTitle: priceCard.service,
+                        workerName: peerName,
+                        workerId: offer?.ownerId || peerId,
+                        whenLabel: priceCard.when,
+                        priceSek: priceCard.amount,
+                      },
+                      checkoutAfter: () => {
+                        void patchCard(peerId, message.id, { status: "paid" });
+                      },
+                    });
+                  }}
+                />
+              </div>
+            );
+          }
+          if (message.card?.kind === "on_the_way") {
+            return <div key={message.id} className="mt-3"><OnTheWayCard card={message.card} time={message.time} /></div>;
+          }
+          if (message.card?.kind === "cancelled") {
+            return (
+              <div key={message.id} className="mt-3 rounded-[1.25rem] border border-line bg-white px-4 py-4">
+                <h3 className="text-lg font-semibold">Jobbet avbokat</h3>
+                <p className="mt-2 text-[15px]">Uppdraget är avbokat.</p>
+              </div>
+            );
+          }
+          if (message.card) {
+            return (
             <div key={message.id} className="mt-3">
               <ChatCardView
                 message={message}
@@ -872,7 +1102,9 @@ function SyncedPeerChat({
                 onPay={() => undefined}
               />
             </div>
-          ) : message.text ? (
+            );
+          }
+          return message.text ? (
             <div key={message.id} className={cn("mt-3 flex", message.from === "me" ? "justify-end" : "justify-start")}>
               <div
                 className={cn(
@@ -884,9 +1116,27 @@ function SyncedPeerChat({
                 <p className={cn("mt-1 text-right text-xs", message.from === "me" ? "text-white/80" : "text-muted")}>{message.time}</p>
               </div>
             </div>
-          ) : null,
-        )}
+          ) : null;
+        })}
       </div>
+      {cancelOpen ? (
+        <div className="absolute inset-0 z-20 flex flex-col justify-end bg-black/25" onClick={() => setCancelOpen(false)}>
+          <div className="rounded-t-[1.6rem] bg-cream px-4 pt-3 pb-6" onClick={(event) => event.stopPropagation()}>
+            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-line" />
+            <h3 className="mb-2 font-serif text-[1.7rem] leading-none">Avboka</h3>
+            <CancelJobSheet
+              locked={messages.some((message) => message.card?.kind === "final_price" && message.card.status === "paid" || message.card?.kind === "paid")}
+              reason={cancelReason}
+              onReason={setCancelReason}
+              onClose={() => setCancelOpen(false)}
+              onConfirm={() => {
+                void cancelThread(peerId, cancelReason.trim());
+                setCancelOpen(false);
+              }}
+            />
+          </div>
+        </div>
+      ) : null}
       <form
         className="flex items-center gap-2 px-3 pt-2 pb-4"
         onSubmit={(event) => {
@@ -927,13 +1177,25 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
   const [price, setPrice] = useState("1200");
   const [editingPrice, setEditingPrice] = useState(false);
   const [draft, setDraft] = useState("");
-  const confirmed = messages.some((message) => message.card?.kind === "slot");
-  const cancelled = messages.reduce((locked, message) => {
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [etaOpen, setEtaOpen] = useState(false);
+  const [etaHint, setEtaHint] = useState<number | null>(null);
+  const [busyRoute, setBusyRoute] = useState(false);
+  const accountId = useVelio((state) => state.accountId);
+  const directory = useVelio((state) => state.directory);
+  const jobPlace = "Södermalm";
+  const jobService = "Städning";
+  const shownMessages = messages.map(displayMessage);
+  const confirmed = shownMessages.some((message) => message.card?.kind === "time_confirmation" || message.card?.kind === "slot");
+  const enrouteLive = shownMessages.find((message) => message.card?.kind === "on_the_way" && message.from === "me" && message.card.status === "enroute" && !message.card.approximate);
+  const cancelled = shownMessages.reduce((locked, message) => {
     if (message.card?.kind === "cancelled") return true;
     if (message.card?.kind === "rebook" && message.card.status === "accepted") return false;
     return locked;
   }, false);
-  const step = messages.some((message) => message.card?.kind === "paid") ? 4 : messages.some((message) => message.text?.includes("fram")) ? 3 : messages.some((message) => message.text?.toLowerCase().includes("på väg")) ? 2 : confirmed ? 1 : 0;
+  const step = progressStep(messages);
   const stages = [
     { icon: Check, label: "Accepterad" },
     { icon: Calendar, label: "Tid" },
@@ -961,6 +1223,105 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
     node.scrollTop = node.scrollHeight;
   }, [lastId, messages.length, panel]);
 
+  const enrouteId = enrouteLive?.id ?? "";
+  const enroutePoint = enrouteLive?.card?.kind === "on_the_way" && enrouteLive.card.jobLat != null ? `${enrouteLive.card.jobLat},${enrouteLive.card.jobLng}` : "";
+  useEffect(() => {
+    if (!enrouteId || !enroutePoint || !threadKey) return;
+    const [jobLat, jobLng] = enroutePoint.split(",").map(Number);
+    const key = `velio-enroute:${enrouteId}`;
+    const started = Number(sessionStorage.getItem(key) || Date.now());
+    sessionStorage.setItem(key, String(started));
+    let stop = false;
+    const tick = async () => {
+      if (stop || Date.now() - started > 60 * 60 * 1000) return;
+      try {
+        const here = await capturePosition(12000);
+        const eta = await routeEta(here, { lat: jobLat, lng: jobLng });
+        await patchCard(threadKey, enrouteId, { etaMin: eta.minutes, distanceM: eta.distanceM, lat: here.lat, lng: here.lng, approximate: false, status: "enroute" });
+        const jobId = await linkedJobId(threadKey);
+        if (jobId && isCloudActive()) {
+          const { shareJobPosition } = await import("@/lib/firebase/cloud");
+          await shareJobPosition(jobId, { lat: here.lat, lng: here.lng, etaMin: eta.minutes }).catch(() => undefined);
+        }
+      } catch {
+        /* Keep the last position already on the card. */
+      }
+    };
+    const id = window.setInterval(() => void tick(), 45000);
+    return () => {
+      stop = true;
+      window.clearInterval(id);
+    };
+  }, [enrouteId, enroutePoint, threadKey]);
+
+  const shareLive = async () => {
+    if (!threadKey) return showToast("Öppna en chatt med kunden först");
+    setBusyRoute(true);
+    try {
+      const here = await capturePosition(20000);
+      const { coordsForArea } = await import("@/lib/velio/data");
+      const job = await geocodePlace(jobPlace.includes(",") ? jobPlace : `${jobPlace}, Stockholm`);
+      const dest = job ?? coordsForArea(jobPlace);
+      const eta = await routeEta(here, dest);
+      const jobId = await linkedJobId(threadKey);
+      await publishCard(threadKey, {
+        kind: "on_the_way",
+        place: jobPlace,
+        etaMin: eta.minutes,
+        distanceM: eta.distanceM,
+        approximate: false,
+        status: "enroute",
+        lat: here.lat,
+        lng: here.lng,
+        jobLat: dest.lat,
+        jobLng: dest.lng,
+      }, jobId);
+      if (jobId && isCloudActive()) {
+        const { shareJobPosition } = await import("@/lib/firebase/cloud");
+        await shareJobPosition(jobId, { lat: here.lat, lng: here.lng, etaMin: eta.minutes }).catch(() => undefined);
+      }
+      setPanel(null);
+    } catch {
+      const own = ownBusiness({ accountId, directory, loggedIn: true });
+      const area = own?.area || own?.areas?.[0] || "Stockholm";
+      setEtaHint(await etaFromArea(area, `${jobPlace}, Stockholm`));
+      setEtaOpen(true);
+    } finally {
+      setBusyRoute(false);
+    }
+  };
+
+  const sendApprox = async (min: number, max?: number) => {
+    if (!threadKey) return showToast("Öppna en chatt med kunden först");
+    const jobId = await linkedJobId(threadKey);
+    await publishCard(threadKey, {
+      kind: "on_the_way",
+      place: jobPlace,
+      etaMin: min,
+      etaMax: max,
+      approximate: true,
+      status: "enroute",
+    }, jobId);
+    setEtaOpen(false);
+    setPanel(null);
+  };
+
+  const markArrived = async () => {
+    if (!threadKey) return;
+    const current = (useVelio.getState().chats[threadKey] ?? []).map(displayMessage).find((message) => message.card?.kind === "on_the_way" && message.card.status === "enroute");
+    if (current?.card?.kind === "on_the_way") {
+      await patchCard(threadKey, current.id, { status: "arrived", lat: undefined, lng: undefined });
+    } else {
+      await publishCard(threadKey, { kind: "on_the_way", place: jobPlace, etaMin: 0, approximate: true, status: "arrived" });
+    }
+    const jobId = await linkedJobId(threadKey);
+    if (jobId && isCloudActive()) {
+      const { shareJobPosition } = await import("@/lib/firebase/cloud");
+      await shareJobPosition(jobId, null).catch(() => undefined);
+    }
+    showToast("Markerat som framme");
+  };
+
   return (
     <div className="absolute inset-0 z-30 flex flex-col bg-cream">
       <div className="flex items-center px-3 pt-3">
@@ -971,7 +1332,7 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
         <button type="button" aria-label="Ring" onClick={() => threadKey && openCallSheet({ peerId: threadKey, peerName: customerName })} className="grid size-9 place-items-center">
           <Phone className="size-5" />
         </button>
-        <button type="button" aria-label="Mer" onClick={() => showToast("Fler val kommer")} className="grid size-9 place-items-center">
+        <button type="button" aria-label="Mer" onClick={() => { setCancelReason(""); setMoreOpen(true); }} className="grid size-9 place-items-center">
           <Ellipsis className="size-5" />
         </button>
       </div>
@@ -1024,10 +1385,18 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
           ) : null}
         </div>
 
-        {messages.map((message) => (
+        {messages.map((raw) => {
+          const message = displayMessage(raw);
+          return (
           <div key={message.id} className="mt-3">
             {message.text === MISSED_CALL_TEXT ? (
               <MissedCallCard time={message.time} />
+            ) : message.card?.kind === "time_confirmation" ? (
+              <TimeConfirmationCard card={message.card} mine time={message.time} />
+            ) : message.card?.kind === "final_price" ? (
+              <FinalPriceMessage card={message.card} mine time={message.time} />
+            ) : message.card?.kind === "on_the_way" ? (
+              <OnTheWayCard card={message.card} time={message.time} />
             ) : message.card?.kind === "request" ? (
               <ChatCardView
                 message={message}
@@ -1036,8 +1405,6 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
                 onFollow={() => showToast("Kunden väntar")}
                 onPay={() => showToast("Väntar på kundens betalning")}
               />
-            ) : message.card?.kind === "slot" ? (
-              <TimeConfirmedCard when={message.card.when} place={message.card.place} service={message.card.service} time={message.time ?? "14:05"} />
             ) : message.card?.kind === "rebook" ? (
               <div className="rounded-[1.25rem] border border-line bg-white px-4 py-4">
                 <h3 className="text-lg font-semibold">Ny förfrågan</h3>
@@ -1083,23 +1450,6 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
                 <h3 className="text-lg font-semibold">Jobbet avbokat</h3>
                 <p className="mt-2 text-[15px]">Reservera jobbet igen för att chatta med {customerName}.</p>
               </div>
-            ) : message.card?.kind === "quote" ? (
-              <div className="flex justify-end">
-                <div className="w-[92%]">
-                  <FinalPriceCard
-                    amount={message.card.amount}
-                    service={message.card.service}
-                    hours={message.card.hours}
-                    when={message.card.when}
-                    place={message.card.place}
-                    sent
-                    quiet
-                    onEdit={() => showToast("Priset är redan skickat")}
-                    onSend={() => showToast("Priset är redan skickat")}
-                  />
-                  <p className="mt-1 text-right text-xs text-muted">{message.time} ✓✓</p>
-                </div>
-              </div>
             ) : message.card?.kind === "paid" ? (
               <div className="flex justify-start">
                 <div className="max-w-[88%] rounded-[1.2rem] border border-line bg-white px-3 py-2.5">
@@ -1135,13 +1485,15 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
               </div>
             )}
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {cancelled ? null : (
       <>
-      <div className="mx-3 grid grid-cols-2 gap-2 rounded-[1.2rem] border border-line bg-white p-2">
+      <div className="mx-3 grid grid-cols-3 gap-2 rounded-[1.2rem] border border-line bg-white p-2">
         <WorkerAction icon={Calendar} label="Bekräfta tid" active={panel === "time"} onClick={() => setPanel(panel === "time" ? null : "time")} />
+        <WorkerAction icon={Car} label={busyRoute ? "Hämtar position" : "Jag är på väg"} active={Boolean(enrouteLive)} onClick={() => void shareLive()} />
         <WorkerAction icon={Coins} label="Skicka slutpris" active={panel === "price"} onClick={() => setPanel(panel === "price" ? null : "price")} />
       </div>
 
@@ -1165,13 +1517,15 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
               if (!slotDate || !slotTime) return showToast("Välj datum och tid");
               const label = `${slotDate.toLocaleDateString("sv-SE", { day: "numeric", month: "short" }).replace(".", "")}, ${slotTime}`;
               setWhen(label);
-              pushLocal({
-                id: `slot-${Date.now()}`,
-                from: "me",
-                time: "14:05",
-                card: { kind: "slot", when: label, place: "Södermalm", service: "Städning" },
-              });
-              sendChat("Tack, jag har skickat min tidsbekräftelse. Ser fram emot att hjälpa dig!");
+              const dateLabel = slotDate.toLocaleDateString("sv-SE", { day: "numeric", month: "short" }).replace(".", "");
+              void linkedJobId(threadKey).then((jobId) => publishCard(threadKey, {
+                kind: "time_confirmation",
+                date: dateLabel,
+                time: slotTime,
+                place: jobPlace,
+                service: jobService,
+                status: "waiting",
+              }, jobId));
               setPanel(null);
               showToast("Bekräftelse skickad");
             }}
@@ -1194,13 +1548,14 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
             onSend={() => {
               const amount = Number(price);
               if (!amount) return showToast("Ange ett slutpris");
-              pushLocal({
-                id: `quote-${Date.now()}`,
-                from: "me",
-                time: "14:08",
-                card: { kind: "quote", amount, service: "Städning", hours: hoursBetween(when), when, place: "Södermalm" },
-              });
-              sendChat(`Slutpris: ${amount.toLocaleString("sv-SE")} kr`);
+              void linkedJobId(threadKey).then((jobId) => publishCard(threadKey, {
+                kind: "final_price",
+                service: jobService,
+                amount,
+                when,
+                place: jobPlace,
+                status: "waiting",
+              }, jobId));
               setPanel(null);
               showToast("Pris skickat till kunden");
             }}
@@ -1208,10 +1563,9 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
         </div>
       ) : null}
 
-      {confirmed ? (
+      {confirmed || enrouteLive ? (
         <div className="flex gap-2 overflow-x-auto px-3 pt-2">
-          <StatusChip icon={Car} label="Jag är på väg" onClick={() => say("Jag är på väg")} />
-          <StatusChip icon={MapPin} label="Jag är framme" onClick={() => say("Jag är framme")} />
+          <StatusChip icon={MapPin} label="Jag är framme" onClick={() => void markArrived()} />
           <StatusChip icon={Search} label="Jag ser inte dig?" onClick={() => say("Jag ser inte dig?")} />
         </div>
       ) : null}
@@ -1254,25 +1608,99 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
       </form>
       </div>
       )}
+      {moreOpen ? (
+        <div className="absolute inset-0 z-20 flex flex-col justify-end bg-black/25" onClick={() => setMoreOpen(false)}>
+          <div className="rounded-t-[1.6rem] bg-cream px-4 pt-3 pb-6" onClick={(event) => event.stopPropagation()}>
+            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-line" />
+            <button type="button" onClick={() => { setMoreOpen(false); setCancelOpen(true); }} className="flex w-full items-center gap-3 rounded-[1.2rem] border border-line bg-white px-3 py-3 text-left">
+              <Ban className="size-5 text-red-800" />
+              <span className="text-[15px]">Avboka uppdrag</span>
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {cancelOpen ? (
+        <div className="absolute inset-0 z-20 flex flex-col justify-end bg-black/25" onClick={() => setCancelOpen(false)}>
+          <div className="rounded-t-[1.6rem] bg-cream px-4 pt-3 pb-6" onClick={(event) => event.stopPropagation()}>
+            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-line" />
+            <h3 className="font-serif text-[1.7rem] leading-none">Avboka</h3>
+            <CancelJobSheet
+              locked={step >= 4}
+              reason={cancelReason}
+              onReason={setCancelReason}
+              onClose={() => setCancelOpen(false)}
+              onConfirm={() => {
+                void cancelThread(threadKey, cancelReason.trim());
+                setCancelOpen(false);
+              }}
+            />
+          </div>
+        </div>
+      ) : null}
+      {etaOpen ? (
+        <div className="absolute inset-0 z-20 flex flex-col justify-end bg-black/25" onClick={() => setEtaOpen(false)}>
+          <div className="rounded-t-[1.6rem] bg-cream px-4 pt-3 pb-6" onClick={(event) => event.stopPropagation()}>
+            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-line" />
+            <h3 className="font-serif text-[1.7rem] leading-none">Ungefärlig tid</h3>
+            <p className="mt-2 text-sm leading-relaxed text-muted">Vi kan inte använda din position. Välj ungefär hur lång tid det tar. Kunden ser det som ungefär, utan karta.</p>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              {etaHint ? (
+                <button type="button" onClick={() => void sendApprox(Math.max(5, etaHint - 5), etaHint + 5)} className="col-span-2 rounded-full border border-line bg-white py-3 text-sm font-semibold">
+                  Ungefär {etaHint} min från ditt område
+                </button>
+              ) : null}
+              <button type="button" onClick={() => void sendApprox(5, 10)} className="rounded-full bg-brown py-3 text-sm font-semibold text-white">5–10 min</button>
+              <button type="button" onClick={() => void sendApprox(10, 20)} className="rounded-full bg-brown py-3 text-sm font-semibold text-white">10–20 min</button>
+              <button type="button" onClick={() => void sendApprox(20, 30)} className="rounded-full bg-brown py-3 text-sm font-semibold text-white">20–30 min</button>
+              <button type="button" onClick={() => void sendApprox(30)} className="rounded-full bg-brown py-3 text-sm font-semibold text-white">30+ min</button>
+            </div>
+            <button type="button" onClick={() => setEtaOpen(false)} className="mt-3 w-full rounded-full border border-line bg-white py-3 font-semibold">Avbryt</button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
 
-function CustomerPayCard({ amount, onPay }: { amount: number; onPay: () => void }) {
+function CancelJobSheet({
+  locked,
+  reason,
+  onReason,
+  onClose,
+  onConfirm,
+}: {
+  locked: boolean;
+  reason: string;
+  onReason: (value: string) => void;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
   return (
-    <div className="rounded-[1.25rem] border border-line bg-white px-4 py-4">
-      <div className="mb-3 flex items-center gap-2">
-        <CreditCard className="size-5" />
-        <span>
-          <span className="block text-lg font-semibold leading-tight">Betalning</span>
-          <span className="text-sm text-muted">Slutpris för uppdraget</span>
-        </span>
+    <div>
+      <p className="text-sm leading-relaxed text-muted">
+        {locked
+          ? "Uppdraget är betalt eller klart och kan inte avbokas."
+          : "Uppdraget avbokas. Den andra parten får ett meddelande. En reserverad betalning släpps. Det går inte att avboka när jobbet är klart eller utbetalt."}
+      </p>
+      {locked ? null : (
+        <textarea
+          value={reason}
+          onChange={(event) => onReason(event.target.value.slice(0, 500))}
+          rows={3}
+          placeholder="Anledning, valfritt"
+          className="mt-3 w-full rounded-2xl border border-line bg-white px-3 py-2 text-sm outline-none"
+        />
+      )}
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        <button type="button" onClick={onClose} className="rounded-full border border-line bg-white py-3 font-semibold">
+          Avbryt
+        </button>
+        {locked ? null : (
+          <button type="button" onClick={onConfirm} className="rounded-full bg-red-800 py-3 font-semibold text-white">
+            Avboka uppdrag
+          </button>
+        )}
       </div>
-      <p className="mt-3 font-serif text-[2.6rem] leading-none">{amount.toLocaleString("sv-SE")} kr</p>
-      <button type="button" onClick={onPay} className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-brown py-3.5 text-base font-semibold text-white">
-        Välj betalningssätt
-        <ChevronRight className="size-4" />
-      </button>
     </div>
   );
 }

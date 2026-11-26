@@ -32,6 +32,7 @@ import {
   type Provider,
   type ServiceId,
 } from "@/lib/velio/data";
+import { messageFromFirestore } from "@/lib/velio/chat-codec";
 import { useVelio, type ChatMsg, type PostedJob, type SavedAddress, type VelioInvoice } from "@/lib/velio/store";
 
 export type CloudOffer = {
@@ -477,12 +478,7 @@ export function startCloudSession(uid: string) {
             (messages) => {
               const thread: ChatMsg[] = messages.docs.map((message) => {
                 const body = message.data();
-                return {
-                  id: message.id,
-                  from: asString(body.senderId) === uid ? "me" : "them",
-                  text: asString(body.text),
-                  time: clock(body.createdAt),
-                };
+                return messageFromFirestore(message.id, body, asString(body.senderId) === uid, clock(body.createdAt));
               });
               const state = useVelio.getState();
               const known = state.directory.find((provider) => provider.id === peer);
@@ -726,7 +722,10 @@ export async function setCloudOfferStatus(id: string, status: CloudOffer["status
   const jobId = asString(offerSnap.data()?.jobId);
   const jobOwnerId = asString(offerSnap.data()?.jobOwnerId);
   if (!jobId || jobOwnerId !== uidOrThrow()) return;
-  await updateDoc(doc(db(), "jobs", jobId), { status: "assigned", updatedAt: serverTimestamp() });
+  const workerId = asString(offerSnap.data()?.ownerId);
+  const jobPatch: Record<string, unknown> = { status: "assigned", updatedAt: serverTimestamp() };
+  if (workerId && workerId !== jobOwnerId) jobPatch.workerId = workerId;
+  await updateDoc(doc(db(), "jobs", jobId), jobPatch);
 }
 
 export function chatForPeer(peerUid: string) {
@@ -742,6 +741,118 @@ export async function sendMissedCall(peerUid: string, callId: string) {
     senderId: uidOrThrow(),
     text: "Missat samtal",
     createdAt: serverTimestamp(),
+  });
+}
+
+export type StructuredPayload =
+  | { type: "time_confirmation"; date: string; time: string; place: string; service: string }
+  | { type: "final_price"; service: string; amount: number; when: string; place: string }
+  | {
+      type: "on_the_way";
+      place: string;
+      etaMin: number;
+      etaMax?: number;
+      distanceM?: number;
+      approximate: boolean;
+      lat?: number;
+      lng?: number;
+      jobLat?: number;
+      jobLng?: number;
+    };
+
+async function ensureChat(peerUid: string, jobId?: string) {
+  const uid = uidOrThrow();
+  let chatId = chatByPeer.get(peerUid)?.id;
+  if (!chatId) {
+    const existing = await getDocs(query(collection(db(), "chats"), where("participantIds", "array-contains", uid)));
+    const found = existing.docs.find((item) => stringList(item.data().participantIds).includes(peerUid));
+    if (found) {
+      chatId = found.id;
+      rememberChat(peerUid, found.id, asString(found.data().jobId) || undefined);
+    }
+  }
+  if (!chatId) {
+    const payload: Record<string, unknown> = {
+      participantIds: [uid, peerUid],
+      createdAt: serverTimestamp(),
+    };
+    if (jobId && jobId.length >= 1 && jobId.length <= 128) payload.jobId = jobId;
+    const created = await addDoc(collection(db(), "chats"), payload);
+    chatId = created.id;
+    rememberChat(peerUid, chatId, jobId);
+  }
+  return chatId;
+}
+
+export async function sendStructuredMessage(peerUid: string, message: StructuredPayload, jobId?: string) {
+  const uid = uidOrThrow();
+  if (!peerUid || peerUid === uid) return null;
+  const chatId = await ensureChat(peerUid, jobId);
+  const payload: Record<string, unknown> = {
+    senderId: uid,
+    type: message.type,
+    createdAt: serverTimestamp(),
+  };
+  if (message.type === "time_confirmation") {
+    payload.date = message.date.slice(0, 40);
+    payload.time = message.time;
+    payload.place = message.place.slice(0, 200);
+    payload.service = message.service.slice(0, 80);
+    payload.status = "waiting";
+  } else if (message.type === "final_price") {
+    payload.service = message.service.slice(0, 80);
+    payload.amount = Math.max(1, Math.round(message.amount));
+    payload.when = message.when.slice(0, 80);
+    payload.place = message.place.slice(0, 200);
+    payload.status = "waiting";
+  } else {
+    payload.place = message.place.slice(0, 200);
+    payload.etaMin = Math.max(0, Math.round(message.etaMin));
+    payload.approximate = message.approximate;
+    payload.status = "enroute";
+    if (message.etaMax) payload.etaMax = Math.round(message.etaMax);
+    if (message.distanceM) payload.distanceM = Math.round(message.distanceM);
+    if (typeof message.lat === "number") payload.lat = message.lat;
+    if (typeof message.lng === "number") payload.lng = message.lng;
+    if (typeof message.jobLat === "number") payload.jobLat = message.jobLat;
+    if (typeof message.jobLng === "number") payload.jobLng = message.jobLng;
+  }
+  const ref = await addDoc(collection(db(), "chats", chatId, "messages"), payload);
+  try {
+    await updateDoc(doc(db(), "chats", chatId), { updatedAt: serverTimestamp() });
+  } catch {
+    /* The message is already saved. */
+  }
+  return ref.id;
+}
+
+export async function patchStructuredMessage(peerUid: string, messageId: string, patch: Record<string, unknown>) {
+  const meta = chatByPeer.get(peerUid);
+  if (!meta || !messageId) return;
+  const next: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(patch)) {
+    next[key] = value === undefined ? deleteField() : value;
+  }
+  await updateDoc(doc(db(), "chats", meta.id, "messages", messageId), next);
+}
+
+/** Last shared position only. Pass null to clear it when the worker arrives. */
+export async function shareJobPosition(jobId: string, position: { lat: number; lng: number; etaMin: number } | null) {
+  if (!jobId) return;
+  if (!position) {
+    await updateDoc(doc(db(), "jobs", jobId), {
+      workerLat: deleteField(),
+      workerLng: deleteField(),
+      workerEtaMin: deleteField(),
+      updatedAt: serverTimestamp(),
+    });
+    return;
+  }
+  await updateDoc(doc(db(), "jobs", jobId), {
+    workerLat: position.lat,
+    workerLng: position.lng,
+    workerEtaMin: position.etaMin,
+    updatedAt: serverTimestamp(),
   });
 }
 

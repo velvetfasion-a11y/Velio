@@ -15,6 +15,7 @@ type Offer = {
   when: string;
   tag: string;
   price: string;
+  category?: string;
   image: string;
   status: "new" | "active" | "done";
   ownerId?: string;
@@ -117,6 +118,7 @@ export function BusinessHome() {
           when: job.when,
           tag: job.ownerName || "Kund",
           price: `${job.price.toLocaleString("sv-SE")} kr`,
+          category: serviceById(job.serviceId)?.name ?? "Uppdrag",
           image: jobImage(job.serviceId),
           status: "new" as const,
           ownerId: job.ownerId,
@@ -349,6 +351,7 @@ function OffersPage({
 }) {
   const showToast = useVelio((state) => state.showToast);
   const [tab, setTab] = useState<"new" | "active" | "done">("new");
+  const [confirm, setConfirm] = useState<Offer | null>(null);
   const fresh = [...posted, ...offers.filter((offer) => offer.status === "new")];
   const active = offers.filter((offer) => offer.status === "active");
   const done = offers.filter((offer) => offer.status === "done");
@@ -407,7 +410,7 @@ function OffersPage({
             {tab === "new" ? (
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <button type="button" onClick={() => onDecline(job.id)} className="rounded-full border border-line py-2.5 text-sm font-semibold">Avböj</button>
-                <button type="button" onClick={() => onTake(job.id)} className="rounded-full bg-brown py-2.5 text-sm font-semibold text-white">Skicka offert</button>
+                <button type="button" onClick={() => setConfirm(job)} className="rounded-full bg-brown py-2.5 text-sm font-semibold text-white">Ta uppdrag</button>
               </div>
             ) : null}
           </article>
@@ -416,6 +419,33 @@ function OffersPage({
         )}
       </div>
       </div>
+      {confirm ? (
+        <div className="fixed inset-0 z-40 flex flex-col justify-end bg-black/30" onClick={() => setConfirm(null)}>
+          <div className="rounded-t-[1.6rem] bg-cream px-5 pt-3 pb-6" onClick={(event) => event.stopPropagation()}>
+            <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-line" />
+            <h2 className="font-serif text-[1.7rem] leading-none">Vill du ta det här uppdraget?</h2>
+            <div className="mt-4 space-y-1.5 rounded-[1.2rem] border border-line bg-white px-4 py-3 text-[15px]">
+              <p><span className="font-semibold">Kategori:</span> {confirm.category || confirm.title}</p>
+              <p><span className="font-semibold">Plats:</span> {confirm.place}</p>
+              <p><span className="font-semibold">Tid:</span> {confirm.when}</p>
+              <p><span className="font-semibold">Pris:</span> {confirm.price}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                onTake(confirm.id);
+                setConfirm(null);
+              }}
+              className="mt-4 h-12 w-full rounded-full bg-brown font-semibold text-white"
+            >
+              Bekräfta
+            </button>
+            <button type="button" onClick={() => setConfirm(null)} className="mt-2 h-12 w-full rounded-full border border-line bg-white font-semibold">
+              Avbryt
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

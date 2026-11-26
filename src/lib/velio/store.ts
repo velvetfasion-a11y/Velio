@@ -117,6 +117,35 @@ export type ChatCard =
   | { kind: "done"; service: string; desc: string; price: number }
   | { kind: "slot"; when: string; place: string; service: string }
   | { kind: "quote"; amount: number; service: string; hours: string; when: string; place: string }
+  | {
+      kind: "time_confirmation";
+      date: string;
+      time: string;
+      place: string;
+      service: string;
+      status: "waiting" | "confirmed";
+    }
+  | {
+      kind: "final_price";
+      service: string;
+      amount: number;
+      when: string;
+      place: string;
+      status: "waiting" | "paid";
+    }
+  | {
+      kind: "on_the_way";
+      place: string;
+      etaMin: number;
+      etaMax?: number;
+      distanceM?: number;
+      approximate: boolean;
+      status: "enroute" | "arrived";
+      lat?: number;
+      lng?: number;
+      jobLat?: number;
+      jobLng?: number;
+    }
   | { kind: "paid"; amount: number }
   | { kind: "reschedule"; when: string; place: string; service: string }
   | { kind: "cancelled" }
@@ -458,6 +487,8 @@ type VelioState = {
   declineOffer: (id: string) => void;
   checkout: CheckoutDraft | null;
   checkoutOpen: boolean;
+  /** Runs after an in-app payment succeeds. Not persisted. */
+  checkoutAfter: (() => void) | null;
   openCheckout: (offerId: string) => void;
   closeCheckout: () => void;
   markJobDone: (jobId: string) => void;
@@ -702,6 +733,7 @@ export const useVelio = create<VelioState>()(
       jobOffers: [],
       checkout: null,
       checkoutOpen: false,
+      checkoutAfter: null,
       activeBookingId: null,
       toast: null,
       go: (screen, opts) => {
@@ -2047,7 +2079,7 @@ export const useVelio = create<VelioState>()(
           },
         });
       },
-      closeCheckout: () => set({ checkoutOpen: false }),
+      closeCheckout: () => set({ checkoutOpen: false, checkoutAfter: null }),
       markJobDone: (jobId) => {
         void (async () => {
           try {

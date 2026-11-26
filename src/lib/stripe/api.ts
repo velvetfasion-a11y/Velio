@@ -38,3 +38,7 @@ export function createAccountSession() {
 export function releasePayout(jobId: string) {
   return post<{ payoutStatus: string }>("/api/release-payout", { jobId });
 }
+
+export function cancelCloudJob(jobId: string, reason: string) {
+  return post<{ ok: boolean; released: boolean }>(`/api/support/jobs/${jobId}/cancel`, { reason });
+}

@@ -2,6 +2,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { applyCors } from "../../lib/cors.js";
 import { adminDb, userFromRequest } from "../../lib/firebase.js";
 import { upsertAlert } from "../../lib/alerts.js";
+import { cancelJobForUser } from "../../lib/cancel-job.js";
 
 function parts(req) {
   const value = req.query.path;
@@ -16,6 +17,10 @@ export default async function handler(req, res) {
     const user = await userFromRequest(req);
     const db = adminDb();
     const [root, id, action] = parts(req);
+    if (req.method === "POST" && root === "jobs" && id && action === "cancel") {
+      const result = await cancelJobForUser(db, user.uid, id, req.body?.reason);
+      return res.status(200).json(result);
+    }
     if (root === "threads" && !id) {
       const text = String(req.body?.text || "").trim().slice(0, 4000);
       if (text.length < 2) return res.status(400).json({ error: "Skriv ett meddelande" });
