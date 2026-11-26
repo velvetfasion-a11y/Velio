@@ -2731,9 +2731,9 @@ export function ReceiptSheet() {
   const go = useVelio((state) => state.go);
   const rebook = useVelio((state) => state.rebook);
   const booking = bookings.find((item) => item.id === receiptId);
+  const directory = useVelio((state) => state.directory);
   const showToast = useVelio((state) => state.showToast);
   if (!booking) return null;
-  const directory = useVelio((state) => state.directory);
   const service = serviceById(booking.serviceId);
   const provider = providerById(booking.providerId) ?? directory.find((item) => item.id === booking.providerId);
 
