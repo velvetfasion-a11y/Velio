@@ -27,7 +27,6 @@ import {
   deprecatedServiceMap,
   initialsOf,
   resolveServiceId,
-  serviceById,
   services,
   setProviders,
   type Provider,
