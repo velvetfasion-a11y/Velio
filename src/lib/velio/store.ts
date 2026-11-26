@@ -225,6 +225,7 @@ export type PostedJob = {
   id: string;
   serviceId: ServiceId;
   subcategoryId?: string;
+  title?: string;
   text: string;
   when: string;
   address: string;

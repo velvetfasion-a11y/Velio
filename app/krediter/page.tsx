@@ -11,7 +11,7 @@ export default function CreditsPage() {
       </a>
       <h1 className="mt-4 font-serif text-4xl">Bildkällor</h1>
       <p className="mt-3 text-sm leading-relaxed text-[#5c5148]">
-        Kategoribilderna kommer från Pexels. Licensen tillåter fri användning, även kommersiellt, utan krav på att ange fotograf. Vi anger ändå fotograf, källa och licens.
+        Kategoribilderna kommer från Pexels. Licensen tillåter fri användning, även kommersiellt, utan krav på att ange fotograf. Vi anger ändå fotograf, källa och licens. Bilden för Annat är en egen grafik i VELIOs färger.
       </p>
       <ul className="mt-6 space-y-4">
         {photoCredits.map((credit) => (

@@ -18,9 +18,10 @@ export type ServiceIcon =
   | "users"
   | "calculator"
   | "key"
-  | "user";
+  | "user"
+  | "ellipsis";
 
-export const SERVICE_IDS = ["stad", "trad", "flytt", "mon", "rep", "el", "vvs", "ren", "sak", "oms", "til", "it", "per", "eko"] as const;
+export const SERVICE_IDS = ["stad", "trad", "flytt", "mon", "rep", "el", "vvs", "ren", "sak", "oms", "til", "it", "per", "eko", "annat"] as const;
 export type ServiceId = (typeof SERVICE_IDS)[number];
 
 export type TaxRelief = { status: TaxStatus; label: string; note: string; source: string };
@@ -78,6 +79,20 @@ function creditOf(image: { file: string; thumb: string; photographer: string; so
   };
 }
 
+const otherTax: TaxRelief = {
+  status: "none",
+  label: "Beror på uppdraget",
+  note: "RUT och ROT beror på vad som ska göras. Det här är ingen bedömning.",
+  source: "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html",
+};
+
+export const otherSubcategory: Subcategory = {
+  id: "annat",
+  name: "Annat",
+  desc: "Beskriv vad du behöver hjälp med",
+  taxRelief: otherTax,
+};
+
 function mapSub(raw: (typeof catalog.categories)[number]["subcategories"][number]): Subcategory {
   const image = "image" in raw ? raw.image : undefined;
   return {
@@ -104,7 +119,7 @@ export const services: Service[] = catalog.categories.map((raw) => ({
   credit: creditOf(raw.image),
   taxRelief: raw.taxRelief as TaxRelief,
   priceEstimate: raw.priceEstimate as PriceEstimate | undefined,
-  subcategories: raw.subcategories.map(mapSub),
+  subcategories: [...raw.subcategories.map(mapSub).filter((item) => item.id !== "annat"), otherSubcategory],
 }));
 
 export const taxReliefDisclaimer = catalog.taxReliefDisclaimer;
@@ -113,7 +128,7 @@ export const priceDisclaimer = catalog.priceDisclaimer;
 export const photoCredits: PhotoCredit[] = [
   ...services.map((service) => service.credit),
   ...services.flatMap((service) => service.subcategories.flatMap((item) => (item.credit ? [item.credit] : []))),
-];
+].filter((credit) => credit.sourceUrl.startsWith("http"));
 
 export const deprecatedServiceMap: Record<string, { id: ServiceId; subcategoryId: string }> = {
   ank: { id: "til", subcategoryId: "ankomst" },

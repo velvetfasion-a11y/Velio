@@ -441,7 +441,7 @@ export function ProfileScreens() {
                   <img src={service?.imageThumb ?? asset("/velio/categories/stad-thumb.webp")} alt="" className="size-16 rounded-xl object-cover" />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-2">
-                      <p className="font-semibold">{service?.name}</p>
+                      <p className="font-semibold">{job.title || service?.name}</p>
                       <span className="shrink-0 rounded-full bg-ok/15 px-2 py-0.5 text-[11px] text-ok">Publicerad</span>
                     </div>
                     <p className="mt-1 line-clamp-2 text-sm text-muted">{job.text}</p>

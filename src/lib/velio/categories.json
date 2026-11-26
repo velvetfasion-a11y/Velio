@@ -1857,6 +1857,33 @@
           }
         }
       ]
+    },
+    {
+      "id": "annat",
+      "name": "Annat",
+      "desc": "Uppdrag som inte passar en kategori",
+      "intro": "Hittar du inte rätt tjänst? Beskriv vad du behöver hjälp med.",
+      "icon": "ellipsis",
+      "popular": false,
+      "image": {
+        "file": "annat.webp",
+        "thumb": "annat-thumb.webp",
+        "width": 1200,
+        "height": 800,
+        "photographer": "VELIO",
+        "sourceUrl": "",
+        "license": "Egen bild",
+        "licenseUrl": "",
+        "pexelsId": 0,
+        "alt": "Brun och gräddfärgad tonplatta för övriga uppdrag"
+      },
+      "taxRelief": {
+        "status": "none",
+        "label": "Beror på uppdraget",
+        "note": "RUT och ROT beror på vad som ska göras. Det här är ingen bedömning.",
+        "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+      },
+      "subcategories": []
     }
   ]
 }

@@ -489,6 +489,8 @@ export function BusinessSetup() {
           ) : null}
 
           {step === "trades" ? (
+            <div className="space-y-2">
+            <p className="text-sm text-muted">Välj Annat om du vill ta uppdrag som inte passar de andra tjänsterna. Högst tre tjänster.</p>
             <div className="grid grid-cols-2 gap-2">
               {services.map((service) => {
                 const on = trades.includes(service.id);
@@ -505,6 +507,7 @@ export function BusinessSetup() {
                   </button>
                 );
               })}
+            </div>
             </div>
           ) : null}
 

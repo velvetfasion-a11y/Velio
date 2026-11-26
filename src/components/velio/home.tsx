@@ -6,6 +6,7 @@ import {
   Check,
   ClipboardList,
   Clock,
+  CircleEllipsis,
   Drill,
   Droplets,
   Eye,
@@ -56,6 +57,7 @@ const icons: Record<ServiceIcon, LucideIcon> = {
   droplets: Droplets,
   heart: Heart,
   laptop: Laptop,
+  ellipsis: CircleEllipsis,
 };
 
 const popular = services
@@ -122,7 +124,8 @@ export function Home() {
   const [showAll, setShowAll] = useState(false);
   const query = search.trim().toLowerCase();
   const cards = popular.filter((item) => !query || matchesService(query, item.id));
-  const extra = services.filter((service) => !service.popular);
+  const extra = services.filter((service) => !service.popular && service.id !== "annat");
+  const annat = services.find((service) => service.id === "annat");
   const activeAddress = addresses.find((item) => item.id === activeAddressId) ?? null;
   const origin =
     activeAddress?.lat != null && activeAddress.lng != null
@@ -219,6 +222,14 @@ export function Home() {
                     />
                   ))
               : null}
+            {annat && (!query || matchesService(query, annat.id)) ? (
+              <PhotoTile
+                label={annat.name}
+                image={annat.image}
+                icon={icons[annat.icon]}
+                onClick={() => openService(annat.id)}
+              />
+            ) : null}
           </div>
         ) : (
           <p className="text-sm text-muted">Inga tjänster matchar “{search.trim()}”.</p>
@@ -627,6 +638,7 @@ function JobSheet() {
   const jobDraft = useVelio((state) => state.jobDraft);
   const [serviceId, setServiceId] = useState<ServiceId>("stad");
   const [subcategoryId, setSubcategoryId] = useState<string | null>(null);
+  const [jobTitle, setJobTitle] = useState("");
   const [text, setText] = useState("");
   const [whenMode, setWhenMode] = useState<WhenMode>("day");
   const [startDate, setStartDate] = useState<Date | null>(null);
@@ -652,6 +664,7 @@ function JobSheet() {
       step,
       serviceId,
       subcategoryId,
+      jobTitle,
       text,
       whenMode,
       start: startDate ? startDate.toISOString() : null,
@@ -662,13 +675,14 @@ function JobSheet() {
       budget,
       quotes,
     });
-  }, [step, serviceId, subcategoryId, text, whenMode, startDate, endDate, timeWindow, clock, pickedAddress, budget, quotes, saveJobDraft]);
+  }, [step, serviceId, subcategoryId, jobTitle, text, whenMode, startDate, endDate, timeWindow, clock, pickedAddress, budget, quotes, saveJobDraft]);
   const resumeJob = () => {
     const draft = jobDraft;
     if (!draft) return;
     if (typeof draft.step === "number") setStep(draft.step);
     if (typeof draft.serviceId === "string") setServiceId((resolveServiceId(draft.serviceId)?.id ?? "stad") as ServiceId);
     if (typeof draft.subcategoryId === "string") setSubcategoryId(draft.subcategoryId);
+    if (typeof draft.jobTitle === "string") setJobTitle(draft.jobTitle);
     if (typeof draft.text === "string") setText(draft.text);
     if (typeof draft.whenMode === "string") setWhenMode(draft.whenMode as WhenMode);
     if (typeof draft.start === "string") setStartDate(new Date(draft.start));
@@ -766,9 +780,11 @@ function JobSheet() {
       .finally(() => setLocating(false));
   };
 
+  const needsDetail = serviceId === "annat" || subcategoryId === "annat";
   const advance = () => {
     if (step === 1 && !subcategoryId) return showToast("Välj vad som ska göras");
-    if (step === 1 && text.trim().length < 8) return showToast("Beskriv uppdraget lite till");
+    if (step === 1 && needsDetail && jobTitle.trim().length < 3) return showToast("Skriv en kort titel");
+    if (step === 1 && text.trim().length < 8) return showToast(needsDetail ? "Beskriv vad du behöver hjälp med" : "Beskriv uppdraget lite till");
     if (step === 2) {
       if (whenMode === "range" && startDate && !endDate) return showToast("Välj även ett slutdatum");
       if (!chosenWhen) return showToast("Välj datum, intervall, senast-datum eller flexibel");
@@ -779,7 +795,8 @@ function JobSheet() {
   };
 
   const publish = () => {
-    if (text.trim().length < 8) return showToast("Beskriv uppdraget lite till");
+    if (needsDetail && jobTitle.trim().length < 3) return showToast("Skriv en kort titel");
+    if (text.trim().length < 8) return showToast(needsDetail ? "Beskriv vad du behöver hjälp med" : "Beskriv uppdraget lite till");
     if (!chosenWhen) return showToast("Välj när uppdraget ska göras");
     if (!pickedAddress) return showToast("Välj en adress");
     const price = !quotes && budget ? Number(budget) : 0;
@@ -787,6 +804,7 @@ function JobSheet() {
     addPosted({
       serviceId,
       subcategoryId: subcategoryId ?? undefined,
+      title: needsDetail ? jobTitle.trim() : undefined,
       text: `${text.trim()}${attached}`,
       when: chosenWhen,
       address: pickedAddress.label,
@@ -852,7 +870,11 @@ function JobSheet() {
                   aria-pressed={selected}
                   onClick={() => {
                     setServiceId(service.id);
-                    setSubcategoryId(null);
+                    setSubcategoryId(service.id === "annat" ? "annat" : null);
+                    if (service.id === "annat") {
+                      setJobTitle("");
+                      setText("");
+                    }
                   }}
                   className={cn(
                     "relative h-full min-h-0 overflow-hidden rounded-2xl border-2 text-left text-paper",
@@ -885,7 +907,12 @@ function JobSheet() {
                 type="button"
                 aria-pressed={subcategoryId === item.id}
                 onClick={() => {
+                  const previous = subcategoryById(serviceId, subcategoryId);
                   setSubcategoryId(item.id);
+                  if (item.id === "annat") {
+                    if (previous && text.trim() === previous.desc.trim()) setText("");
+                    return;
+                  }
                   if (text.trim().length < 8) setText(item.desc);
                 }}
                 className={cn("rounded-full border px-3 py-1.5 text-sm", subcategoryId === item.id ? "border-brown bg-brown text-paper" : "border-line bg-paper")}
@@ -893,14 +920,6 @@ function JobSheet() {
                 {item.name}
               </button>
             ))}
-            <button
-              type="button"
-              aria-pressed={subcategoryId === "ovrigt"}
-              onClick={() => setSubcategoryId("ovrigt")}
-              className={cn("rounded-full border px-3 py-1.5 text-sm", subcategoryId === "ovrigt" ? "border-brown bg-brown text-paper" : "border-line bg-paper")}
-            >
-              Övrigt
-            </button>
           </div>
           {subcategoryById(serviceId, subcategoryId)?.taxRelief ? (
             <p className="mb-3 text-xs text-muted">
@@ -908,14 +927,25 @@ function JobSheet() {
               <a className="underline" href={subcategoryById(serviceId, subcategoryId)?.taxRelief.source}>Skatteverket</a>
             </p>
           ) : null}
+          {needsDetail ? (
+            <label className="mb-3 block">
+              <span className="text-sm font-semibold">Titel</span>
+              <input
+                value={jobTitle}
+                onChange={(event) => setJobTitle(event.target.value)}
+                placeholder="Kort rubrik på uppdraget"
+                className="mt-1 w-full rounded-2xl border border-line px-3 py-3 text-sm outline-none"
+              />
+            </label>
+          ) : null}
           <div className="mb-2 flex items-start gap-2">
             <ClipboardList className="mt-0.5 size-5" />
             <div>
               <p className="font-semibold">Beskriv uppdraget</p>
-              <p className="text-sm text-muted">Berätta kort vad som ska göras.</p>
+              <p className="text-sm text-muted">{needsDetail ? "Skriv vad som ska göras, så att rätt person kan svara." : "Berätta kort vad som ska göras."}</p>
             </div>
           </div>
-          <textarea value={text} onChange={(event) => setText(event.target.value)} rows={4} placeholder="T.ex. flyttstädning av 3 rum och kök." className="w-full rounded-2xl border border-line px-3 py-3 text-sm outline-none" />
+          <textarea value={text} onChange={(event) => setText(event.target.value)} rows={4} placeholder={needsDetail ? "Beskriv vad du behöver hjälp med" : "T.ex. flyttstädning av 3 rum och kök."} className="w-full rounded-2xl border border-line px-3 py-3 text-sm outline-none" />
         </section>
         ) : null}
 
@@ -1081,6 +1111,7 @@ function JobSheet() {
         {step === 5 ? (
           <section className="space-y-2 rounded-[1.3rem] border border-line bg-paper p-4 text-sm shadow-soft">
             <ReviewRow label="Tjänst" value={serviceName} />
+            {needsDetail ? <ReviewRow label="Titel" value={jobTitle.trim()} /> : null}
             <ReviewRow label="Beskrivning" value={text.trim()} />
             <ReviewRow label="När" value={chosenWhen || "—"} />
             <ReviewRow label="Plats" value={pickedAddress?.label || "—"} />
@@ -1195,10 +1226,12 @@ function JobCalendar({
 function FilterSheet() {
   const closeSheet = useVelio((state) => state.closeSheet);
   const openService = useVelio((state) => state.openService);
+  const annat = services.find((service) => service.id === "annat");
+  const choices = [...popular, ...(annat ? [{ id: annat.id, label: annat.name }] : [])];
   return (
     <BottomSheet title="Filtrera" onClose={closeSheet}>
       <div className="grid grid-cols-2 gap-2">
-        {popular.map((item) => (
+        {choices.map((item) => (
           <Btn key={item.id} variant="secondary" onClick={() => openService(item.id)}>
             {item.label}
           </Btn>

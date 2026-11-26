@@ -227,10 +227,12 @@ function jobFromDoc(id: string, data: DocumentData): PostedJob {
   const serviceId = serviceIdOf(rawService);
   const storedSub = asString(schedule.subcategoryId);
   const subcategoryId = storedSub || deprecatedServiceMap[rawService]?.subcategoryId || undefined;
+  const jobTitle = asString(schedule.jobTitle);
   return {
     id,
     serviceId,
     ...(subcategoryId ? { subcategoryId } : {}),
+    ...(jobTitle ? { title: jobTitle } : {}),
     text: asString(data.description) || asString(data.title),
     when: asString(schedule.when),
     address: asString(data.locationLabel),
@@ -647,6 +649,7 @@ export async function deleteWorkerProfile() {
 export async function createCloudJob(input: {
   serviceId: ServiceId;
   subcategoryId?: string;
+  title?: string;
   text: string;
   when: string;
   address: string;
@@ -656,15 +659,17 @@ export async function createCloudJob(input: {
   const uid = uidOrThrow();
   const service = resolveServiceId(input.serviceId);
   const serviceName = service?.name ?? "Uppdrag";
+  const customTitle = input.title?.trim().slice(0, 120) ?? "";
   const payload: Record<string, unknown> = {
     ownerId: uid,
-    title: serviceName.slice(0, 120),
+    title: (customTitle || serviceName).slice(0, 120),
     category: serviceName.slice(0, 80),
     status: "open",
     schedule: {
       when: input.when.slice(0, 300),
       serviceId: service?.id ?? input.serviceId,
       ...(input.subcategoryId ? { subcategoryId: input.subcategoryId.slice(0, 40) } : {}),
+      ...(customTitle ? { jobTitle: customTitle } : {}),
       rate: input.rate,
     },
     createdAt: serverTimestamp(),
