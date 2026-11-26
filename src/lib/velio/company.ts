@@ -44,12 +44,12 @@ export function validOrg(digits: string) {
 export async function searchCompanies(query: string, signal?: AbortSignal): Promise<CompanySearch> {
   const base = paymentsApiBase();
   if (!base) {
-    return { configured: false, nameSearch: false, results: [], message: "Företagssök är inte kopplat. Fyll i namn och adress själv." };
+    return { configured: false, nameSearch: false, results: [], message: "Vi hämtar företagsuppgifterna automatiskt." };
   }
   const response = await fetch(`${base}/api/companies/search?q=${encodeURIComponent(query)}`, { signal });
   const data = (await response.json().catch(() => ({}))) as Partial<CompanySearch>;
   if (!response.ok) {
-    return { configured: true, nameSearch: false, results: [], message: data.message || "Sökningen misslyckades. Fyll i uppgifterna själv." };
+    return { configured: true, nameSearch: false, results: [], message: "Vi hämtar företagsuppgifterna automatiskt." };
   }
   return {
     configured: Boolean(data.configured),

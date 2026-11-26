@@ -104,11 +104,9 @@ export function BusinessSetup() {
   const [pn, setPn] = useState("");
   const [pnFromBank, setPnFromBank] = useState(false);
   const [revealPn, setRevealPn] = useState(false);
-  const [companyQuery, setCompanyQuery] = useState("");
-  const [companyHits, setCompanyHits] = useState<Omit<CompanyRecord, "fTax">[]>([]);
-  const [companyNote, setCompanyNote] = useState("");
   const [companyBusy, setCompanyBusy] = useState(false);
   const [company, setCompany] = useState<CompanyRecord | null>(null);
+  const [fTax, setFtax] = useState<"yes" | "no" | "unsure" | null>(null);
   const [trades, setTrades] = useState<ServiceId[]>([]);
   const [offers, setOffers] = useState<Offer[]>([]);
   const [area, setArea] = useState<AddressHit | null>(null);
@@ -170,6 +168,7 @@ export function BusinessSetup() {
       org,
       pn,
       company,
+      fTax,
       trades,
       offers,
       place: area?.label ?? "",
@@ -178,7 +177,7 @@ export function BusinessSetup() {
       lng: area?.lng ?? null,
       km,
     });
-  }, [step, identityVia, seller, org, pn, company, trades, offers, area, km, saveSetupDraft]);
+  }, [step, identityVia, seller, org, pn, company, fTax, trades, offers, area, km, saveSetupDraft]);
 
   const resumeSetup = () => {
     const draft = setupDraft;
@@ -188,7 +187,12 @@ export function BusinessSetup() {
     if (draft.seller === "company" || draft.seller === "private") setSeller(draft.seller);
     if (typeof draft.org === "string") setOrg(draft.org);
     if (typeof draft.pn === "string") setPn(draft.pn);
-    if (draft.company && typeof draft.company === "object") setCompany(draft.company as CompanyRecord);
+    if (draft.company && typeof draft.company === "object") {
+      const saved = draft.company as CompanyRecord;
+      setCompany(saved.source === "bolagsverket" && saved.name ? saved : null);
+      if (saved.fTax) setFtax(saved.fTax);
+    }
+    if (draft.fTax === "yes" || draft.fTax === "no" || draft.fTax === "unsure") setFtax(draft.fTax);
     if (Array.isArray(draft.trades)) setTrades(draft.trades as ServiceId[]);
     if (Array.isArray(draft.offers)) setOffers(draft.offers as Offer[]);
     if (typeof draft.km === "number") setKm(draft.km);
@@ -215,42 +219,38 @@ export function BusinessSetup() {
   };
 
   useEffect(() => {
-    if (seller !== "company" || company) {
-      setCompanyHits([]);
+    if (seller !== "company" || !validOrg(org)) {
       setCompanyBusy(false);
+      if (!validOrg(org)) setCompany(null);
       return;
     }
-    const query = companyQuery.trim();
-    if (query.length < 2) {
-      setCompanyHits([]);
-      setCompanyNote("");
-      return;
-    }
+    setCompany((current) => (orgDigits(current?.orgNumber || "") === org ? current : null));
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
       setCompanyBusy(true);
-      void searchCompanies(query, controller.signal)
+      void searchCompanies(org, controller.signal)
         .then((found) => {
           if (controller.signal.aborted) return;
-          setCompanyHits(found.results);
-          setCompanyNote(found.results.length ? "" : found.message);
+          const hit = found.configured ? found.results[0] : undefined;
+          setCompany(
+            hit?.name
+              ? { ...hit, fTax: null, source: "bolagsverket" }
+              : null,
+          );
         })
         .catch((error: unknown) => {
           if (error instanceof DOMException && error.name === "AbortError") return;
-          if (!controller.signal.aborted) {
-            setCompanyHits([]);
-            setCompanyNote("Sökningen misslyckades. Fyll i namn och adress själv.");
-          }
+          if (!controller.signal.aborted) setCompany(null);
         })
         .finally(() => {
           if (!controller.signal.aborted) setCompanyBusy(false);
         });
-    }, 320);
+    }, 250);
     return () => {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [company, companyQuery, seller]);
+  }, [org, seller]);
 
   const goPrice = () => {
     if (!trades.length) return showToast("Välj minst en tjänst");
@@ -267,14 +267,16 @@ export function BusinessSetup() {
     const names = trades.map((id) => services.find((item) => item.id === id)?.name).filter(Boolean);
     const who = profile.name || "Jag";
     const where = area.label;
+    const lookedUp = company?.source === "bolagsverket" && company.name ? company.name : "";
+    const companyLabel = lookedUp || who;
     const listing: Listing = {
       serviceId: trades[0],
       serviceIds: trades,
-      title: seller === "private" ? "Privatperson" : company?.name || who,
+      title: seller === "private" ? "Privatperson" : companyLabel,
       desc:
         seller === "private"
           ? `${who} tar uppdrag som privatperson inom ${names.join(", ")} kring ${where}.`
-          : `${company?.name ?? who} tar uppdrag inom ${names.join(", ")} kring ${where}.`,
+          : `${companyLabel} tar uppdrag inom ${names.join(", ")} kring ${where}.`,
       price: Math.min(...active.map((offer) => offer.price)),
       photos,
       offers: active.map(({ name, hours, price }) => ({ name, hours, price })),
@@ -282,15 +284,14 @@ export function BusinessSetup() {
       sellerKind: seller === "private" ? "private" : "company",
       demo: true,
       nationalId: seller === "private" ? pn : undefined,
-      ...(seller === "private" || !company
+      ...(seller === "private"
         ? {}
         : {
-            companyName: company.name,
-            orgNumber: company.orgNumber,
-            ...(company.fTax ? { fTax: company.fTax } : {}),
+            companyName: companyLabel,
+            orgNumber: formatOrg(orgDigits(company?.orgNumber || org)),
+            ...(fTax ? { fTax } : {}),
           }),
     };
-    if (seller !== "private" && !company) return showToast("Slå upp företaget först");
     publishDemoBusiness(listing);
     saveSetupDraft(null);
   };
@@ -375,7 +376,7 @@ export function BusinessSetup() {
     step === "identity"
       ? "BankID är vägen när en leverantör är kopplad. ID-handling granskas inte i den här versionen."
         : step === "org"
-        ? "Sök på organisationsnummer. Hittas bolaget fylls namn och adress i. Annars skriver du dem själv."
+        ? "Skriv ditt organisationsnummer så hämtar vi resten."
         : step === "person"
           ? "Numret behövs för att veta vem som ska få betalt. Det sparas bara på ditt privata konto, som bara du kan läsa, och visas inte på den publika profilen."
           : step === "trades"
@@ -423,36 +424,13 @@ export function BusinessSetup() {
                 <ChoiceCard icon={UserRound} title="Privatperson" subtitle="Inget företag" selected={seller === "private"} onClick={() => setSeller("private")} />
               </div>
               {seller === "company" ? (
-                <CompanyFields
-                  company={company}
-                  query={companyQuery}
-                  hits={companyHits}
-                  note={companyNote}
+                <OrgNumberFields
+                  digits={org}
                   busy={companyBusy}
-                  onQuery={(value) => {
-                    setCompanyQuery(value);
-                    setOrg(orgDigits(value));
-                  }}
-                  onPick={(hit) => {
-                    setCompany({ ...hit, fTax: company?.fTax ?? null, source: "bolagsverket" });
-                    setOrg(orgDigits(hit.orgNumber));
-                    setCompanyHits([]);
-                    setCompanyNote("");
-                  }}
-                  onClear={() => setCompany(null)}
-                  onChange={(next) => setCompany({ ...next, source: next.source || "manual" })}
-                  onManual={() => {
-                    if (company) return;
-                    const digits = orgDigits(companyQuery);
-                    setCompany({
-                      orgNumber: validOrg(digits) ? formatOrg(digits) : "",
-                      name: digits ? "" : companyQuery.trim(),
-                      street: "",
-                      city: "",
-                      fTax: null,
-                      source: "manual",
-                    });
-                  }}
+                  company={company?.source === "bolagsverket" ? company : null}
+                  fTax={fTax}
+                  onDigits={(value) => setOrg(orgDigits(value))}
+                  onTax={setFtax}
                 />
               ) : null}
             </div>
@@ -603,7 +581,7 @@ export function BusinessSetup() {
             </div>
           ) : null}
 
-          {step === "preview" && (seller === "private" || company) ? (
+          {step === "preview" && seller ? (
             <div className="overflow-hidden rounded-[1.4rem] border border-line bg-paper">
               <div className="bg-sand px-4 py-3">
                 <span className="rounded-full bg-brown px-2.5 py-1 text-xs font-semibold text-paper">Demo</span>
@@ -613,8 +591,8 @@ export function BusinessSetup() {
                 <div className="flex items-center gap-3">
                   <ProfilePhoto />
                   <div>
-                    <p className="font-serif text-2xl leading-none">{profile.name || company?.name}</p>
-                    <p className="mt-1 text-sm text-muted">{seller === "private" ? "Privatperson" : company?.name}</p>
+                    <p className="font-serif text-2xl leading-none">{profile.name || company?.name || formatOrg(org)}</p>
+                    <p className="mt-1 text-sm text-muted">{seller === "private" ? "Privatperson" : company?.name || formatOrg(org) || profile.name}</p>
                   </div>
                 </div>
                 <p className="mt-3 text-sm">fr. {Math.min(...offers.filter((offer) => offer.on).map((offer) => offer.price))} kr</p>
@@ -635,7 +613,7 @@ export function BusinessSetup() {
                   </p>
                 ) : (
                   <>
-                    <p className="mt-3 text-sm text-muted">Org.nr {company?.orgNumber}</p>
+                    <p className="mt-3 text-sm text-muted">Org.nr {formatOrg(orgDigits(company?.orgNumber || org))}</p>
                   </>
                 )}
                 <p className="mt-4 flex gap-2 rounded-2xl bg-sand px-3 py-3 text-sm leading-snug">
@@ -660,10 +638,8 @@ export function BusinessSetup() {
               if (step === "org") {
                 if (seller === "private") openPrivate();
                 else {
-                  const digits = orgDigits(company?.orgNumber || org);
-                  if (digits && !validOrg(digits)) return showToast("Organisationsnummer skrivs som 10 siffror");
-                  if (!company?.name.trim()) return showToast("Välj ett bolag eller skriv namnet");
-                  if (!company.fTax) return showToast("Välj F-skatt: ja, nej eller vet inte");
+                  if (!validOrg(org)) return showToast("Kontrollera organisationsnumret");
+                  if (!fTax) return showToast("Välj F-skatt: ja, nej eller vet inte");
                   setStep("trades");
                 }
                 return;
@@ -692,115 +668,72 @@ export function BusinessSetup() {
   );
 }
 
-function CompanyFields({
-  company,
-  query,
-  hits,
-  note,
+function OrgNumberFields({
+  digits,
   busy,
-  onQuery,
-  onPick,
-  onClear,
-  onChange,
-  onManual,
+  company,
+  fTax,
+  onDigits,
+  onTax,
 }: {
-  company: CompanyRecord | null;
-  query: string;
-  hits: Omit<CompanyRecord, "fTax">[];
-  note: string;
+  digits: string;
   busy: boolean;
-  onQuery: (value: string) => void;
-  onPick: (hit: Omit<CompanyRecord, "fTax">) => void;
-  onClear: () => void;
-  onChange: (next: CompanyRecord) => void;
-  onManual: () => void;
+  company: CompanyRecord | null;
+  fTax: "yes" | "no" | "unsure" | null;
+  onDigits: (value: string) => void;
+  onTax: (value: "yes" | "no" | "unsure") => void;
 }) {
-  const tax = (
-    <div>
-      <p className="text-sm font-medium">F-skatt</p>
-      <div className="mt-2 grid grid-cols-3 gap-2">
-        {(
-          [
-            ["yes", "Ja"],
-            ["no", "Nej"],
-            ["unsure", "Vet inte"],
-          ] as const
-        ).map(([value, label]) => (
-          <button
-            key={value}
-            type="button"
-            aria-pressed={company?.fTax === value}
-            onClick={() => company && onChange({ ...company, fTax: value })}
-            className={cn("h-12 rounded-full text-sm font-semibold", company?.fTax === value ? "bg-brown text-paper" : "border border-line bg-paper")}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-      <p className="mt-2 text-xs leading-snug text-muted">Svaret sparas bara på ditt konto. Det visas inte på profilen och kontrolleras inte mot Skatteverket.</p>
-    </div>
-  );
-  if (company) {
-    return (
-      <div className="space-y-3">
-        <div className="flex items-start justify-between gap-3 rounded-2xl bg-sand px-3 py-3">
-          <div>
-            <p className="font-semibold">{company.name || "Företag"}</p>
-            <p className="text-sm text-muted">{company.orgNumber || "Utan organisationsnummer"}</p>
-          </div>
-          <button type="button" onClick={onClear} className="text-sm font-semibold text-brown">
-            Ändra
-          </button>
-        </div>
-        <label className="block text-sm font-medium">
-          Namn
-          <input value={company.name} onChange={(event) => onChange({ ...company, name: event.target.value, source: "manual" })} className="mt-1 h-12 w-full rounded-2xl border border-line bg-paper px-4 font-normal outline-none" />
-        </label>
-        <label className="block text-sm font-medium">
-          Gatuadress
-          <input value={company.street} onChange={(event) => onChange({ ...company, street: event.target.value, source: "manual" })} className="mt-1 h-12 w-full rounded-2xl border border-line bg-paper px-4 font-normal outline-none" />
-        </label>
-        <label className="block text-sm font-medium">
-          Ort
-          <input value={company.city} onChange={(event) => onChange({ ...company, city: event.target.value, source: "manual" })} className="mt-1 h-12 w-full rounded-2xl border border-line bg-paper px-4 font-normal outline-none" />
-        </label>
-        {tax}
-      </div>
-    );
-  }
+  const invalid = digits.length === 10 && !validOrg(digits);
+  const address = [company?.street, company?.postalCode, company?.city].filter(Boolean).join(", ");
   return (
-    <div>
+    <div className="space-y-3">
       <label className="block">
-        <span className="mb-2 block text-sm font-medium text-muted">Företag eller organisationsnummer</span>
+        <span className="mb-2 block text-sm font-medium text-muted">Organisationsnummer</span>
         <input
-          value={query}
-          placeholder="Namn eller 556677-8899"
-          aria-label="Sök företag"
+          value={formatOrg(digits)}
+          inputMode="numeric"
           autoComplete="off"
-          onChange={(event) => onQuery(event.target.value)}
-          className="h-14 w-full rounded-2xl border border-line bg-paper px-4 text-lg text-ink outline-none"
+          placeholder="556677-8899"
+          aria-label="Organisationsnummer"
+          aria-invalid={invalid}
+          onChange={(event) => onDigits(event.target.value)}
+          className="h-14 w-full rounded-2xl border border-line bg-paper px-4 text-lg tracking-wide text-ink outline-none"
         />
       </label>
-      {busy ? <p className="mt-2 text-sm text-muted">Söker bolag…</p> : null}
-      {hits.length ? (
-        <ul className="mt-2 overflow-hidden rounded-2xl border border-line bg-paper">
-          {hits.map((hit) => (
-            <li key={hit.orgNumber} className="border-b border-line last:border-b-0">
-              <button type="button" onClick={() => onPick(hit)} className="block w-full px-3 py-3 text-left">
-                <span className="block font-semibold">{hit.name}</span>
-                <span className="block text-sm text-muted">
-                  {hit.orgNumber}
-                  {hit.city ? ` · ${hit.city}` : ""}
-                </span>
-              </button>
-            </li>
+      {invalid ? <p className="text-sm text-red-800">Kontrollera organisationsnumret.</p> : null}
+      {busy ? <p className="text-sm text-muted">Hämtar företagsuppgifter…</p> : null}
+      {company?.name ? (
+        <div className="rounded-2xl bg-sand px-3 py-3">
+          <p className="font-semibold">{company.name}</p>
+          {address ? <p className="mt-1 text-sm text-muted">{address}</p> : null}
+          <p className="mt-1 text-sm text-muted">{company.orgNumber}</p>
+        </div>
+      ) : (
+        <p className="text-sm text-muted">Vi hämtar företagsuppgifterna automatiskt.</p>
+      )}
+      <div>
+        <p className="text-sm font-medium">F-skatt</p>
+        <div className="mt-2 grid grid-cols-3 gap-2">
+          {(
+            [
+              ["yes", "Ja"],
+              ["no", "Nej"],
+              ["unsure", "Vet inte"],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={fTax === value}
+              onClick={() => onTax(value)}
+              className={cn("h-12 rounded-full text-sm font-semibold", fTax === value ? "bg-brown text-paper" : "border border-line bg-paper")}
+            >
+              {label}
+            </button>
           ))}
-        </ul>
-      ) : null}
-      {note ? <p className="mt-2 text-sm text-muted">{note}</p> : null}
-      <button type="button" onClick={onManual} className="mt-3 text-sm font-semibold text-brown">
-        Fyll i namn och adress själv
-      </button>
+        </div>
+        <p className="mt-2 text-xs leading-snug text-muted">Svaret sparas bara på ditt konto. Det visas inte på profilen och kontrolleras inte mot Skatteverket.</p>
+      </div>
     </div>
   );
 }

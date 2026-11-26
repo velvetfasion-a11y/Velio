@@ -11,7 +11,7 @@ export default async function handler(req, res) {
       configured: false,
       nameSearch: false,
       results: [],
-      message: "Bolagsverket är inte kopplat. Fyll i namn och adress själv.",
+      message: "Vi hämtar företagsuppgifterna automatiskt.",
     });
   }
   if (digits.length === 10 && validOrg(digits)) {
@@ -28,7 +28,7 @@ export default async function handler(req, res) {
         configured: true,
         nameSearch: false,
         results: [],
-        message: "Bolagsverket gick inte att nå. Fyll i uppgifterna själv.",
+        message: "Vi hämtar företagsuppgifterna automatiskt.",
       });
     }
   }
@@ -36,9 +36,6 @@ export default async function handler(req, res) {
     configured: true,
     nameSearch: false,
     results: [],
-    message:
-      digits.length > 0
-        ? "Skriv hela organisationsnumret, 10 siffror."
-        : "Bolagsverkets gratis-API söker på organisationsnummer, inte på namn. Skriv numret, eller fyll i namn och adress själv.",
+    message: "Vi hämtar företagsuppgifterna automatiskt.",
   });
 }
