@@ -350,7 +350,7 @@ service cloud.firestore {
 
     function isValidUser(data) {
       return hasRequiredFields(['uid', 'createdAt', 'updatedAt']) &&
-        hasOnlyAllowedFields(['uid', 'email', 'phone', 'displayName', 'accountType', 'orgNumber', 'nationalId', 'fSkatt', 'stripeAccountId', 'stripeOnboardingStatus', 'stripeAccountState', 'stripeRequirements', 'status', 'statusReason', 'disabledAt', 'idVerified', 'idMethod', 'emailLower', 'phoneE164', 'createdAt', 'updatedAt']) &&
+        hasOnlyAllowedFields(['uid', 'email', 'phone', 'displayName', 'accountType', 'orgNumber', 'nationalId', 'fSkatt', 'stripeAccountId', 'stripeOnboardingStatus', 'stripeAccountState', 'stripeRequirements', 'status', 'statusReason', 'disabledAt', 'idVerified', 'idMethod', 'idStatus', 'verifiedName', 'personnummerHash', 'emailLower', 'phoneE164', 'createdAt', 'updatedAt']) &&
         data.uid is string &&
         data.uid == request.auth.uid &&
         isValidTimestamp(data.createdAt) &&
@@ -370,6 +370,9 @@ service cloud.firestore {
         isValidOptionalString(data, 'stripeAccountState', 0, 40) &&
         isValidOptionalString(data, 'idMethod', 0, 20) &&
         (!('idVerified' in data) || data.idVerified is bool) &&
+        (!('idStatus' in data) || data.idStatus in ['pending', 'verified', 'canceled', 'requires_input']) &&
+        isValidOptionalString(data, 'verifiedName', 1, 80) &&
+        isValidOptionalString(data, 'personnummerHash', 64, 64) &&
         (!('disabledAt' in data) || isValidTimestamp(data.disabledAt)) &&
         (!('stripeRequirements' in data) || data.stripeRequirements is list);
     }
@@ -551,7 +554,7 @@ service cloud.firestore {
         omitsAdminUserFields();
       allow update: if isOwner(userId) &&
         isValidUser(request.resource.data) &&
-        areImmutableFieldsUnchanged(['uid', 'createdAt', 'stripeAccountId', 'stripeOnboardingStatus', 'stripeAccountState', 'stripeRequirements', 'status', 'statusReason', 'disabledAt', 'idVerified', 'idMethod', 'emailLower', 'phoneE164']);
+        areImmutableFieldsUnchanged(['uid', 'createdAt', 'stripeAccountId', 'stripeOnboardingStatus', 'stripeAccountState', 'stripeRequirements', 'status', 'statusReason', 'disabledAt', 'idVerified', 'idMethod', 'idStatus', 'verifiedName', 'personnummerHash', 'emailLower', 'phoneE164']);
     }
 
     match /profiles/{userId} {

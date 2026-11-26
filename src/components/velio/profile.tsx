@@ -289,6 +289,7 @@ export function ProfileScreens() {
   const listing = useVelio((state) => state.listing);
   const accountMode = useVelio((state) => state.accountMode);
   const idVerified = useVelio((state) => state.idVerified);
+  const idStatus = useVelio((state) => state.idStatus);
   const kycPending = useVelio((state) => state.kycPending);
   const idMethod = useVelio((state) => state.idMethod);
   const setAccountMode = useVelio((state) => state.setAccountMode);
@@ -508,8 +509,8 @@ export function ProfileScreens() {
       ? "Demo\ninte verifierad"
       : !idVerified
         ? "Identitet\nkrävs"
-        : idMethod === "passport"
-          ? "Verifierad\nmed pass"
+        : idMethod === "bankid" || idMethod === "stripe_identity"
+          ? "Verifierad\nmed BankID"
           : "Verifierad\nmed BankID";
     const points = [
       { icon: ShieldCheck, label: verifyLabel },
@@ -915,7 +916,7 @@ export function ProfileScreens() {
         <div className="font-display text-4xl font-bold tracking-tight">VELIO</div>
         <h2 className="mt-3 font-display text-2xl font-semibold">Välkommen</h2>
         <p className="mt-2 mb-6 max-w-xs text-sm leading-relaxed text-muted">
-          Logga in med BankID, Google, e-post eller mobil. Utförare verifieras med BankID eller pass.
+          Logga in med Google, e-post eller mobil. Utförare verifieras med BankID.
         </p>
         <Btn variant="bank" onClick={() => setSheet("bankid")}>
           <Shield className="size-4" /> Öppna BankID
@@ -926,7 +927,7 @@ export function ProfileScreens() {
 
   const own = ownBusiness({ accountId, directory, loggedIn });
   const email = profile.email;
-  const verifyLabel = idVerified ? "ID verifierat" : "Konto aktivt";
+  const verifyLabel = idVerified ? "Verifierad" : idStatus === "pending" ? "Väntar" : idStatus === "canceled" || idStatus === "requires_input" ? "Försök igen" : "Inte verifierad";
   const roleLabel = accountMode === "business" ? "Utförare" : "Kund";
   const quick = [
     { icon: Calendar, label: "Bokningar", badge: bookings.length, onClick: () => go("bookings") },
@@ -1118,8 +1119,8 @@ function ModeSwitch({
     go("home");
   };
   const badge = idVerified
-    ? idMethod === "passport"
-      ? "Verifierad med pass"
+    ? idMethod === "bankid" || idMethod === "stripe_identity"
+      ? "Verifierad med BankID"
       : "Verifierad med BankID"
     : "Konto aktivt";
   return (
@@ -1152,7 +1153,7 @@ function ModeSwitch({
             active={mode === "business"}
             icon={Briefcase}
             title="VELIO Business"
-            text={idVerified || ownsListing ? "Erbjud tjänster och ta emot uppdrag" : "Kräver BankID eller pass"}
+            text={idVerified || ownsListing ? "Erbjud tjänster och ta emot uppdrag" : "Kräver BankID"}
             onClick={() => pick("business")}
           />
         </div>

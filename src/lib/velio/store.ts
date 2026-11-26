@@ -432,6 +432,8 @@ type VelioState = {
   accountMode: "customer" | "business";
   idVerified: boolean;
   idMethod: string | null;
+  idStatus: string | null;
+  verifiedName: string | null;
   /** Local placeholder only. Never contains image data. */
   kycPending: { document: "passport" | "national-id" | "driving-licence"; submittedAt: string; reference: string } | null;
   markKycPending: (input: { document: "passport" | "national-id" | "driving-licence"; reference: string }) => void;
@@ -675,6 +677,8 @@ export const useVelio = create<VelioState>()(
       accountMode: "customer",
       idVerified: false,
       idMethod: null,
+      idStatus: null,
+      verifiedName: null,
       kycPending: null,
       wallet: emptyWallet(),
       bankIdPersonalNumber: null,

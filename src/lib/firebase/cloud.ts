@@ -199,8 +199,6 @@ function emitDirectory(list: Provider[]) {
     ...(own && !prefersCustomer()
       ? {
           accountMode: "business" as const,
-          idVerified: false,
-          idMethod: "demo",
           providerId: state.providerId ?? own.id,
           listing: state.listing ?? {
             serviceId: own.serviceId,
@@ -350,6 +348,10 @@ export function startCloudSession(uid: string) {
           phone: asString(data.phone),
           avatar: state.profile.avatar,
         },
+        idVerified: data.idVerified === true,
+        idMethod: asString(data.idMethod) || null,
+        idStatus: asString(data.idStatus) || null,
+        verifiedName: asString(data.verifiedName) || null,
       });
     }),
   );

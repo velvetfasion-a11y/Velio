@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Building2, Check, IdCard, Shield, ShieldCheck, UserRound, type LucideIcon } from "lucide-react";
+import { Building2, Check, Shield, UserRound, type LucideIcon } from "lucide-react";
 import { services, type ServiceId } from "@/lib/velio/data";
 import { formatOrg, orgDigits, searchCompanies, validOrg, type CompanyRecord } from "@/lib/velio/company";
 import { searchAddresses, type AddressHit } from "@/lib/velio/geo";
@@ -7,7 +7,7 @@ import { formatPerson, personDigits, validatePersonnummer } from "@/lib/velio/pe
 import { AddressSearch } from "@/components/velio/address-search";
 import { useVelio, type Listing } from "@/lib/velio/store";
 import dynamic from "next/dynamic";
-import { IdentityFlow } from "@/components/velio/identity";
+import { BankIdVerify } from "@/components/velio/bankid-verify";
 import { ProfilePhoto } from "@/components/velio/ui";
 
 const RadiusMap = dynamic(() => import("@/components/velio/radius-map").then((mod) => mod.RadiusMap), {
@@ -312,7 +312,7 @@ export function BusinessSetup() {
           </p>
           <ul className="mt-6 space-y-3">
             {[
-              ["Identitet", "BankID om det finns, annars ID-handling som platshållare."],
+              ["Identitet", "BankID i appen. Pass används inte."],
               ["Företag eller privat", "Organisationsnummer, eller personnummer om du inte har bolag."],
               ["Syns för kunder", "Tjänster, pris, område och en förhandsvisning."],
             ].map(([title, body]) => (
@@ -339,16 +339,12 @@ export function BusinessSetup() {
 
   if (step === "doc") {
     return (
-      <div className="absolute inset-0 z-40 flex flex-col bg-cream">
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 pt-4 pb-6">
-          <IdentityFlow
-            onBack={() => setStep("identity")}
-            onContinue={() => {
-              setIdentityVia("document");
-              setStep("org");
-            }}
-          />
-        </div>
+      <div className="absolute inset-0 z-40 flex flex-col bg-cream px-5 pt-6">
+        <button type="button" onClick={() => setStep("identity")} className="text-sm font-semibold text-brown">
+          Tillbaka
+        </button>
+        <h1 className="ios-title mt-4 text-[1.85rem]">Har du inte BankID?</h1>
+        <p className="mt-3 text-sm leading-relaxed text-muted">Verifiering med pass är inte tillgänglig. Använd BankID i appen.</p>
       </div>
     );
   }
@@ -374,7 +370,7 @@ export function BusinessSetup() {
 
   const subtitle =
     step === "identity"
-      ? "BankID är vägen när en leverantör är kopplad. ID-handling granskas inte i den här versionen."
+      ? "BankID öppnas här i appen. Har du inte BankID kan du inte verifiera dig i den här versionen."
         : step === "org"
         ? "Skriv ditt organisationsnummer så hämtar vi resten."
         : step === "person"
@@ -411,9 +407,8 @@ export function BusinessSetup() {
         <p className="mt-2 text-sm leading-relaxed text-muted">{subtitle}</p>
         <div className="mt-6">
           {step === "identity" ? (
-            <div className="grid grid-cols-2 gap-3">
-              <ChoiceCard icon={ShieldCheck} title="BankID" subtitle="Rekommenderas" selected={identityVia === "bankid"} onClick={() => setIdentityVia("bankid")} />
-              <ChoiceCard icon={IdCard} title="ID-handling" subtitle="Pass eller kort" selected={identityVia === "document"} onClick={() => setIdentityVia("document")} />
+            <div className="space-y-4">
+              <BankIdVerify onVerified={() => setIdentityVia("bankid")} />
             </div>
           ) : null}
 
@@ -626,13 +621,13 @@ export function BusinessSetup() {
         </div>
       </div>
       <div className="px-5 pt-2 pb-4">
-        {(step === "identity" && !identityVia) || (step === "org" && !seller) ? null : (
+        {(step === "org" && !seller) ? null : (
           <button
             type="button"
             onClick={() => {
               if (step === "identity") {
-                if (identityVia === "document") setStep("doc");
-                else setStep("org");
+                setIdentityVia("bankid");
+                setStep("org");
                 return;
               }
               if (step === "org") {
