@@ -46,7 +46,9 @@ async function hash(value: string): Promise<string> {
 
 export function isStaticHost(): boolean {
   if (typeof window === "undefined") return process.env.NEXT_PUBLIC_STATIC === "1";
-  return process.env.NEXT_PUBLIC_STATIC === "1" || window.location.hostname.endsWith("github.io");
+  if (process.env.NEXT_PUBLIC_STATIC === "1") return true;
+  const host = window.location.hostname;
+  return host === "velio.nu" || host === "www.velio.nu" || host.endsWith("github.io");
 }
 
 export function getLocalSessionAccount(): LocalAccount | null {

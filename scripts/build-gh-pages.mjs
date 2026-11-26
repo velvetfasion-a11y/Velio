@@ -25,15 +25,17 @@ try {
   await rm(join(root, ".next"), { recursive: true, force: true });
   await rename(apiDir, stashDir);
   moved = true;
+  const basePath = (process.env.NEXT_PUBLIC_BASE_PATH ?? "").trim().replace(/\/$/, "");
   await run("npx", ["next", "build"], {
     GITHUB_PAGES: "1",
     NEXT_PUBLIC_STATIC: "1",
-    NEXT_PUBLIC_BASE_PATH: "/Velio",
+    NEXT_PUBLIC_BASE_PATH: basePath,
+    NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL || "https://velio.nu",
   });
   const outDir = join(root, "out");
   await writeFile(join(outDir, ".nojekyll"), "");
-  // Project pages serve repo root at /Velio/ — keep export paths with basePath /Velio
-  console.log("build-gh-pages: static site ready in out/");
+  await writeFile(join(outDir, "CNAME"), "velio.nu\n");
+  console.log(`build-gh-pages: static site ready in out/ (basePath ${basePath || "/"}, CNAME velio.nu)`);
 } finally {
   if (moved) {
     await rm(apiDir, { recursive: true, force: true }).catch(() => undefined);

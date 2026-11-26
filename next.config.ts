@@ -1,19 +1,24 @@
 import type { NextConfig } from "next";
 
-const isGhPages = process.env.GITHUB_PAGES === "1";
-const basePath = isGhPages ? "/Velio" : "";
+/** Empty by default so velio.nu is served from the site root. Set NEXT_PUBLIC_BASE_PATH for a subpath such as /Velio. */
+function configuredBasePath() {
+  return (process.env.NEXT_PUBLIC_BASE_PATH ?? "").trim().replace(/\/$/, "");
+}
+
+const basePath = configuredBasePath();
+const pages = process.env.GITHUB_PAGES === "1";
 
 const nextConfig: NextConfig = {
   devIndicators: false,
   serverExternalPackages: ["@electric-sql/pglite", "pg"],
   env: {
-    NEXT_PUBLIC_BASE_PATH: process.env.NEXT_PUBLIC_BASE_PATH || basePath,
+    NEXT_PUBLIC_BASE_PATH: basePath,
+    NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL || "https://velio.nu",
   },
-  ...(isGhPages
+  ...(pages
     ? {
         output: "export" as const,
-        basePath: "/Velio",
-        assetPrefix: "/Velio/",
+        ...(basePath ? { basePath, assetPrefix: `${basePath}/` } : {}),
         images: { unoptimized: true },
         trailingSlash: true,
       }
