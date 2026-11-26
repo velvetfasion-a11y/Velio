@@ -570,8 +570,22 @@ service cloud.firestore {
         isValidTimestamp(data.createdAt);
     }
 
+    function isBookingChange(data) {
+      return hasRequiredFields(['senderId', 'type', 'date', 'time', 'place', 'service', 'status', 'createdAt']) &&
+        hasOnlyAllowedFields(['senderId', 'type', 'date', 'time', 'place', 'description', 'service', 'status', 'createdAt']) &&
+        data.senderId == request.auth.uid &&
+        data.type == 'booking_change' &&
+        data.status == 'pending' &&
+        isShort(data, 'date', 40) &&
+        data.time is string && data.time.matches('^[0-2][0-9]:[0-5][0-9]$') &&
+        data.place is string && data.place.size() <= 200 &&
+        isShort(data, 'service', 80) &&
+        (!('description' in data) || (data.description is string && data.description.size() <= 2000)) &&
+        isValidTimestamp(data.createdAt);
+    }
+
     function isValidMessage(data) {
-      return isTextMessage(data) || isTimeConfirmation(data) || isFinalPrice(data) || isOnTheWay(data);
+      return isTextMessage(data) || isTimeConfirmation(data) || isFinalPrice(data) || isOnTheWay(data) || isBookingChange(data);
     }
 
     function isChatMember(chatId) {
@@ -591,6 +605,14 @@ service cloud.firestore {
       return resource.data.type == 'final_price' &&
         resource.data.status == 'waiting' &&
         request.resource.data.status == 'paid' &&
+        request.auth.uid != resource.data.senderId &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
+    }
+
+    function canAnswerBookingChange() {
+      return resource.data.type == 'booking_change' &&
+        resource.data.status == 'pending' &&
+        request.resource.data.status in ['accepted', 'declined'] &&
         request.auth.uid != resource.data.senderId &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
     }
@@ -679,6 +701,24 @@ service cloud.firestore {
           (('workerId' in resource.data) && resource.data.workerId == request.auth.uid));
     }
 
+    function jobIsOpenForChange() {
+      return resource.data.status in ['open', 'assigned'] &&
+        (!('payoutStatus' in resource.data) || resource.data.payoutStatus == 'none' || resource.data.payoutStatus == '') &&
+        (!('transferId' in resource.data) || resource.data.transferId == '') &&
+        (!('paymentStatus' in resource.data) || resource.data.paymentStatus in ['requires_payment', 'processing', 'failed', 'canceled']);
+    }
+
+    function canApplyBookingChange() {
+      return jobIsOpenForChange() &&
+        request.resource.data.status == resource.data.status &&
+        (request.auth.uid == resource.data.ownerId || (('workerId' in resource.data) && resource.data.workerId == request.auth.uid)) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['schedule', 'locationLabel', 'description', 'updatedAt']) &&
+        request.resource.data.schedule is map &&
+        isValidTimestamp(request.resource.data.updatedAt) &&
+        (!request.resource.data.keys().hasAny(['locationLabel']) || (request.resource.data.locationLabel is string && request.resource.data.locationLabel.size() <= 200)) &&
+        (!request.resource.data.keys().hasAny(['description']) || (request.resource.data.description is string && request.resource.data.description.size() <= 8000));
+    }
+
     function canShareWorkerLocation() {
       return isAuthenticated() &&
         resource.data.keys().hasAny(['workerId']) &&
@@ -715,11 +755,13 @@ service cloud.firestore {
       allow update: if isAuthenticated() && (
         canCancelJob() ||
         canShareWorkerLocation() ||
+        (canApplyBookingChange() && isValidJob(request.resource.data)) ||
         (
           resource.data.ownerId == request.auth.uid &&
           request.resource.data.ownerId == resource.data.ownerId &&
           isValidJob(request.resource.data) &&
           !(resource.data.status != 'cancelled' && request.resource.data.status == 'cancelled') &&
+          !(request.resource.data.diff(resource.data).affectedKeys().hasAny(['schedule', 'locationLabel', 'description']) && !jobIsOpenForChange()) &&
           workerIdOk() &&
           areImmutableFieldsUnchanged(['ownerId', 'createdAt', 'paymentStatus', 'paymentIntentId', 'paidAt', 'payoutStatus', 'transferId', 'offerId', 'amountOre', 'feeOre', 'workOre', 'currency', 'refundedOre', 'disputeId', 'disputeStatus'])
         )
@@ -765,7 +807,7 @@ service cloud.firestore {
         allow read: if isAuthenticated() &&
           request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participantIds;
         allow create: if isChatMember(chatId) && isValidMessage(request.resource.data);
-        allow update: if isChatMember(chatId) && (canConfirmTime() || canMarkPaid() || canUpdateEnroute());
+        allow update: if isChatMember(chatId) && (canConfirmTime() || canMarkPaid() || canUpdateEnroute() || canAnswerBookingChange());
         allow delete: if isAuthenticated() &&
           resource.data.senderId == request.auth.uid &&
           request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participantIds;

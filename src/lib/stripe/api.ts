@@ -42,3 +42,7 @@ export function releasePayout(jobId: string) {
 export function cancelCloudJob(jobId: string, reason: string) {
   return post<{ ok: boolean; released: boolean }>(`/api/support/jobs/${jobId}/cancel`, { reason });
 }
+
+export function acceptCloudBookingChange(jobId: string, messageId: string) {
+  return post<{ ok: boolean }>(`/api/support/jobs/${jobId}/change`, { messageId });
+}

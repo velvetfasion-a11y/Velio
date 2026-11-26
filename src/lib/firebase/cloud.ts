@@ -747,6 +747,7 @@ export async function sendMissedCall(peerUid: string, callId: string) {
 export type StructuredPayload =
   | { type: "time_confirmation"; date: string; time: string; place: string; service: string }
   | { type: "final_price"; service: string; amount: number; when: string; place: string }
+  | { type: "booking_change"; date: string; time: string; place: string; description?: string; service: string }
   | {
       type: "on_the_way";
       place: string;
@@ -805,6 +806,13 @@ export async function sendStructuredMessage(peerUid: string, message: Structured
     payload.when = message.when.slice(0, 80);
     payload.place = message.place.slice(0, 200);
     payload.status = "waiting";
+  } else if (message.type === "booking_change") {
+    payload.date = message.date.slice(0, 40);
+    payload.time = message.time;
+    payload.place = message.place.slice(0, 200);
+    payload.service = message.service.slice(0, 80);
+    payload.status = "pending";
+    if (message.description?.trim()) payload.description = message.description.trim().slice(0, 2000);
   } else {
     payload.place = message.place.slice(0, 200);
     payload.etaMin = Math.max(0, Math.round(message.etaMin));
@@ -834,6 +842,19 @@ export async function patchStructuredMessage(peerUid: string, messageId: string,
     next[key] = value === undefined ? deleteField() : value;
   }
   await updateDoc(doc(db(), "chats", meta.id, "messages", messageId), next);
+}
+
+/** Applies an accepted booking change. Address and description are written only when the proposal includes them. */
+export async function applyBookingOnJob(jobId: string, input: { when: string; place?: string; description?: string }) {
+  const ref = doc(db(), "jobs", jobId);
+  const snap = await getDoc(ref);
+  const current = snap.data()?.schedule;
+  const schedule = current && typeof current === "object" ? { ...(current as Record<string, unknown>) } : {};
+  schedule.when = input.when.slice(0, 300);
+  const patch: Record<string, unknown> = { schedule, updatedAt: serverTimestamp() };
+  if (input.place?.trim()) patch.locationLabel = input.place.trim().slice(0, 200);
+  if (input.description?.trim()) patch.description = input.description.trim().slice(0, 8000);
+  await updateDoc(ref, patch);
 }
 
 /** Last shared position only. Pass null to clear it when the worker arrives. */

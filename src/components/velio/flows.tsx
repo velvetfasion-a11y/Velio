@@ -6,7 +6,7 @@ import { displayMessage } from "@/lib/velio/chat-codec";
 import { capturePosition } from "@/lib/velio/geo";
 import { etaFromArea, geocodePlace, routeEta } from "@/lib/velio/route-eta";
 import { isCloudActive } from "@/lib/firebase/session";
-import { FinalPriceMessage, OnTheWayCard, TimeConfirmationCard } from "@/components/velio/chat-cards";
+import { BookingChangeCard, FinalPriceMessage, OnTheWayCard, TimeConfirmationCard } from "@/components/velio/chat-cards";
 import { cn } from "@/lib/cn";
 import { AppHeader, PlaceLink } from "@/components/velio/header";
 import { CityMap } from "@/components/velio/osm-map";
@@ -26,9 +26,14 @@ function clockNow() {
 function progressStep(messages: ChatMsg[]) {
   const shown = messages.map(displayMessage);
   const paid = shown.some((message) => message.card?.kind === "paid" || (message.card?.kind === "final_price" && message.card.status === "paid"));
-  const arrived = shown.some((message) => message.card?.kind === "on_the_way" && message.card.status === "arrived") || messages.some((message) => /framme/i.test(message.text || ""));
-  const enroute = shown.some((message) => message.card?.kind === "on_the_way" && message.card.status === "enroute") || messages.some((message) => /på väg/i.test(message.text || ""));
-  const timeSet = shown.some((message) => message.card?.kind === "time_confirmation" || message.card?.kind === "slot");
+  let resetAt = -1;
+  shown.forEach((message, index) => {
+    if (message.card?.kind === "booking_change" && message.card.status === "accepted") resetAt = index;
+  });
+  const relevant = resetAt >= 0 ? shown.slice(resetAt) : shown;
+  const arrived = relevant.some((message) => message.card?.kind === "on_the_way" && message.card.status === "arrived") || relevant.some((message) => /framme/i.test(message.text || ""));
+  const enroute = relevant.some((message) => message.card?.kind === "on_the_way" && message.card.status === "enroute") || relevant.some((message) => /på väg/i.test(message.text || ""));
+  const timeSet = relevant.some((message) => message.card?.kind === "time_confirmation" || message.card?.kind === "slot" || (message.card?.kind === "booking_change" && message.card.status === "accepted"));
   if (paid) return 4;
   if (arrived) return 3;
   if (enroute) return 2;
@@ -63,6 +68,15 @@ async function publishCard(peerId: string, card: ChatCard, jobId?: string) {
       await sendStructuredMessage(peerId, { type: "time_confirmation", date: card.date, time: card.time, place: card.place, service: card.service }, jobId);
     } else if (card.kind === "final_price") {
       await sendStructuredMessage(peerId, { type: "final_price", service: card.service, amount: card.amount, when: card.when, place: card.place }, jobId);
+    } else if (card.kind === "booking_change") {
+      await sendStructuredMessage(peerId, {
+        type: "booking_change",
+        date: card.date,
+        time: card.time,
+        place: card.place,
+        description: card.description,
+        service: card.service,
+      }, jobId);
     } else if (card.kind === "on_the_way" && card.status === "enroute") {
       await sendStructuredMessage(
         peerId,
@@ -87,7 +101,7 @@ async function publishCard(peerId: string, card: ChatCard, jobId?: string) {
   }
 }
 
-async function patchCard(peerId: string, messageId: string, patch: Record<string, unknown>) {
+async function patchCard(peerId: string, messageId: string, patch: Record<string, unknown>, remote = true) {
   const state = useVelio.getState();
   const prev = state.chats[peerId] ?? [];
   useVelio.setState({
@@ -96,7 +110,7 @@ async function patchCard(peerId: string, messageId: string, patch: Record<string
       [peerId]: prev.map((message) => (message.id === messageId && message.card ? { ...message, card: { ...message.card, ...patch } as ChatCard } : message)),
     },
   });
-  if (!isCloudActive() || messageId.startsWith("card-") || messageId.startsWith("local-")) return;
+  if (!remote || !isCloudActive() || messageId.startsWith("card-") || messageId.startsWith("local-")) return;
   try {
     const { patchStructuredMessage } = await import("@/lib/firebase/cloud");
     await patchStructuredMessage(peerId, messageId, patch);
@@ -104,6 +118,48 @@ async function patchCard(peerId: string, messageId: string, patch: Record<string
     const { cloudErrorSv } = await import("@/lib/firebase/cloud");
     useVelio.getState().showToast(cloudErrorSv(error));
   }
+}
+
+async function answerBookingChange(peerId: string, message: ChatMsg, status: "accepted" | "declined") {
+  if (message.card?.kind !== "booking_change") return;
+  const card = message.card;
+  if (status === "declined") {
+    await patchCard(peerId, message.id, { status: "declined" });
+    useVelio.getState().showToast("Förslaget är avböjt");
+    return;
+  }
+  const jobId = await linkedJobId(peerId);
+  let remotePatched = false;
+  if (jobId && isCloudActive() && !message.id.startsWith("card-")) {
+    try {
+      const { acceptCloudBookingChange } = await import("@/lib/stripe/api");
+      await acceptCloudBookingChange(jobId, message.id);
+      remotePatched = true;
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "";
+      if (!/finns inte|inte kopplad|Failed to fetch|NetworkError|Load failed|Not found|Okänd väg/i.test(text)) {
+        useVelio.getState().showToast(text || "Tiden kunde inte ändras");
+        return;
+      }
+    }
+  }
+  if (!remotePatched && jobId && isCloudActive()) {
+    try {
+      const { applyBookingOnJob } = await import("@/lib/firebase/cloud");
+      await applyBookingOnJob(jobId, { when: `${card.date}, ${card.time}`, place: card.place, description: card.description });
+    } catch (error) {
+      const { cloudErrorSv } = await import("@/lib/firebase/cloud");
+      useVelio.getState().showToast(cloudErrorSv(error));
+      return;
+    }
+  }
+  await patchCard(peerId, message.id, { status: "accepted" }, !remotePatched);
+  const label = `${card.date}, ${card.time}`;
+  const state = useVelio.getState();
+  useVelio.setState({
+    bookings: state.bookings.map((item) => (item.providerId === peerId && item.status !== "done" ? { ...item, whenLabel: label, location: card.place || item.location } : item)),
+  });
+  useVelio.getState().showToast("Ny tid är bekräftad");
 }
 
 async function cancelThread(peerId: string, reason: string) {
@@ -372,6 +428,8 @@ export function ChatSheet() {
   const [note, setNote] = useState("");
   const [changeDate, setChangeDate] = useState<Date | null>(null);
   const [changeTime, setChangeTime] = useState("");
+  const [changePlace, setChangePlace] = useState("");
+  const [changeAbout, setChangeAbout] = useState("");
   const [rebookWhen, setRebookWhen] = useState<(typeof whenOptions)[number]>(whenOptions[0]);
   const scroller = useRef<HTMLDivElement>(null);
   const lastId = messages[messages.length - 1]?.id;
@@ -505,6 +563,14 @@ export function ChatSheet() {
                 time={message.time}
                 onAccept={() => void patchCard(provider.id, message.id, { status: "confirmed" })}
                 onPropose={() => setHelp("change")}
+              />
+            ) : message.card?.kind === "booking_change" ? (
+              <BookingChangeCard
+                card={message.card}
+                mine={message.from === "me"}
+                time={message.time}
+                onAccept={() => void answerBookingChange(provider.id, message, "accepted")}
+                onDecline={() => void answerBookingChange(provider.id, message, "declined")}
               />
             ) : message.card?.kind === "final_price" ? (
               <FinalPriceMessage
@@ -693,16 +759,16 @@ export function ChatSheet() {
             <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-line" />
             <div className="mb-3 flex items-center justify-between">
               <h3 className="font-serif text-[1.7rem] leading-none">
-                {help === "change" ? "Ändra bokning" : help === "problem" ? "Beskriv problemet" : help === "sure" ? "Är du säker?" : help === "detail" ? issue : "Avboka"}
+                {help === "change" ? "Ändra bokning" : help === "menu" ? "Mer" : help === "problem" ? "Beskriv problemet" : help === "sure" ? "Är du säker?" : help === "detail" ? issue : "Avboka"}
               </h3>
               <button type="button" aria-label="Stäng" onClick={() => setHelp(null)} className="grid size-8 place-items-center">
                 <X className="size-5" />
               </button>
             </div>
             {help === "menu" ? (
-              <button type="button" onClick={() => { setCancelReason(""); setHelp("cancel"); }} className="mb-3 flex w-full items-center gap-3 rounded-[1.2rem] border border-line bg-white px-3 py-3 text-left">
-                <Ban className="size-5 text-red-800" strokeWidth={1.6} />
-                <span className="flex-1 text-[15px]">Avboka uppdrag</span>
+              <button type="button" onClick={() => { setChangePlace(jobPlace); setChangeAbout(""); setHelp("change"); }} className="mb-3 flex w-full items-center gap-3 rounded-[1.2rem] border border-line bg-white px-3 py-3.5 text-left">
+                <Calendar className="size-5" strokeWidth={1.6} />
+                <span className="flex-1 text-[15px]">Ändra bokning</span>
                 <ChevronRight className="size-4 text-muted" />
               </button>
             ) : null}
@@ -745,6 +811,12 @@ export function ChatSheet() {
                   );
                 })}
               </div>
+            ) : null}
+            {help === "menu" ? (
+              <button type="button" onClick={() => { setCancelReason(""); setHelp("cancel"); }} className="mt-3 flex w-full items-center gap-3 rounded-[1.2rem] border border-line bg-white px-3 py-3.5 text-left text-red-800">
+                <Ban className="size-5" strokeWidth={1.6} />
+                <span className="flex-1 text-[15px] font-semibold">Avboka</span>
+              </button>
             ) : null}
             {help === "sure" ? (
               <div>
@@ -812,27 +884,40 @@ export function ChatSheet() {
               </div>
             ) : null}
             {help === "change" ? (
-              <ChangeWhen
-                date={changeDate}
-                time={changeTime}
-                onDate={setChangeDate}
-                onTime={setChangeTime}
-                hint="Välj datum och tid. Utföraren får det som en ny förfrågan."
-                submitLabel="Skicka förfrågan"
-                onSend={() => {
-                  if (!changeDate || !changeTime) return showToast("Välj datum och tid");
-                  const label = `${changeDate.toLocaleDateString("sv-SE", { day: "numeric", month: "short" }).replace(".", "")}, ${changeTime}`;
-                  appendChat(provider.id, {
-                    id: `move-${Date.now()}`,
-                    from: "me",
-                    time: "21:45",
-                    text: `Ny förfrågan: ${label}`,
-                    card: { kind: "reschedule", when: label, place: jobPlace, service: jobTitle },
-                  });
-                  setHelp(null);
-                  showToast("Förfrågan skickad till utföraren");
-                }}
-              />
+              paid || finished ? (
+                <p className="text-sm leading-relaxed text-muted">Bokningen är betald eller klar och kan inte ändras.</p>
+              ) : (
+                <>
+                  <p className="mb-3 text-sm leading-relaxed text-muted">Föreslå en ny tid. Adress och beskrivning kan du också ändra. Utföraren godkänner innan bokningen ändras.</p>
+                  <label className="mb-1 block text-xs font-semibold" htmlFor="change-place">Adress</label>
+                  <input id="change-place" value={changePlace} onChange={(event) => setChangePlace(event.target.value.slice(0, 200))} placeholder="Valfritt" className="mb-3 w-full rounded-2xl border border-line bg-white px-3 py-2 text-sm outline-none" />
+                  <label className="mb-1 block text-xs font-semibold" htmlFor="change-about">Beskrivning</label>
+                  <textarea id="change-about" value={changeAbout} onChange={(event) => setChangeAbout(event.target.value.slice(0, 2000))} rows={2} placeholder="Valfritt" className="mb-2 w-full rounded-2xl border border-line bg-white px-3 py-2 text-sm outline-none" />
+                  <ChangeWhen
+                    date={changeDate}
+                    time={changeTime}
+                    onDate={setChangeDate}
+                    onTime={setChangeTime}
+                    hint=""
+                    submitLabel="Skicka förslag"
+                    onSend={() => {
+                      if (!changeDate || !changeTime) return showToast("Välj datum och tid");
+                      const dateLabel = changeDate.toLocaleDateString("sv-SE", { day: "numeric", month: "short" }).replace(".", "");
+                      void linkedJobId(provider.id).then((jobId) => publishCard(provider.id, {
+                        kind: "booking_change",
+                        date: dateLabel,
+                        time: changeTime,
+                        place: changePlace.trim(),
+                        description: changeAbout.trim() || undefined,
+                        service: jobTitle,
+                        status: "pending",
+                      }, jobId));
+                      setHelp(null);
+                      showToast("Förslag skickat");
+                    }}
+                  />
+                </>
+              )
             ) : null}
           </div>
         </div>
@@ -993,6 +1078,12 @@ function SyncedPeerChat({
 }) {
   const scroller = useRef<HTMLDivElement>(null);
   const showToast = useVelio((state) => state.showToast);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [changeOpen, setChangeOpen] = useState(false);
+  const [changeDate, setChangeDate] = useState<Date | null>(null);
+  const [changeTime, setChangeTime] = useState("");
+  const [changePlace, setChangePlace] = useState("");
+  const [changeAbout, setChangeAbout] = useState("");
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const lastId = messages[messages.length - 1]?.id;
@@ -1018,7 +1109,7 @@ function SyncedPeerChat({
         <button type="button" aria-label="Ring" onClick={() => openCallSheet({ peerId, peerName })} className="grid size-9 place-items-center">
           <Phone className="size-5" />
         </button>
-        <button type="button" aria-label="Mer" onClick={() => { setCancelReason(""); setCancelOpen(true); }} className="grid size-9 place-items-center">
+        <button type="button" aria-label="Mer" onClick={() => setMenuOpen(true)} className="grid size-9 place-items-center">
           <Ellipsis className="size-5" />
         </button>
       </div>
@@ -1043,7 +1134,20 @@ function SyncedPeerChat({
                   mine={message.from === "me"}
                   time={message.time}
                   onAccept={() => void patchCard(peerId, message.id, { status: "confirmed" })}
-                  onPropose={() => showToast("Föreslå en ny tid i meddelandet")}
+                  onPropose={() => { setChangePlace(""); setChangeAbout(""); setChangeOpen(true); }}
+                />
+              </div>
+            );
+          }
+          if (message.card?.kind === "booking_change") {
+            return (
+              <div key={message.id} className="mt-3">
+                <BookingChangeCard
+                  card={message.card}
+                  mine={message.from === "me"}
+                  time={message.time}
+                  onAccept={() => void answerBookingChange(peerId, message, "accepted")}
+                  onDecline={() => void answerBookingChange(peerId, message, "declined")}
                 />
               </div>
             );
@@ -1119,13 +1223,56 @@ function SyncedPeerChat({
           ) : null;
         })}
       </div>
+      {menuOpen ? (
+        <JobMenu
+          onChange={() => { setChangePlace(""); setChangeAbout(""); setMenuOpen(false); setChangeOpen(true); }}
+          onCancel={() => { setCancelReason(""); setMenuOpen(false); setCancelOpen(true); }}
+          onClose={() => setMenuOpen(false)}
+        />
+      ) : null}
+      {changeOpen ? (
+        <div className="absolute inset-0 z-20 flex flex-col justify-end bg-black/25" onClick={() => setChangeOpen(false)}>
+          <div className="max-h-[88%] overflow-y-auto rounded-t-[1.6rem] bg-cream px-4 pt-3 pb-6" onClick={(event) => event.stopPropagation()}>
+            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-line" />
+            <h3 className="font-serif text-[1.7rem] leading-none">Ändra bokning</h3>
+            <BookingChangeForm
+              role="customer"
+              locked={messages.some((message) => (message.card?.kind === "final_price" && message.card.status === "paid") || message.card?.kind === "paid")}
+              date={changeDate}
+              time={changeTime}
+              place={changePlace}
+              about={changeAbout}
+              onDate={setChangeDate}
+              onTime={setChangeTime}
+              onPlace={setChangePlace}
+              onAbout={setChangeAbout}
+              onClose={() => setChangeOpen(false)}
+              onSend={() => {
+                if (!changeDate || !changeTime) return showToast("Välj datum och tid");
+                const dateLabel = changeDate.toLocaleDateString("sv-SE", { day: "numeric", month: "short" }).replace(".", "");
+                void linkedJobId(peerId).then((jobId) => publishCard(peerId, {
+                  kind: "booking_change",
+                  date: dateLabel,
+                  time: changeTime,
+                  place: changePlace.trim(),
+                  description: changeAbout.trim() || undefined,
+                  service: "Uppdrag",
+                  status: "pending",
+                }, jobId));
+                setChangeOpen(false);
+                showToast("Förslag skickat");
+              }}
+            />
+          </div>
+        </div>
+      ) : null}
       {cancelOpen ? (
         <div className="absolute inset-0 z-20 flex flex-col justify-end bg-black/25" onClick={() => setCancelOpen(false)}>
           <div className="rounded-t-[1.6rem] bg-cream px-4 pt-3 pb-6" onClick={(event) => event.stopPropagation()}>
             <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-line" />
             <h3 className="mb-2 font-serif text-[1.7rem] leading-none">Avboka</h3>
             <CancelJobSheet
-              locked={messages.some((message) => message.card?.kind === "final_price" && message.card.status === "paid" || message.card?.kind === "paid")}
+              locked={messages.some((message) => (message.card?.kind === "final_price" && message.card.status === "paid") || message.card?.kind === "paid")}
               reason={cancelReason}
               onReason={setCancelReason}
               onClose={() => setCancelOpen(false)}
@@ -1178,6 +1325,9 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
   const [editingPrice, setEditingPrice] = useState(false);
   const [draft, setDraft] = useState("");
   const [moreOpen, setMoreOpen] = useState(false);
+  const [changeOpen, setChangeOpen] = useState(false);
+  const [changeDate, setChangeDate] = useState<Date | null>(null);
+  const [changeTime, setChangeTime] = useState("");
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [etaOpen, setEtaOpen] = useState(false);
@@ -1393,6 +1543,18 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
               <MissedCallCard time={message.time} />
             ) : message.card?.kind === "time_confirmation" ? (
               <TimeConfirmationCard card={message.card} mine time={message.time} />
+            ) : message.card?.kind === "booking_change" ? (
+              <BookingChangeCard
+                card={message.card}
+                mine={message.from === "me"}
+                time={message.time}
+                onAccept={() => {
+                  void answerBookingChange(threadKey, message, "accepted").then(() => {
+                    if (message.card?.kind === "booking_change") setWhen(`${message.card.date}, ${message.card.time}`);
+                  });
+                }}
+                onDecline={() => void answerBookingChange(threadKey, message, "declined")}
+              />
             ) : message.card?.kind === "final_price" ? (
               <FinalPriceMessage card={message.card} mine time={message.time} />
             ) : message.card?.kind === "on_the_way" ? (
@@ -1609,13 +1771,40 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
       </div>
       )}
       {moreOpen ? (
-        <div className="absolute inset-0 z-20 flex flex-col justify-end bg-black/25" onClick={() => setMoreOpen(false)}>
-          <div className="rounded-t-[1.6rem] bg-cream px-4 pt-3 pb-6" onClick={(event) => event.stopPropagation()}>
+        <JobMenu
+          onChange={() => { setMoreOpen(false); setChangeOpen(true); }}
+          onCancel={() => { setCancelReason(""); setMoreOpen(false); setCancelOpen(true); }}
+          onClose={() => setMoreOpen(false)}
+        />
+      ) : null}
+      {changeOpen ? (
+        <div className="absolute inset-0 z-20 flex flex-col justify-end bg-black/25" onClick={() => setChangeOpen(false)}>
+          <div className="max-h-[88%] overflow-y-auto rounded-t-[1.6rem] bg-cream px-4 pt-3 pb-6" onClick={(event) => event.stopPropagation()}>
             <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-line" />
-            <button type="button" onClick={() => { setMoreOpen(false); setCancelOpen(true); }} className="flex w-full items-center gap-3 rounded-[1.2rem] border border-line bg-white px-3 py-3 text-left">
-              <Ban className="size-5 text-red-800" />
-              <span className="text-[15px]">Avboka uppdrag</span>
-            </button>
+            <h3 className="font-serif text-[1.7rem] leading-none">Ändra bokning</h3>
+            <BookingChangeForm
+              role="worker"
+              locked={step >= 4}
+              date={changeDate}
+              time={changeTime}
+              onDate={setChangeDate}
+              onTime={setChangeTime}
+              onClose={() => setChangeOpen(false)}
+              onSend={() => {
+                if (!changeDate || !changeTime) return showToast("Välj datum och tid");
+                const dateLabel = changeDate.toLocaleDateString("sv-SE", { day: "numeric", month: "short" }).replace(".", "");
+                void linkedJobId(threadKey).then((jobId) => publishCard(threadKey, {
+                  kind: "booking_change",
+                  date: dateLabel,
+                  time: changeTime,
+                  place: "",
+                  service: jobService,
+                  status: "pending",
+                }, jobId));
+                setChangeOpen(false);
+                showToast("Förslag skickat");
+              }}
+            />
           </div>
         </div>
       ) : null}
@@ -1658,6 +1847,78 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
           </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function JobMenu({ onChange, onCancel, onClose }: { onChange: () => void; onCancel: () => void; onClose: () => void }) {
+  return (
+    <div className="absolute inset-0 z-20 flex flex-col justify-end bg-black/25" onClick={onClose}>
+      <div className="rounded-t-[1.6rem] bg-cream px-4 pt-3 pb-6" onClick={(event) => event.stopPropagation()}>
+        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-line" />
+        <div className="overflow-hidden rounded-[1.2rem] border border-line bg-white">
+          <button type="button" onClick={onChange} className="flex w-full items-center gap-3 px-3 py-3.5 text-left">
+            <Calendar className="size-5" strokeWidth={1.6} />
+            <span className="flex-1 text-[15px]">Ändra bokning</span>
+            <ChevronRight className="size-4 text-muted" />
+          </button>
+          <button type="button" onClick={onCancel} className="flex w-full items-center gap-3 border-t border-line px-3 py-3.5 text-left text-red-800">
+            <Ban className="size-5" strokeWidth={1.6} />
+            <span className="flex-1 text-[15px] font-semibold">Avboka</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BookingChangeForm({
+  role,
+  locked,
+  date,
+  time,
+  place,
+  about,
+  onDate,
+  onTime,
+  onPlace,
+  onAbout,
+  onClose,
+  onSend,
+}: {
+  role: "customer" | "worker";
+  locked: boolean;
+  date: Date | null;
+  time: string;
+  place?: string;
+  about?: string;
+  onDate: (date: Date) => void;
+  onTime: (time: string) => void;
+  onPlace?: (value: string) => void;
+  onAbout?: (value: string) => void;
+  onClose: () => void;
+  onSend: () => void;
+}) {
+  if (locked) {
+    return <p className="mt-2 text-sm leading-relaxed text-muted">Bokningen är betald eller klar och kan inte ändras.</p>;
+  }
+  return (
+    <div className="mt-2">
+      <p className="text-sm leading-relaxed text-muted">
+        {role === "customer"
+          ? "Föreslå en ny tid. Adress och beskrivning kan du också ändra. Utföraren godkänner innan bokningen ändras."
+          : "Föreslå en ny tid. Kunden godkänner innan bokningen ändras."}
+      </p>
+      {role === "customer" ? (
+        <>
+          <label className="mt-3 mb-1 block text-xs font-semibold" htmlFor="peer-change-place">Adress</label>
+          <input id="peer-change-place" value={place ?? ""} onChange={(event) => onPlace?.(event.target.value.slice(0, 200))} placeholder="Valfritt" className="w-full rounded-2xl border border-line bg-white px-3 py-2 text-sm outline-none" />
+          <label className="mt-3 mb-1 block text-xs font-semibold" htmlFor="peer-change-about">Beskrivning</label>
+          <textarea id="peer-change-about" value={about ?? ""} onChange={(event) => onAbout?.(event.target.value.slice(0, 2000))} rows={2} placeholder="Valfritt" className="w-full rounded-2xl border border-line bg-white px-3 py-2 text-sm outline-none" />
+        </>
+      ) : null}
+      <ChangeWhen date={date} time={time || "14:00"} onDate={onDate} onTime={onTime} hint="" submitLabel="Skicka förslag" onSend={onSend} />
+      <button type="button" onClick={onClose} className="mt-2 w-full rounded-full border border-line bg-white py-3 font-semibold">Avbryt</button>
     </div>
   );
 }

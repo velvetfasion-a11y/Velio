@@ -110,6 +110,54 @@ export function FinalPriceMessage({
   );
 }
 
+export function BookingChangeCard({
+  card,
+  mine,
+  time,
+  onAccept,
+  onDecline,
+}: {
+  card: Extract<ChatCard, { kind: "booking_change" }>;
+  mine: boolean;
+  time?: string;
+  onAccept?: () => void;
+  onDecline?: () => void;
+}) {
+  const pending = card.status === "pending";
+  const label = card.status === "accepted" ? "Godkänd" : card.status === "declined" ? "Avböjd" : mine ? "Väntar på svar" : "Väntar";
+  return (
+    <div>
+      <div className="rounded-[1.25rem] border border-line bg-white px-4 py-4">
+        <div className="mb-3 flex items-center gap-2">
+          <Calendar className="size-5" />
+          <h3 className="text-lg font-semibold">Ny tid</h3>
+          <span className={`ml-auto rounded-full px-2.5 py-1 text-xs font-semibold ${card.status === "accepted" ? "bg-ok/15 text-ok" : "bg-sand text-muted"}`}>
+            {label}
+          </span>
+        </div>
+        <div className="space-y-1 text-[15px]">
+          {card.service ? <p><span className="font-semibold">Uppdrag:</span> {card.service}</p> : null}
+          <p><span className="font-semibold">Datum:</span> {card.date}</p>
+          <p><span className="font-semibold">Tid:</span> {card.time}</p>
+          {card.place ? <p><span className="font-semibold">Plats:</span> {card.place}</p> : null}
+          {card.description ? <p><span className="font-semibold">Beskrivning:</span> {card.description}</p> : null}
+        </div>
+        {!mine && pending && onAccept && onDecline ? (
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <button type="button" onClick={onDecline} className="rounded-full border border-line py-3 text-[15px] font-semibold">
+              Avböj
+            </button>
+            <button type="button" onClick={onAccept} className="rounded-full bg-brown py-3 text-[15px] font-semibold text-white">
+              Godkänn
+            </button>
+          </div>
+        ) : null}
+      </div>
+      <Stamp time={time} />
+    </div>
+  );
+}
+
 export function OnTheWayCard({
   card,
   time,

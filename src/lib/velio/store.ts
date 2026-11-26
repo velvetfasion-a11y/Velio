@@ -148,6 +148,15 @@ export type ChatCard =
     }
   | { kind: "paid"; amount: number }
   | { kind: "reschedule"; when: string; place: string; service: string }
+  | {
+      kind: "booking_change";
+      date: string;
+      time: string;
+      place: string;
+      description?: string;
+      service: string;
+      status: "pending" | "accepted" | "declined";
+    }
   | { kind: "cancelled" }
   | { kind: "rebook"; service: string; when: string; place: string; about: string; price: number; status: "pending" | "accepted" | "declined" };
 

@@ -28,6 +28,7 @@ export function previewMessageText(raw: string): string {
   if (card?.kind === "confirmed" || card?.kind === "time_confirmation") return "Tid bekräftad";
   if (card?.kind === "quote" || card?.kind === "final_price") return "Slutpris skickat";
   if (card?.kind === "on_the_way") return card.status === "arrived" ? "Framme" : "På väg";
+  if (card?.kind === "booking_change") return "Ny tid föreslagen";
   if (card?.kind === "cancelled") return "Uppdraget är avbokat";
   if (card?.kind === "paid") return "Betalning mottagen";
   return decoded.text || raw;
@@ -128,6 +129,23 @@ export function messageFromFirestore(id: string, data: Record<string, unknown>, 
         lng: num(data.lng),
         jobLat: num(data.jobLat),
         jobLng: num(data.jobLng),
+      },
+    };
+  }
+  if (type === "booking_change") {
+    const status = data.status === "accepted" || data.status === "declined" ? data.status : "pending";
+    return {
+      id,
+      from,
+      time,
+      card: {
+        kind: "booking_change",
+        date: str(data.date),
+        time: str(data.time),
+        place: str(data.place),
+        description: str(data.description) || undefined,
+        service: str(data.service) || "Uppdrag",
+        status,
       },
     };
   }
