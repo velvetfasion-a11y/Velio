@@ -1,7 +1,8 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { FileText, Star, Bell, ArrowLeft, Heart, BadgeCheck, Shield, Calendar, MessageCircle, Clock, ChevronDown, ChevronRight, MapPin, Camera, Wrench, Phone, Ellipsis, Plus, Navigation, ClipboardCheck, Car, Check, Coins, CreditCard, Mic, Send, Briefcase, Search, Pencil, Ban, ClipboardList, Headphones, X, Lock, ShieldCheck, type LucideIcon } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { FileText, Star, Bell, ArrowLeft, Heart, BadgeCheck, Shield, Calendar, MessageCircle, Clock, ChevronDown, ChevronRight, MapPin, Camera, Wrench, Phone, Ellipsis, Plus, Navigation, ClipboardCheck, Car, Check, Coins, CreditCard, Mic, Send, Briefcase, Pencil, Ban, ClipboardList, Headphones, X, Lock, ShieldCheck, Receipt, type LucideIcon } from "lucide-react";
 import { kr, providerById, providerDescription, providerTradeNames, ratingLabel, serviceById, sortLabels, whenOptions, type SortKey } from "@/lib/velio/data";
 import { ownBusiness, useVelio, bookingStatusLabel, type Booking, type ChatCard, type ChatMsg } from "@/lib/velio/store";
+import { priceOrQuote, formatKr, normalizeJobPrice, jobPriceCard } from "@/lib/velio/price";
 import { displayMessage } from "@/lib/velio/chat-codec";
 import { capturePosition } from "@/lib/velio/geo";
 import { etaFromArea, geocodePlace, routeEta } from "@/lib/velio/route-eta";
@@ -18,6 +19,78 @@ import { MissedCallCard } from "@/components/velio/call-screen";
 import { MISSED_CALL_TEXT } from "@/lib/calls/ice";
 
 const EMPTY_CHAT: ChatMsg[] = [];
+
+function useChatBottom(scroller: RefObject<HTMLDivElement | null>, threadKey: string, revision: string) {
+  const stick = useRef(true);
+  const pinning = useRef(false);
+
+  const pin = () => {
+    const node = scroller.current;
+    if (!node || !stick.current) return;
+    pinning.current = true;
+    node.scrollTop = node.scrollHeight;
+    window.requestAnimationFrame(() => {
+      pinning.current = false;
+    });
+  };
+
+  useLayoutEffect(() => {
+    stick.current = true;
+    pin();
+    // Opening a thread always starts on the latest message.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [threadKey]);
+
+  useLayoutEffect(() => {
+    pin();
+    let inner = 0;
+    const outer = window.requestAnimationFrame(() => {
+      pin();
+      inner = window.requestAnimationFrame(pin);
+    });
+    return () => {
+      window.cancelAnimationFrame(outer);
+      if (inner) window.cancelAnimationFrame(inner);
+    };
+    // Follow new messages only while the reader is already near the bottom.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [threadKey, revision]);
+
+  useEffect(() => {
+    const node = scroller.current;
+    if (!node) return;
+    const onScroll = () => {
+      if (pinning.current) return;
+      const gap = node.scrollHeight - node.scrollTop - node.clientHeight;
+      stick.current = gap < 96;
+    };
+    const onLoad = (event: Event) => {
+      if (event.target instanceof HTMLImageElement) pin();
+    };
+    const observer = new ResizeObserver(() => pin());
+    const watch = () => {
+      observer.observe(node);
+      for (const child of node.children) observer.observe(child);
+    };
+    watch();
+    const mutations = new MutationObserver(() => {
+      watch();
+      pin();
+    });
+    mutations.observe(node, { childList: true, subtree: true });
+    node.addEventListener("scroll", onScroll, { passive: true });
+    node.addEventListener("load", onLoad, true);
+    const late = window.setTimeout(pin, 280);
+    return () => {
+      window.clearTimeout(late);
+      observer.disconnect();
+      mutations.disconnect();
+      node.removeEventListener("scroll", onScroll);
+      node.removeEventListener("load", onLoad, true);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [threadKey, revision]);
+}
 
 function clockNow() {
   return new Date().toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" });
@@ -67,7 +140,15 @@ async function publishCard(peerId: string, card: ChatCard, jobId?: string) {
     if (card.kind === "time_confirmation") {
       await sendStructuredMessage(peerId, { type: "time_confirmation", date: card.date, time: card.time, place: card.place, service: card.service }, jobId);
     } else if (card.kind === "final_price") {
-      await sendStructuredMessage(peerId, { type: "final_price", service: card.service, amount: card.amount, when: card.when, place: card.place }, jobId);
+      await sendStructuredMessage(peerId, {
+        type: "final_price",
+        service: card.service,
+        amount: card.amount,
+        when: card.when,
+        place: card.place,
+        hours: card.hours,
+        rate: card.rate,
+      }, jobId);
     } else if (card.kind === "booking_change") {
       await sendStructuredMessage(peerId, {
         type: "booking_change",
@@ -433,12 +514,7 @@ export function ChatSheet() {
   const [rebookWhen, setRebookWhen] = useState<(typeof whenOptions)[number]>(whenOptions[0]);
   const scroller = useRef<HTMLDivElement>(null);
   const lastId = messages[messages.length - 1]?.id;
-
-  useLayoutEffect(() => {
-    const node = scroller.current;
-    if (!node) return;
-    node.scrollTop = node.scrollHeight;
-  }, [lastId, messages.length]);
+  useChatBottom(scroller, providerId || "customer", `${lastId ?? ""}:${messages.length}`);
 
   const backToInbox = () => {
     closeSheet();
@@ -548,7 +624,7 @@ export function ChatSheet() {
           )}
         </div>
       </div>
-      <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+      <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-4 py-4 [overflow-anchor:none]">
         {messages.map((raw) => {
           const message = displayMessage(raw);
           return (
@@ -615,7 +691,7 @@ export function ChatSheet() {
                   <p><span className="font-semibold">Om jobbet:</span> {message.card.about}</p>
                   <p><span className="font-semibold">Tid:</span> {message.card.when}</p>
                   <p><span className="font-semibold">Plats:</span> {message.card.place}</p>
-                  <p><span className="font-semibold">Pris:</span> {kr(message.card.price)}</p>
+                  <p><span className="font-semibold">Pris:</span> {priceOrQuote(message.card.price)}</p>
                 </div>
                 <p className="mt-3 text-sm text-muted">{message.card.status === "accepted" ? "Godkänd" : message.card.status === "declined" ? "Nekad" : "Väntar på att arbetaren svarar"}</p>
               </div>
@@ -1087,11 +1163,7 @@ function SyncedPeerChat({
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const lastId = messages[messages.length - 1]?.id;
-  useLayoutEffect(() => {
-    const node = scroller.current;
-    if (!node) return;
-    node.scrollTop = node.scrollHeight;
-  }, [lastId, messages.length]);
+  useChatBottom(scroller, peerId, `${lastId ?? ""}:${messages.length}`);
   const initials = peerName
     .split(" ")
     .map((part) => part[0])
@@ -1120,7 +1192,7 @@ function SyncedPeerChat({
           <p className="text-sm text-muted">Synkad chatt</p>
         </div>
       </div>
-      <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+      <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-4 py-3 [overflow-anchor:none]">
         {messages.map((raw) => {
           const message = displayMessage(raw);
           if (message.text === MISSED_CALL_TEXT) {
@@ -1321,7 +1393,13 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
   const [when, setWhen] = useState("Idag, 14:00");
   const [slotDate, setSlotDate] = useState<Date | null>(null);
   const [slotTime, setSlotTime] = useState("14:00");
-  const [price, setPrice] = useState("1200");
+  const postedJobs = useVelio((state) => state.posted);
+  const linkedJob = postedJobs.find((job) => job.ownerId === threadKey);
+  const linkedPrice = normalizeJobPrice(linkedJob ?? { price: 0 });
+  const hourlyJob = linkedPrice.priceType === "hourly";
+  const [billHours, setBillHours] = useState("");
+  const [billRate, setBillRate] = useState("");
+  const [price, setPrice] = useState("");
   const [editingPrice, setEditingPrice] = useState(false);
   const [draft, setDraft] = useState("");
   const [moreOpen, setMoreOpen] = useState(false);
@@ -1338,7 +1416,6 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
   const jobPlace = "Södermalm";
   const jobService = "Städning";
   const shownMessages = messages.map(displayMessage);
-  const confirmed = shownMessages.some((message) => message.card?.kind === "time_confirmation" || message.card?.kind === "slot");
   const enrouteLive = shownMessages.find((message) => message.card?.kind === "on_the_way" && message.from === "me" && message.card.status === "enroute" && !message.card.approximate);
   const cancelled = shownMessages.reduce((locked, message) => {
     if (message.card?.kind === "cancelled") return true;
@@ -1360,6 +1437,7 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
   const pushLocal = (message: ChatMsg) => appendChat(threadKey, message);
   const thread = useRef<HTMLDivElement>(null);
   const lastId = messages[messages.length - 1]?.id;
+  useChatBottom(thread, threadKey || "worker", `${lastId ?? ""}:${messages.length}:${panel ?? ""}`);
   const initials = customerName
     .split(" ")
     .map((part) => part[0])
@@ -1367,11 +1445,11 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
     .slice(0, 2)
     .toUpperCase();
 
-  useLayoutEffect(() => {
-    const node = thread.current;
-    if (!node) return;
-    node.scrollTop = node.scrollHeight;
-  }, [lastId, messages.length, panel]);
+  useEffect(() => {
+    if (!hourlyJob) return;
+    if (!billRate && linkedPrice.price > 0) setBillRate(String(linkedPrice.price));
+    if (!billHours && linkedPrice.estHours) setBillHours(String(linkedPrice.estHours));
+  }, [hourlyJob, linkedPrice.price, linkedPrice.estHours, billRate, billHours]);
 
   const enrouteId = enrouteLive?.id ?? "";
   const enroutePoint = enrouteLive?.card?.kind === "on_the_way" && enrouteLive.card.jobLat != null ? `${enrouteLive.card.jobLat},${enrouteLive.card.jobLng}` : "";
@@ -1517,7 +1595,7 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
         })}
       </div>
 
-      <div ref={thread} className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+      <div ref={thread} className="min-h-0 flex-1 overflow-y-auto px-4 py-3 [overflow-anchor:none]">
         <div className="rounded-[1.2rem] border border-line bg-white p-2.5">
           <div className="flex items-center gap-3">
           <img src={asset("/velio/categories/stad-thumb.webp")} alt="" className="size-16 rounded-xl object-cover" />
@@ -1526,7 +1604,7 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
             <p className="mt-0.5 flex items-center gap-1 text-sm text-muted"><MapPin className="size-3.5" /> Södermalm</p>
             <p className="flex items-center gap-1 text-sm text-muted"><Calendar className="size-3.5" /> {when}</p>
           </div>
-          <span className="rounded-full bg-sand px-3 py-1.5 text-sm font-semibold">1 200 kr</span>
+          <span className="rounded-full bg-sand px-3 py-1.5 text-sm font-semibold">{linkedJob ? jobPriceCard(linkedJob) : "1 200 kr"}</span>
           </div>
           {cancelled ? (
             <button type="button" onClick={() => showToast("Kunden kan boka om jobbet")} className="mt-2 flex w-full items-center justify-center gap-1 rounded-full bg-brown py-2.5 text-sm font-semibold text-white">
@@ -1575,7 +1653,7 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
                   <p><span className="font-semibold">Om jobbet:</span> {message.card.about}</p>
                   <p><span className="font-semibold">Tid:</span> {message.card.when}</p>
                   <p><span className="font-semibold">Plats:</span> {message.card.place}</p>
-                  <p><span className="font-semibold">Pris:</span> {kr(message.card.price)}</p>
+                  <p><span className="font-semibold">Pris:</span> {priceOrQuote(message.card.price)}</p>
                 </div>
                 {message.card.status === "pending" ? (
                   <div className="mt-3 grid grid-cols-2 gap-2">
@@ -1653,10 +1731,11 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
 
       {cancelled ? null : (
       <>
-      <div className="mx-3 grid grid-cols-3 gap-2 rounded-[1.2rem] border border-line bg-white p-2">
+      <div className="mx-3 grid grid-cols-4 gap-1 rounded-[1.2rem] border border-line bg-sand p-1">
         <WorkerAction icon={Calendar} label="Bekräfta tid" active={panel === "time"} onClick={() => setPanel(panel === "time" ? null : "time")} />
-        <WorkerAction icon={Car} label={busyRoute ? "Hämtar position" : "Jag är på väg"} active={Boolean(enrouteLive)} onClick={() => void shareLive()} />
-        <WorkerAction icon={Coins} label="Skicka slutpris" active={panel === "price"} onClick={() => setPanel(panel === "price" ? null : "price")} />
+        <WorkerAction icon={Car} label="Jag är på väg" active={Boolean(enrouteLive)} busy={busyRoute} onClick={() => { if (!busyRoute) void shareLive(); }} />
+        <WorkerAction icon={MapPin} label="Jag är framme" active={step >= 3} onClick={() => void markArrived()} />
+        <WorkerAction icon={Receipt} label="Skicka slutpris" active={panel === "price"} onClick={() => setPanel(panel === "price" ? null : "price")} />
       </div>
 
       {panel === "time" ? (
@@ -1698,18 +1777,25 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
       {panel === "price" ? (
         <div className="mx-3 mt-2">
           <FinalPriceCard
-            amount={Number(price) || 0}
-            service="Städning"
+            amount={hourlyJob ? Math.round((Number(billHours.replace(",", ".")) || 0) * (Number(billRate) || 0)) : Number(price) || 0}
+            service={jobService}
             hours={hoursBetween(when)}
             when={when}
-            place="Södermalm"
+            place={jobPlace}
+            hourly={hourlyJob}
+            hoursValue={billHours}
+            rateValue={billRate}
+            onHours={setBillHours}
+            onRate={setBillRate}
             editing={editingPrice}
             price={price}
             onPrice={setPrice}
             onEdit={() => setEditingPrice(!editingPrice)}
             onSend={() => {
-              const amount = Number(price);
-              if (!amount) return showToast("Ange ett slutpris");
+              const hours = Number(billHours.replace(",", "."));
+              const rate = Number(billRate);
+              const amount = hourlyJob ? Math.round(hours * rate) : Number(price);
+              if (!amount) return showToast(hourlyJob ? "Fyll i timmar och timpris" : "Ange ett slutpris");
               void linkedJobId(threadKey).then((jobId) => publishCard(threadKey, {
                 kind: "final_price",
                 service: jobService,
@@ -1717,18 +1803,12 @@ function WorkerChat({ onClose }: { onClose: () => void }) {
                 when,
                 place: jobPlace,
                 status: "waiting",
+                ...(hourlyJob ? { hours, rate } : {}),
               }, jobId));
               setPanel(null);
               showToast("Pris skickat till kunden");
             }}
           />
-        </div>
-      ) : null}
-
-      {confirmed || enrouteLive ? (
-        <div className="flex gap-2 overflow-x-auto px-3 pt-2">
-          <StatusChip icon={MapPin} label="Jag är framme" onClick={() => void markArrived()} />
-          <StatusChip icon={Search} label="Jag ser inte dig?" onClick={() => say("Jag ser inte dig?")} />
         </div>
       ) : null}
       </>
@@ -1979,13 +2059,17 @@ function FinalPriceCard({
   service,
   when,
   place,
-  sent,
   quiet,
   editing,
   price,
   onPrice,
   onEdit,
   onSend,
+  hourly,
+  hoursValue,
+  rateValue,
+  onHours,
+  onRate,
 }: {
   amount: number;
   service: string;
@@ -1999,6 +2083,11 @@ function FinalPriceCard({
   onPrice?: (value: string) => void;
   onEdit?: () => void;
   onSend?: () => void;
+  hourly?: boolean;
+  hoursValue?: string;
+  rateValue?: string;
+  onHours?: (value: string) => void;
+  onRate?: (value: string) => void;
 }) {
   return (
     <div className="rounded-[1.25rem] border border-line bg-white px-4 py-4">
@@ -2008,18 +2097,30 @@ function FinalPriceCard({
           <span className="block text-lg font-semibold leading-tight">Slutpris</span>
           <span className="block text-sm text-muted">{service}</span>
         </span>
-        {quiet ? null : (
+        {quiet || hourly ? null : (
           <button type="button" onClick={onEdit} className="flex items-center gap-1 rounded-full border border-line bg-white px-2.5 py-1 text-sm">
             <Pencil className="size-3.5" /> Ändra
           </button>
         )}
       </div>
-      {editing ? (
+      {hourly ? (
+        <div className="grid grid-cols-2 gap-2">
+          <label className="text-xs font-semibold text-muted">
+            Antal timmar
+            <input value={hoursValue} inputMode="decimal" onChange={(event) => onHours?.(event.target.value.replace(/[^\d.,]/g, "").slice(0, 5))} className="mt-1 w-full rounded-2xl border border-line bg-white px-3 py-2 text-lg font-semibold text-ink outline-none" />
+          </label>
+          <label className="text-xs font-semibold text-muted">
+            Timpris
+            <input value={rateValue} inputMode="numeric" onChange={(event) => onRate?.(event.target.value.replace(/\D/g, "").slice(0, 6))} className="mt-1 w-full rounded-2xl border border-line bg-white px-3 py-2 text-lg font-semibold text-ink outline-none" />
+          </label>
+        </div>
+      ) : editing ? (
         <input value={price} inputMode="numeric" onChange={(event) => onPrice?.(event.target.value.replace(/[^\d]/g, ""))} className="mt-1 w-full rounded-2xl border border-line bg-white px-3 py-2 text-2xl font-semibold outline-none" />
       ) : (
-        <p className="text-3xl font-semibold tracking-tight">{amount.toLocaleString("sv-SE")} kr</p>
+        <p className="text-3xl font-semibold tracking-tight">{amount > 0 ? formatKr(amount) : "Ange ett pris"}</p>
       )}
-      <p className="text-sm text-muted">Inkl. moms</p>
+      {hourly && amount > 0 ? <p className="mt-3 text-2xl font-semibold tracking-tight">{formatKr(amount)}</p> : null}
+      <p className="text-sm text-muted">Serviceavgift VELIO läggs till.</p>
       <div className="mt-3 space-y-1 border-t border-line pt-3 text-[15px]">
         <p><span className="font-semibold">Tid:</span> {when.replace(/\s*[–-]\s*\d{1,2}:\d{2}\s*$/, "")}</p>
         <p><span className="font-semibold">Plats:</span> {place}</p>
@@ -2030,14 +2131,6 @@ function FinalPriceCard({
         </button>
       )}
     </div>
-  );
-}
-
-function StatusChip({ icon: Icon, label, onClick }: { icon: LucideIcon; label: string; onClick: () => void }) {
-  return (
-    <button type="button" onClick={onClick} className="flex shrink-0 items-center gap-1.5 rounded-full border border-line bg-white px-3 py-2 text-sm">
-      <Icon className="size-4" /> {label}
-    </button>
   );
 }
 
@@ -2066,11 +2159,21 @@ function TimeConfirmedCard({ when, place, time }: { when: string; place: string;
   );
 }
 
-function WorkerAction({ icon: Icon, label, active, onClick }: { icon: LucideIcon; label: string; active?: boolean; onClick: () => void }) {
+function WorkerAction({ icon: Icon, label, active, busy, onClick }: { icon: LucideIcon; label: string; active?: boolean; busy?: boolean; onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} className={cn("flex flex-col items-center gap-1 rounded-2xl border px-1 py-2 text-center text-[11px] leading-tight", active ? "border-[#2a211c] bg-white font-semibold" : "border-line bg-white")}>
-      <Icon className="size-5" />
-      {label}
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      aria-busy={busy || undefined}
+      disabled={busy}
+      className={cn(
+        "flex min-h-16 flex-col items-center justify-center gap-1 rounded-[0.85rem] px-0.5 py-1.5 text-center text-[10px] leading-[1.15] font-semibold disabled:opacity-60",
+        active ? "bg-brown text-paper" : "text-ink",
+      )}
+    >
+      <Icon className="size-[18px] shrink-0" strokeWidth={1.8} />
+      <span className="max-w-full">{label}</span>
     </button>
   );
 }
@@ -2118,7 +2221,7 @@ function ChatCardView({
             {card.about ? <p><span className="font-semibold">Om jobbet:</span> {card.about}</p> : null}
             <p><span className="font-semibold">Tid:</span> {card.when}</p>
             <p><span className="font-semibold">Plats:</span> {card.place}</p>
-            <p><span className="font-semibold">Pris (estimat):</span> {kr(card.price)}</p>
+            <p><span className="font-semibold">Pris (estimat):</span> {priceOrQuote(card.price)}</p>
           </div>
         ) : null}
         {card.kind === "confirmed" ? (
@@ -2142,7 +2245,7 @@ function ChatCardView({
           <div className="space-y-1 text-[15px]">
             <p><span className="font-semibold">Tjänst:</span> {card.service}</p>
             <p><span className="font-semibold">Beskrivning:</span> {card.desc}</p>
-            <p><span className="font-semibold">Pris:</span> {kr(card.price)}</p>
+            <p><span className="font-semibold">Pris:</span> {priceOrQuote(card.price)}</p>
           </div>
         ) : null}
         {takePending && message.from === "them" && onAnswerTake ? (

@@ -4,7 +4,8 @@ import dynamic from "next/dynamic";
 import { Calendar, Check, CreditCard } from "lucide-react";
 import { quoteBreakdown, sek } from "@/lib/stripe/config";
 import { distanceLabel, etaPhrase } from "@/lib/velio/route-eta";
-import type { ChatCard } from "@/lib/velio/store";
+import { overBudget } from "@/lib/velio/price";
+import { useVelio, type ChatCard } from "@/lib/velio/store";
 
 const EnrouteMap = dynamic(() => import("@/components/velio/enroute-map").then((mod) => mod.EnrouteMap), {
   ssr: false,
@@ -74,6 +75,9 @@ export function FinalPriceMessage({
 }) {
   const parts = quoteBreakdown(card.amount);
   const paid = card.status === "paid";
+  const posted = useVelio((state) => state.posted);
+  const accountId = useVelio((state) => state.accountId);
+  const budgetJob = posted.find((job) => (!accountId || job.ownerId === accountId) && overBudget(card.amount, job));
   return (
     <div>
       <div className="rounded-[1.25rem] border border-line bg-white px-4 py-4">
@@ -88,9 +92,14 @@ export function FinalPriceMessage({
           </span>
         </div>
         <div className="space-y-1.5 text-[15px]">
-          <p className="flex justify-between"><span>Jobbpris</span><span>{sek(parts.work)}</span></p>
+          {card.hours && card.rate ? (
+            <p className="flex justify-between text-muted"><span>{String(card.hours).replace(".", ",")} tim × {sek(card.rate).replace(/ kr$/, "")} kr/tim</span><span>{sek(parts.work)}</span></p>
+          ) : (
+            <p className="flex justify-between"><span>Jobbpris</span><span>{sek(parts.work)}</span></p>
+          )}
           <p className="flex justify-between text-muted"><span>Serviceavgift VELIO</span><span>{sek(parts.fee)}</span></p>
           <p className="flex justify-between border-t border-line pt-2 font-semibold"><span>Totalt</span><span>{sek(parts.total)}</span></p>
+          {budgetJob ? <p className="text-xs text-brown">Över kundens budget</p> : null}
         </div>
         {card.when || card.place ? (
           <p className="mt-3 text-sm text-muted">{[card.when, card.place].filter(Boolean).join(" · ")}</p>

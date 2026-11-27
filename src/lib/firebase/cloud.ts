@@ -33,6 +33,7 @@ import {
   type ServiceId,
 } from "@/lib/velio/data";
 import { messageFromFirestore } from "@/lib/velio/chat-codec";
+import { normalizeJobPrice } from "@/lib/velio/price";
 import { useVelio, type ChatMsg, type PostedJob, type SavedAddress, type VelioInvoice } from "@/lib/velio/store";
 
 export type CloudOffer = {
@@ -225,6 +226,14 @@ function jobFromDoc(id: string, data: DocumentData): PostedJob {
   const storedSub = asString(schedule.subcategoryId);
   const subcategoryId = storedSub || deprecatedServiceMap[rawService]?.subcategoryId || undefined;
   const jobTitle = asString(schedule.jobTitle);
+  const budget = asNumber(data.price) || asNumber(data.budget);
+  const named = asString(data.priceType);
+  const normalized = normalizeJobPrice({
+    priceType: named === "fixed" || named === "hourly" || named === "quote" || named === "budget" ? named : null,
+    price: budget,
+    rate: schedule.rate === "hour" ? "hour" : null,
+    estHours: typeof data.estHours === "number" ? data.estHours : null,
+  });
   return {
     id,
     serviceId,
@@ -233,8 +242,10 @@ function jobFromDoc(id: string, data: DocumentData): PostedJob {
     text: asString(data.description) || asString(data.title),
     when: asString(schedule.when),
     address: asString(data.locationLabel),
-    rate: schedule.rate === "hour" ? "hour" : "fixed",
-    price: asNumber(data.budget),
+    rate: normalized.priceType === "hourly" ? "hour" : "fixed",
+    price: normalized.price,
+    priceType: normalized.priceType,
+    ...(normalized.estHours ? { estHours: normalized.estHours } : {}),
     ownerId: asString(data.ownerId),
     status: asString(data.status) || "open",
   };
@@ -660,6 +671,8 @@ export async function createCloudJob(input: {
   address: string;
   rate: "hour" | "fixed";
   price: number;
+  priceType?: "quote" | "budget" | "fixed" | "hourly";
+  estHours?: number;
 }) {
   const uid = uidOrThrow();
   const service = resolveServiceId(input.serviceId);
@@ -675,7 +688,7 @@ export async function createCloudJob(input: {
       serviceId: service?.id ?? input.serviceId,
       ...(input.subcategoryId ? { subcategoryId: input.subcategoryId.slice(0, 40) } : {}),
       ...(customTitle ? { jobTitle: customTitle } : {}),
-      rate: input.rate,
+      rate: input.priceType === "hourly" || input.rate === "hour" ? "hour" : "fixed",
     },
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -684,7 +697,13 @@ export async function createCloudJob(input: {
   const locationLabel = input.address.trim().slice(0, 200);
   if (description) payload.description = description;
   if (locationLabel) payload.locationLabel = locationLabel;
-  if (input.price > 0) payload.budget = input.price;
+  const kind = input.priceType ?? (input.price > 0 ? "fixed" : "quote");
+  payload.priceType = kind;
+  if (kind !== "quote" && input.price > 0) {
+    payload.price = input.price;
+    payload.budget = input.price;
+  }
+  if (kind === "hourly" && input.estHours && input.estHours > 0) payload.estHours = input.estHours;
   const ref = await addDoc(collection(db(), "jobs"), payload);
   return ref.id;
 }
@@ -746,7 +765,7 @@ export async function sendMissedCall(peerUid: string, callId: string) {
 
 export type StructuredPayload =
   | { type: "time_confirmation"; date: string; time: string; place: string; service: string }
-  | { type: "final_price"; service: string; amount: number; when: string; place: string }
+  | { type: "final_price"; service: string; amount: number; when: string; place: string; hours?: number; rate?: number }
   | { type: "booking_change"; date: string; time: string; place: string; description?: string; service: string }
   | {
       type: "on_the_way";
@@ -806,6 +825,8 @@ export async function sendStructuredMessage(peerUid: string, message: Structured
     payload.when = message.when.slice(0, 80);
     payload.place = message.place.slice(0, 200);
     payload.status = "waiting";
+    if (message.hours && message.hours > 0) payload.hours = message.hours;
+    if (message.rate && message.rate > 0) payload.rate = message.rate;
   } else if (message.type === "booking_change") {
     payload.date = message.date.slice(0, 40);
     payload.time = message.time;

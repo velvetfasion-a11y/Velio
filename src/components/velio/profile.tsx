@@ -28,6 +28,7 @@ import { VerifyIdScreen } from "@/components/velio/verify-id";
 import { GetPaidCard } from "@/components/velio/get-paid";
 import { openSupportSheet } from "@/components/velio/support-sheet";
 import { ownBusiness, useVelio, type Booking, type SavedAddress } from "@/lib/velio/store";
+import { jobPriceDetail, overBudget, priceOrQuote } from "@/lib/velio/price";
 import { cn } from "@/lib/cn";
 import { Btn, Field, ProfilePhoto, ScreenHeader, SecurePayNote } from "@/components/velio/ui";
 import { asset } from "@/lib/velio/asset";
@@ -448,6 +449,7 @@ export function ProfileScreens() {
                     <p className="mt-1 line-clamp-2 text-sm text-muted">{job.text}</p>
                     <p className="mt-1 text-xs text-muted">{job.when}</p>
                     <p className="text-xs text-muted">{job.address}</p>
+                    <p className="mt-1 text-sm font-semibold">{jobPriceDetail(job)}</p>
                     {job.status && job.status !== "open" ? (
                       <p className="mt-1 text-xs font-semibold text-brown">{job.status === "assigned" ? "Tilldelat" : job.status === "completed" ? "Klart" : job.status === "cancelled" ? "Avbrutet" : job.status}</p>
                     ) : null}
@@ -462,12 +464,13 @@ export function ProfileScreens() {
                         .map((offer) => (
                           <div key={offer.id} className="rounded-2xl bg-sand px-3 py-2">
                             <p className="text-sm font-semibold">
-                              Offert {offer.amount.toLocaleString("sv-SE")} kr
+                              Offert {priceOrQuote(offer.amount)}
                               <span className="ml-2 font-medium text-muted">
                                 {offer.status === "pending" ? "Väntar" : offer.status === "accepted" ? "Accepterad" : offer.status === "declined" ? "Avböjd" : "Tillbakadragen"}
                               </span>
                             </p>
                             {offer.message ? <p className="mt-1 text-sm text-muted">{offer.message}</p> : null}
+                            {overBudget(offer.amount, job) ? <p className="mt-1 text-xs text-brown">Över kundens budget</p> : null}
                             {offer.status === "pending" && offer.jobOwnerId === accountId ? (
                               <div className="mt-2 flex gap-2">
                                 <button type="button" onClick={() => openCheckout(offer.id)} className="h-9 rounded-full bg-brown px-3 text-sm font-semibold text-paper">

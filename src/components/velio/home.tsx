@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { coordsForArea, distanceKm, greetingName, providerById, providerTradeNames, ratingLabel, resolveServiceId, serviceById, services, subcategoryById, type ServiceIcon, type ServiceId } from "@/lib/velio/data";
 import { useVelio } from "@/lib/velio/store";
+import { jobPriceDetail } from "@/lib/velio/price";
 import { AppHeader } from "@/components/velio/header";
 import { cn } from "@/lib/cn";
 import { BottomSheet, Btn, StepProgress, TrustNote } from "@/components/velio/ui";
@@ -653,7 +654,8 @@ function JobSheet() {
   const [locating, setLocating] = useState(false);
   const [files, setFiles] = useState<string[]>([]);
   const [budget, setBudget] = useState("");
-  const [quotes, setQuotes] = useState<boolean | null>(null);
+  const [priceMode, setPriceMode] = useState<"quote" | "budget" | "fixed" | "hourly">("quote");
+  const [estHours, setEstHours] = useState("");
   const [step, setStep] = useState(0);
   const [done, setDone] = useState(false);
   const [keyboard, setKeyboard] = useState(0);
@@ -673,9 +675,10 @@ function JobSheet() {
       clock,
       address: pickedAddress,
       budget,
-      quotes,
+      priceMode,
+      estHours,
     });
-  }, [step, serviceId, subcategoryId, jobTitle, text, whenMode, startDate, endDate, timeWindow, clock, pickedAddress, budget, quotes, saveJobDraft]);
+  }, [step, serviceId, subcategoryId, jobTitle, text, whenMode, startDate, endDate, timeWindow, clock, pickedAddress, budget, priceMode, estHours, saveJobDraft]);
   const resumeJob = () => {
     const draft = jobDraft;
     if (!draft) return;
@@ -691,11 +694,12 @@ function JobSheet() {
     if (typeof draft.clock === "string") setClock(draft.clock);
     if (draft.address && typeof draft.address === "object") setPickedAddress(draft.address as AddressHit);
     if (typeof draft.budget === "string") setBudget(draft.budget);
-    if (typeof draft.quotes === "boolean") setQuotes(draft.quotes);
+    if (draft.priceMode === "fixed" || draft.priceMode === "hourly" || draft.priceMode === "quote" || draft.priceMode === "budget") setPriceMode(draft.priceMode);
+    if (typeof draft.estHours === "string") setEstHours(draft.estHours);
   };
   const catCols = services.length % 2 === 0 ? 2 : 3;
   const catRows = Math.ceil(services.length / catCols);
-  const stepNames = ["Tjänst", "Beskrivning", "Tid", "Plats", "Budget", "Granska"];
+  const stepNames = ["Tjänst", "Beskrivning", "Tid", "Plats", "Pris", "Granska"];
   const hours = Array.from({ length: 14 }, (_, index) => `${String(index + 7).padStart(2, "0")}:00`);
 
   useEffect(() => {
@@ -790,8 +794,8 @@ function JobSheet() {
       if (!chosenWhen) return showToast("Välj datum, intervall, senast-datum eller flexibel");
     }
     if (step === 3 && !pickedAddress) return showToast("Välj en adress i listan, eller använd din plats");
-    if (step === 4 && quotes == null && !budget) return showToast("Skriv en budget eller välj att få offerter");
-    if (step === 4 && budget && !/^\d+$/.test(budget)) return showToast("Skriv budget i hela kronor, eller hoppa över");
+    if (step === 4 && priceMode !== "quote" && (!/^\d+$/.test(budget) || Number(budget) <= 0)) return showToast("Skriv ett pris i hela kronor");
+    if (step === 4 && priceMode === "hourly" && estHours && !/^\d+([.,]\d+)?$/.test(estHours)) return showToast("Skriv timmarna som ett tal");
     setStep((current) => Math.min(5, current + 1));
   };
 
@@ -800,7 +804,9 @@ function JobSheet() {
     if (text.trim().length < 8) return showToast(needsDetail ? "Beskriv vad du behöver hjälp med" : "Beskriv uppdraget lite till");
     if (!chosenWhen) return showToast("Välj när uppdraget ska göras");
     if (!pickedAddress) return showToast("Välj en adress");
-    const price = quotes === false && budget ? Number(budget) : 0;
+    const priceType = priceMode ?? "quote";
+    const price = priceType === "quote" ? 0 : Number(budget);
+    const hours = priceType === "hourly" && estHours ? Number(estHours.replace(",", ".")) : undefined;
     const attached = files.length ? `\n\nBifogat: ${files.join(", ")}` : "";
     addPosted({
       serviceId,
@@ -809,8 +815,10 @@ function JobSheet() {
       text: `${text.trim()}${attached}`,
       when: chosenWhen,
       address: pickedAddress.label,
-      rate: price > 0 ? "fixed" : "hour",
+      rate: priceType === "hourly" ? "hour" : "fixed",
       price,
+      priceType,
+      ...(hours ? { estHours: hours } : {}),
     });
     setDone(true);
     saveJobDraft(null);
@@ -838,7 +846,7 @@ function JobSheet() {
         <div className={step === 0 ? "shrink-0" : undefined}>
         <StepProgress step={step + 1} total={6} label={stepNames[step]} />
         <h1 className={cn("ios-title", step === 0 ? "text-[1.35rem] leading-tight" : "text-[1.85rem]")}>
-          {step === 0 ? "Vad behöver du hjälp med?" : step === 1 ? "Beskriv uppdraget" : step === 2 ? "När ska det göras?" : step === 3 ? "Var ska det utföras?" : step === 4 ? "Ungefärlig budget" : "Granska och publicera"}
+          {step === 0 ? "Vad behöver du hjälp med?" : step === 1 ? "Beskriv uppdraget" : step === 2 ? "När ska det göras?" : step === 3 ? "Var ska det utföras?" : step === 4 ? "Vilket pris?" : "Granska och publicera"}
         </h1>
         {step === 0 && jobDraft ? (
           <button type="button" onClick={resumeJob} className="mt-3 h-11 w-full rounded-full border border-line text-sm font-semibold">
@@ -847,7 +855,7 @@ function JobSheet() {
         ) : null}
         <p className={cn("leading-snug text-muted", step === 0 ? "mt-1 text-xs" : "mt-2 text-sm")}>
           {step === 4
-            ? "Budgeten är en riktlinje. Du betalar när jobbet är klart, och inget dras om arbetet inte utförs."
+            ? "Välj hur priset ska anges. Du betalar när jobbet är klart."
             : step === 0
               ? "Välj en tjänst."
               : "Kort steg för steg. Du kan gå tillbaka och ändra innan du publicerar."}
@@ -1069,42 +1077,68 @@ function JobSheet() {
 
         {step === 4 ? (
           <section className="rounded-[1.3rem] border border-line bg-paper p-3 shadow-soft">
-            <button
-              type="button"
-              aria-pressed={quotes === true}
-              onClick={() => {
-                setQuotes((value) => (value === true ? null : true));
-                setBudget("");
-              }}
-              className={cn(
-                "flex w-full items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left",
-                quotes ? "border-brown bg-brown text-paper" : "border-line bg-paper",
-              )}
-            >
-              <span>
-                <span className="block font-semibold">Hoppa över · jag vill få offerter</span>
-                <span className={cn("mt-0.5 block text-sm", quotes ? "text-paper/80" : "text-muted")}>
-                  Ingen summa behövs. Utförare svarar med pris.
-                </span>
-              </span>
-              {quotes ? <Check className="size-5 shrink-0" /> : null}
-            </button>
-            <label className={cn("mt-3 flex items-center gap-2 rounded-2xl border border-line px-4", quotes && "opacity-50")}>
-              <input
-                inputMode="numeric"
-                value={budget}
-                onChange={(event) => {
-                  const next = event.target.value.replace(/\D/g, "").slice(0, 6);
-                  setBudget(next);
-                  setQuotes(next ? false : null);
-                }}
-                onFocus={(event) => event.currentTarget.scrollIntoView({ block: "center" })}
-                placeholder="Eller skriv en budget"
-                aria-label="Budget i kronor"
-                className="h-12 min-w-0 flex-1 bg-transparent text-lg font-semibold outline-none"
-              />
-              <span className="text-sm font-semibold text-muted">kr</span>
-            </label>
+            <div className="grid grid-cols-2 gap-1 rounded-[1.15rem] bg-sand p-1">
+              {([
+                ["quote", "Ge offert"],
+                ["budget", "Budget"],
+                ["fixed", "Fast pris"],
+                ["hourly", "Timpris"],
+              ] as const).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  aria-pressed={priceMode === id}
+                  onClick={() => {
+                    setPriceMode(id);
+                    if (id === "quote") {
+                      setBudget("");
+                      setEstHours("");
+                    }
+                  }}
+                  className={cn(
+                    "h-11 rounded-[0.9rem] text-sm font-semibold",
+                    priceMode === id ? "bg-brown text-paper" : "text-ink",
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-3 text-sm leading-snug text-muted">
+              {priceMode === "budget"
+                ? "Högsta belopp du vill betala."
+                : priceMode === "fixed"
+                  ? "Ett pris för hela uppdraget."
+                  : priceMode === "hourly"
+                    ? "Pris per timme. Uppskattade timmar är valfritt."
+                    : "Utföraren föreslår priset."}
+            </p>
+            {priceMode === "fixed" || priceMode === "hourly" || priceMode === "budget" ? (
+              <label className="mt-3 flex items-center gap-2 rounded-2xl border border-line px-4">
+                <input
+                  inputMode="numeric"
+                  value={budget}
+                  onChange={(event) => setBudget(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                  placeholder={priceMode === "hourly" ? "Kr per timme" : priceMode === "budget" ? "Högsta belopp" : "Belopp"}
+                  aria-label={priceMode === "hourly" ? "Timpris i kronor" : priceMode === "budget" ? "Budget i kronor" : "Fast pris i kronor"}
+                  className="h-12 min-w-0 flex-1 bg-transparent text-lg font-semibold outline-none"
+                />
+                <span className="text-sm font-semibold text-muted">{priceMode === "hourly" ? "kr/tim" : "kr"}</span>
+              </label>
+            ) : null}
+            {priceMode === "hourly" ? (
+              <label className="mt-3 flex items-center gap-2 rounded-2xl border border-line px-4">
+                <input
+                  inputMode="decimal"
+                  value={estHours}
+                  onChange={(event) => setEstHours(event.target.value.replace(/[^\d.,]/g, "").slice(0, 5))}
+                  placeholder="Uppskattade timmar, valfritt"
+                  aria-label="Uppskattade timmar"
+                  className="h-12 min-w-0 flex-1 bg-transparent text-lg font-semibold outline-none"
+                />
+                <span className="text-sm font-semibold text-muted">tim</span>
+              </label>
+            ) : null}
             <div className="mt-3">
               <TrustNote>Betalningen hålls tills jobbet är klart. Kvitto sparas i appen.</TrustNote>
             </div>
@@ -1117,7 +1151,7 @@ function JobSheet() {
             <ReviewRow label="Beskrivning" value={text.trim()} />
             <ReviewRow label="När" value={chosenWhen || "—"} />
             <ReviewRow label="Plats" value={pickedAddress?.label || "—"} />
-            <ReviewRow label="Budget" value={quotes === false && budget ? `${budget} kr` : quotes === true ? "Offerter, ingen budget" : "Inte valt"} />
+            <ReviewRow label="Pris" value={priceMode ? jobPriceDetail({ priceType: priceMode, price: priceMode === "quote" ? 0 : Number(budget) || 0, estHours: estHours ? Number(estHours.replace(",", ".")) : undefined }) : "Inte valt"} />
             <ReviewRow label="Bilder" value={files.length ? files.join(", ") : "Inga"} />
           </section>
         ) : null}

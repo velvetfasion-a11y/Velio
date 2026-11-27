@@ -132,6 +132,8 @@ export type ChatCard =
       when: string;
       place: string;
       status: "waiting" | "paid";
+      hours?: number;
+      rate?: number;
     }
   | {
       kind: "on_the_way";
@@ -269,6 +271,8 @@ export type PostedJob = {
   address: string;
   rate: "hour" | "fixed";
   price: number;
+  priceType?: "quote" | "budget" | "fixed" | "hourly";
+  estHours?: number;
   ownerId?: string;
   ownerName?: string;
   status?: string;
@@ -607,6 +611,8 @@ function jobsToPosted(jobs: JobDto[]): PostedJob[] {
     address: job.address,
     rate: job.rate,
     price: job.price,
+    priceType: job.priceType,
+    estHours: job.estHours,
     ownerId: job.ownerId,
     ownerName: job.ownerName,
   }));
@@ -1691,7 +1697,12 @@ export const useVelio = create<VelioState>()(
             try {
               const { sendCloudOffer, sendPeerMessage } = await import("@/lib/firebase/cloud");
               const own = ownBusiness({ accountId: get().accountId, directory: get().directory, loggedIn: true });
-              const amount = job.price > 0 ? job.price : own?.price ?? 0;
+              const priced = job.priceType === "hourly" && job.estHours
+                ? Math.round(job.price * job.estHours)
+                : job.priceType === "fixed" || job.priceType === "hourly"
+                  ? job.price
+                  : 0;
+              const amount = priced > 0 ? priced : (own?.price ?? 0);
               const message = "Jag kan ta uppdraget.";
               await sendCloudOffer({ jobId: job.id, jobOwnerId: ownerId, amount, message });
               await sendPeerMessage(ownerId, message, job.id);

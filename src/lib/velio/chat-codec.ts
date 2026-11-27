@@ -109,6 +109,8 @@ export function messageFromFirestore(id: string, data: Record<string, unknown>, 
         when: str(data.when),
         place: str(data.place),
         status: data.status === "paid" ? "paid" : "waiting",
+        hours: num(data.hours),
+        rate: num(data.rate),
       },
     };
   }

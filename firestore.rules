@@ -437,7 +437,7 @@ service cloud.firestore {
 
     function isValidJob(data) {
       return hasRequiredFields(['ownerId', 'title', 'category', 'status', 'createdAt', 'updatedAt']) &&
-        hasOnlyAllowedFields(['ownerId', 'title', 'category', 'description', 'locationLabel', 'schedule', 'budget', 'status', 'completedAt', 'paymentStatus', 'paymentIntentId', 'paidAt', 'payoutStatus', 'transferId', 'offerId', 'workerId', 'amountOre', 'feeOre', 'workOre', 'currency', 'refundedOre', 'disputeId', 'disputeStatus', 'cancelledBy', 'cancelReason', 'cancelledAt', 'workerLat', 'workerLng', 'workerEtaMin', 'createdAt', 'updatedAt']) &&
+        hasOnlyAllowedFields(['ownerId', 'title', 'category', 'description', 'locationLabel', 'schedule', 'budget', 'price', 'priceType', 'estHours', 'status', 'completedAt', 'paymentStatus', 'paymentIntentId', 'paidAt', 'payoutStatus', 'transferId', 'offerId', 'workerId', 'amountOre', 'feeOre', 'workOre', 'currency', 'refundedOre', 'disputeId', 'disputeStatus', 'cancelledBy', 'cancelReason', 'cancelledAt', 'workerLat', 'workerLng', 'workerEtaMin', 'createdAt', 'updatedAt']) &&
         data.ownerId is string &&
         data.title is string &&
         data.title.size() >= 1 &&
@@ -452,6 +452,9 @@ service cloud.firestore {
         isValidOptionalString(data, 'locationLabel', 0, 200) &&
         (!('schedule' in data) || data.schedule is map) &&
         (!('budget' in data) || (data.budget is number && data.budget >= 0)) &&
+        (!('priceType' in data) || data.priceType in ['quote', 'budget', 'fixed', 'hourly']) &&
+        (!('price' in data) || (data.price is number && data.price >= 0 && data.price <= 1000000)) &&
+        (!('estHours' in data) || (data.estHours is number && data.estHours > 0 && data.estHours <= 1000)) &&
         (!('completedAt' in data) || isValidTimestamp(data.completedAt)) &&
         (!('paymentStatus' in data) || isPaymentStatus(data.paymentStatus)) &&
         isValidOptionalString(data, 'paymentIntentId', 1, 128) &&
@@ -541,7 +544,7 @@ service cloud.firestore {
 
     function isFinalPrice(data) {
       return hasRequiredFields(['senderId', 'type', 'service', 'amount', 'when', 'place', 'status', 'createdAt']) &&
-        hasOnlyAllowedFields(['senderId', 'type', 'service', 'amount', 'when', 'place', 'status', 'createdAt']) &&
+        hasOnlyAllowedFields(['senderId', 'type', 'service', 'amount', 'when', 'place', 'hours', 'rate', 'status', 'createdAt']) &&
         data.senderId == request.auth.uid &&
         data.type == 'final_price' &&
         data.status == 'waiting' &&
@@ -549,6 +552,8 @@ service cloud.firestore {
         data.amount is number && data.amount >= 1 && data.amount <= 1000000 &&
         data.when is string && data.when.size() <= 80 &&
         data.place is string && data.place.size() <= 200 &&
+        (!('hours' in data) || (data.hours is number && data.hours > 0 && data.hours <= 1000)) &&
+        (!('rate' in data) || (data.rate is number && data.rate >= 1 && data.rate <= 1000000)) &&
         isValidTimestamp(data.createdAt);
     }
 

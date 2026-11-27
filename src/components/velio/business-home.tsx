@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ArrowLeftRight, Briefcase, Calendar, Check, ChevronLeft, ChevronRight, Clock, Coffee, MapPin, MessageCircle, SlidersHorizontal } from "lucide-react";
 import { greetingName, serviceById, type ServiceId } from "@/lib/velio/data";
+import { jobPriceCard, jobPriceDetail } from "@/lib/velio/price";
 import { hoursOn, loadSchedule, sameLocalDay, saveSchedule, weekDates, withDateHours, type DayHours, type WorkSchedule } from "@/lib/velio/schedule";
 import { ownBusiness, useVelio, type PostedJob } from "@/lib/velio/store";
 import { AppHeader } from "@/components/velio/header";
@@ -15,6 +16,7 @@ type Offer = {
   when: string;
   tag: string;
   price: string;
+  priceDetail?: string;
   category?: string;
   image: string;
   status: "new" | "active" | "done";
@@ -117,7 +119,8 @@ export function BusinessHome() {
           place: job.address,
           when: job.when,
           tag: job.ownerName || "Kund",
-          price: `${job.price.toLocaleString("sv-SE")} kr`,
+          price: jobPriceCard(job),
+          priceDetail: jobPriceDetail(job),
           category: serviceById(job.serviceId)?.name ?? "Uppdrag",
           image: jobImage(job.serviceId),
           status: "new" as const,
@@ -428,7 +431,7 @@ function OffersPage({
               <p><span className="font-semibold">Kategori:</span> {confirm.category || confirm.title}</p>
               <p><span className="font-semibold">Plats:</span> {confirm.place}</p>
               <p><span className="font-semibold">Tid:</span> {confirm.when}</p>
-              <p><span className="font-semibold">Pris:</span> {confirm.price}</p>
+              <p><span className="font-semibold">Pris:</span> {confirm.priceDetail || confirm.price}</p>
             </div>
             <button
               type="button"
