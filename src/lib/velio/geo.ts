@@ -210,6 +210,12 @@ function readPosition(options: PositionOptions & { waitMs: number }): Promise<Ge
   });
 }
 
+/** Current coordinates. The timer starts after the browser shows the permission prompt. */
+export async function capturePosition(waitMs = 15000): Promise<{ lat: number; lng: number }> {
+  const position = await readPosition({ enableHighAccuracy: false, maximumAge: 60_000, waitMs });
+  return { lat: position.coords.latitude, lng: position.coords.longitude };
+}
+
 export async function resolveCurrentLocation(): Promise<UserLocation> {
   let position: GeolocationPosition;
   try {

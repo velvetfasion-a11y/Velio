@@ -84,7 +84,9 @@ async function transferJob(stripe, db, jobId, job) {
     await ref.set({ payoutStatus: "failed", updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     return { jobId, payoutStatus: "failed", reason: "charge_not_ready" };
   }
-  const amount = workerShareOre(intent.amount_received || intent.amount);
+  const charged = intent.amount_received || intent.amount;
+  const storedWork = Number(job.workOre) || 0;
+  const amount = storedWork > 0 && storedWork <= charged ? storedWork : workerShareOre(charged);
   const transfer = await stripe.transfers.create({
     amount,
     currency: "sek",

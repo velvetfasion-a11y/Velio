@@ -117,8 +117,48 @@ export type ChatCard =
   | { kind: "done"; service: string; desc: string; price: number }
   | { kind: "slot"; when: string; place: string; service: string }
   | { kind: "quote"; amount: number; service: string; hours: string; when: string; place: string }
+  | {
+      kind: "time_confirmation";
+      date: string;
+      time: string;
+      place: string;
+      service: string;
+      status: "waiting" | "confirmed";
+    }
+  | {
+      kind: "final_price";
+      service: string;
+      amount: number;
+      when: string;
+      place: string;
+      status: "waiting" | "paid";
+      hours?: number;
+      rate?: number;
+    }
+  | {
+      kind: "on_the_way";
+      place: string;
+      etaMin: number;
+      etaMax?: number;
+      distanceM?: number;
+      approximate: boolean;
+      status: "enroute" | "arrived";
+      lat?: number;
+      lng?: number;
+      jobLat?: number;
+      jobLng?: number;
+    }
   | { kind: "paid"; amount: number }
   | { kind: "reschedule"; when: string; place: string; service: string }
+  | {
+      kind: "booking_change";
+      date: string;
+      time: string;
+      place: string;
+      description?: string;
+      service: string;
+      status: "pending" | "accepted" | "declined";
+    }
   | { kind: "cancelled" }
   | { kind: "rebook"; service: string; when: string; place: string; about: string; price: number; status: "pending" | "accepted" | "declined" };
 
@@ -224,11 +264,15 @@ export type SavedAddress = {
 export type PostedJob = {
   id: string;
   serviceId: ServiceId;
+  subcategoryId?: string;
+  title?: string;
   text: string;
   when: string;
   address: string;
   rate: "hour" | "fixed";
   price: number;
+  priceType?: "quote" | "budget" | "fixed" | "hourly";
+  estHours?: number;
   ownerId?: string;
   ownerName?: string;
   status?: string;
@@ -417,6 +461,8 @@ type VelioState = {
   search: string;
   serviceId: ServiceId | null;
   providerId: string | null;
+  bookOffer: { name: string; price: number } | null;
+  setBookOffer: (offer: { name: string; price: number } | null) => void;
   receiptId: string | null;
   mapMode: boolean;
   sort: SortKey;
@@ -428,6 +474,8 @@ type VelioState = {
   accountMode: "customer" | "business";
   idVerified: boolean;
   idMethod: string | null;
+  idStatus: string | null;
+  verifiedName: string | null;
   /** Local placeholder only. Never contains image data. */
   kycPending: { document: "passport" | "national-id" | "driving-licence"; submittedAt: string; reference: string } | null;
   markKycPending: (input: { document: "passport" | "national-id" | "driving-licence"; reference: string }) => void;
@@ -452,6 +500,8 @@ type VelioState = {
   declineOffer: (id: string) => void;
   checkout: CheckoutDraft | null;
   checkoutOpen: boolean;
+  /** Runs after an in-app payment succeeds. Not persisted. */
+  checkoutAfter: (() => void) | null;
   openCheckout: (offerId: string) => void;
   closeCheckout: () => void;
   markJobDone: (jobId: string) => void;
@@ -561,6 +611,8 @@ function jobsToPosted(jobs: JobDto[]): PostedJob[] {
     address: job.address,
     rate: job.rate,
     price: job.price,
+    priceType: job.priceType,
+    estHours: job.estHours,
     ownerId: job.ownerId,
     ownerName: job.ownerName,
   }));
@@ -640,6 +692,8 @@ export const useVelio = create<VelioState>()(
       screen: "home",
       navStack: [],
       sheet: null,
+      bookOffer: null,
+      setBookOffer: (bookOffer) => set({ bookOffer, sheet: "book" }),
       loggedIn: false,
       loginIntro: false,
       authReady: false,
@@ -669,6 +723,8 @@ export const useVelio = create<VelioState>()(
       accountMode: "customer",
       idVerified: false,
       idMethod: null,
+      idStatus: null,
+      verifiedName: null,
       kycPending: null,
       wallet: emptyWallet(),
       bankIdPersonalNumber: null,
@@ -692,6 +748,7 @@ export const useVelio = create<VelioState>()(
       jobOffers: [],
       checkout: null,
       checkoutOpen: false,
+      checkoutAfter: null,
       activeBookingId: null,
       toast: null,
       go: (screen, opts) => {
@@ -1640,7 +1697,12 @@ export const useVelio = create<VelioState>()(
             try {
               const { sendCloudOffer, sendPeerMessage } = await import("@/lib/firebase/cloud");
               const own = ownBusiness({ accountId: get().accountId, directory: get().directory, loggedIn: true });
-              const amount = job.price > 0 ? job.price : own?.price ?? 0;
+              const priced = job.priceType === "hourly" && job.estHours
+                ? Math.round(job.price * job.estHours)
+                : job.priceType === "fixed" || job.priceType === "hourly"
+                  ? job.price
+                  : 0;
+              const amount = priced > 0 ? priced : (own?.price ?? 0);
               const message = "Jag kan ta uppdraget.";
               await sendCloudOffer({ jobId: job.id, jobOwnerId: ownerId, amount, message });
               await sendPeerMessage(ownerId, message, job.id);
@@ -1712,13 +1774,15 @@ export const useVelio = create<VelioState>()(
         const provider = providerById(get().providerId);
         if (!provider) return;
         const primary = get().addresses.find((item) => item.primary) ?? get().addresses[0];
+        const chosen = get().bookOffer;
+        const price = chosen?.price || provider.price;
         const booking: Booking = {
           id: uid(),
           serviceId: provider.serviceId,
           providerId: provider.id,
-          whenLabel,
-          cost: provider.price,
-          holdKr: provider.price,
+          whenLabel: chosen ? `${chosen.name} · ${whenLabel}` : whenLabel,
+          cost: price,
+          holdKr: price,
           tip: null,
           location: location?.trim() || primary?.line || get().userLocation?.label || provider.area,
           rating: null,
@@ -1729,7 +1793,7 @@ export const useVelio = create<VelioState>()(
           activeBookingId: booking.id,
           sheet: "request",
         });
-        get().showToast(`${kr(provider.price)} reserverat. Inget dras om arbetet inte utförs.`);
+        get().showToast(`${kr(price)} reserverat. Inget dras om arbetet inte utförs.`);
         get().pushNotification({
           kind: "booking_requested",
           title: "Förfrågan skickad",
@@ -1971,6 +2035,7 @@ export const useVelio = create<VelioState>()(
               sellerKind: listing.sellerKind === "company" ? "company" : "private",
               orgNumber: listing.orgNumber,
               nationalId: listing.nationalId,
+              fTax: listing.fTax,
             });
             const where = areaSummary(listing.areas);
             const published = listingToProvider({
@@ -2034,7 +2099,7 @@ export const useVelio = create<VelioState>()(
           },
         });
       },
-      closeCheckout: () => set({ checkoutOpen: false }),
+      closeCheckout: () => set({ checkoutOpen: false, checkoutAfter: null }),
       markJobDone: (jobId) => {
         void (async () => {
           try {

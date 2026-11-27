@@ -19,11 +19,9 @@ async function post<T>(path: string, body: Record<string, string>) {
   return data;
 }
 
-export function createPaymentIntent(offerId: string, buyer?: { companyName?: string; orgNr?: string }) {
+export function createPaymentIntent(offerId: string) {
   return post<{ clientSecret: string; paymentIntentId: string; amount: number; currency: string }>("/api/create-payment-intent", {
     offerId,
-    buyerCompanyName: buyer?.companyName || "",
-    buyerOrgNr: buyer?.orgNr || "",
   });
 }
 
@@ -37,4 +35,12 @@ export function createAccountSession() {
 
 export function releasePayout(jobId: string) {
   return post<{ payoutStatus: string }>("/api/release-payout", { jobId });
+}
+
+export function cancelCloudJob(jobId: string, reason: string) {
+  return post<{ ok: boolean; released: boolean }>(`/api/support/jobs/${jobId}/cancel`, { reason });
+}
+
+export function acceptCloudBookingChange(jobId: string, messageId: string) {
+  return post<{ ok: boolean }>(`/api/support/jobs/${jobId}/change`, { messageId });
 }

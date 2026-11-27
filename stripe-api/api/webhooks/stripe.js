@@ -51,8 +51,13 @@ export default async function handler(req, res) {
         patch.paidAt = FieldValue.serverTimestamp();
         const totalOre = intent.amount_received || intent.amount || 0;
         patch.amountOre = totalOre;
-        patch.feeOre = Math.round(totalOre * 0.1);
-        patch.workOre = totalOre - patch.feeOre;
+        if (intent.metadata?.feeModel === "extra") {
+          patch.workOre = Number(intent.metadata.workOre) || 0;
+          patch.feeOre = Number(intent.metadata.feeOre) || 0;
+        } else {
+          patch.feeOre = Math.round(totalOre * 0.1);
+          patch.workOre = totalOre - patch.feeOre;
+        }
         patch.currency = "sek";
       }
       if (status === "failed" && intent.metadata?.jobId) {

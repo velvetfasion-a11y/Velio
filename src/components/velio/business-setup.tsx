@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { Building2, Check, IdCard, Shield, ShieldCheck, UserRound, type LucideIcon } from "lucide-react";
+import { Building2, Check, Shield, UserRound, type LucideIcon } from "lucide-react";
 import { services, type ServiceId } from "@/lib/velio/data";
-import { formatOrg, lookupCompany, orgDigits, type CompanyRecord } from "@/lib/velio/company";
+import { formatOrg, orgDigits, searchCompanies, validOrg, type CompanyRecord } from "@/lib/velio/company";
 import { searchAddresses, type AddressHit } from "@/lib/velio/geo";
 import { formatPerson, personDigits, validatePersonnummer } from "@/lib/velio/personnummer";
 import { AddressSearch } from "@/components/velio/address-search";
 import { useVelio, type Listing } from "@/lib/velio/store";
 import dynamic from "next/dynamic";
-import { IdentityFlow } from "@/components/velio/identity";
+import { BankIdVerify } from "@/components/velio/bankid-verify";
 import { ProfilePhoto } from "@/components/velio/ui";
 
 const RadiusMap = dynamic(() => import("@/components/velio/radius-map").then((mod) => mod.RadiusMap), {
@@ -16,56 +16,28 @@ const RadiusMap = dynamic(() => import("@/components/velio/radius-map").then((mo
 });
 import { cn } from "@/lib/cn";
 
-const presets: Record<ServiceId, { name: string; hours: string; price: number }[]> = {
-  stad: [
-    { name: "Hemstädning", hours: "2–4 timmar", price: 650 },
-    { name: "Flyttstäd", hours: "En dag", price: 2490 },
-    { name: "Fönsterputs", hours: "1–2 timmar", price: 490 },
-  ],
-  el: [
-    { name: "Felsökning", hours: "1 timme", price: 750 },
-    { name: "Byte av uttag", hours: "Efter överenskommelse", price: 890 },
-  ],
-  trad: [
-    { name: "Gräsklippning", hours: "1–2 timmar", price: 450 },
-    { name: "Häckklippning", hours: "Halvdag", price: 980 },
-  ],
-  rep: [
-    { name: "Småfix hemma", hours: "1 timme", price: 550 },
-    { name: "Montering", hours: "1–2 timmar", price: 690 },
-  ],
-  sak: [
-    { name: "Låsbyte", hours: "1 timme", price: 890 },
-    { name: "Bevakning", hours: "Pass", price: 420 },
-  ],
-  ren: [
-    { name: "Målning av rum", hours: "En dag", price: 3200 },
-    { name: "Tapetsering", hours: "En dag", price: 2800 },
-  ],
-  per: [
-    { name: "Extra personal", hours: "Halvdag", price: 1600 },
-    { name: "Heldag", hours: "8 timmar", price: 2900 },
-  ],
-  eko: [
-    { name: "Löpande bokföring", hours: "Per månad", price: 1490 },
-    { name: "Deklaration", hours: "En gång", price: 2200 },
-  ],
-  ank: [
-    { name: "Inflyttning", hours: "Halvdag", price: 1800 },
-    { name: "Välkomststäd", hours: "2–3 timmar", price: 790 },
-  ],
-  til: [
-    { name: "Tillsyn av hem", hours: "Besök", price: 350 },
-    { name: "Vattna och vädra", hours: "Besök", price: 290 },
-  ],
-};
+function presetPrice(min?: number, max?: number) {
+  if (min == null || max == null) return 500;
+  return Math.round((min + max) / 2);
+}
+
+const presets: Record<ServiceId, { name: string; hours: string; price: number }[]> = Object.fromEntries(
+  services.map((service) => [
+    service.id,
+    service.subcategories.slice(0, 3).map((item) => ({
+      name: item.name,
+      hours: "Efter överenskommelse",
+      price: presetPrice(item.priceEstimate?.min ?? service.priceEstimate?.min, item.priceEstimate?.max ?? service.priceEstimate?.max),
+    })),
+  ]),
+) as Record<ServiceId, { name: string; hours: string; price: number }[]>;
 
 type Offer = { name: string; hours: string; price: number; on: boolean };
 type Step = "welcome" | "identity" | "doc" | "org" | "person" | "company" | "trades" | "price" | "area" | "photo" | "work" | "preview";
 type Seller = "company" | "private" | null;
 
 function stepsFor(seller: Seller): Step[] {
-  const middle: Step[] = seller === "private" ? ["person"] : ["company"];
+  const middle: Step[] = seller === "private" ? ["person"] : [];
   return ["identity", "org", ...middle, "trades", "price", "area", "photo", "work", "preview"];
 }
 
@@ -132,8 +104,9 @@ export function BusinessSetup() {
   const [pn, setPn] = useState("");
   const [pnFromBank, setPnFromBank] = useState(false);
   const [revealPn, setRevealPn] = useState(false);
-  const [lookupBusy, setLookupBusy] = useState(false);
+  const [companyBusy, setCompanyBusy] = useState(false);
   const [company, setCompany] = useState<CompanyRecord | null>(null);
+  const [fTax, setFtax] = useState<"yes" | "no" | "unsure" | null>(null);
   const [trades, setTrades] = useState<ServiceId[]>([]);
   const [offers, setOffers] = useState<Offer[]>([]);
   const [area, setArea] = useState<AddressHit | null>(null);
@@ -195,6 +168,7 @@ export function BusinessSetup() {
       org,
       pn,
       company,
+      fTax,
       trades,
       offers,
       place: area?.label ?? "",
@@ -203,17 +177,22 @@ export function BusinessSetup() {
       lng: area?.lng ?? null,
       km,
     });
-  }, [step, identityVia, seller, org, pn, company, trades, offers, area, km, saveSetupDraft]);
+  }, [step, identityVia, seller, org, pn, company, fTax, trades, offers, area, km, saveSetupDraft]);
 
   const resumeSetup = () => {
     const draft = setupDraft;
     if (!draft) return;
-    if (typeof draft.step === "string") setStep(draft.step as Step);
+    if (typeof draft.step === "string") setStep(draft.step === "company" ? "org" : (draft.step as Step));
     if (draft.identityVia === "bankid" || draft.identityVia === "document") setIdentityVia(draft.identityVia);
     if (draft.seller === "company" || draft.seller === "private") setSeller(draft.seller);
     if (typeof draft.org === "string") setOrg(draft.org);
     if (typeof draft.pn === "string") setPn(draft.pn);
-    if (draft.company && typeof draft.company === "object") setCompany(draft.company as CompanyRecord);
+    if (draft.company && typeof draft.company === "object") {
+      const saved = draft.company as CompanyRecord;
+      setCompany(saved.source === "bolagsverket" && saved.name ? saved : null);
+      if (saved.fTax) setFtax(saved.fTax);
+    }
+    if (draft.fTax === "yes" || draft.fTax === "no" || draft.fTax === "unsure") setFtax(draft.fTax);
     if (Array.isArray(draft.trades)) setTrades(draft.trades as ServiceId[]);
     if (Array.isArray(draft.offers)) setOffers(draft.offers as Offer[]);
     if (typeof draft.km === "number") setKm(draft.km);
@@ -239,18 +218,39 @@ export function BusinessSetup() {
     });
   };
 
-  const loadCompany = async () => {
-    setLookupBusy(true);
-    try {
-      const found = await lookupCompany(org);
-      setCompany(found);
-      setStep("company");
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : "Kunde inte slå upp numret");
-    } finally {
-      setLookupBusy(false);
+  useEffect(() => {
+    if (seller !== "company" || !validOrg(org)) {
+      setCompanyBusy(false);
+      if (!validOrg(org)) setCompany(null);
+      return;
     }
-  };
+    setCompany((current) => (orgDigits(current?.orgNumber || "") === org ? current : null));
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setCompanyBusy(true);
+      void searchCompanies(org, controller.signal)
+        .then((found) => {
+          if (controller.signal.aborted) return;
+          const hit = found.configured ? found.results[0] : undefined;
+          setCompany(
+            hit?.name
+              ? { ...hit, fTax: null, source: "bolagsverket" }
+              : null,
+          );
+        })
+        .catch((error: unknown) => {
+          if (error instanceof DOMException && error.name === "AbortError") return;
+          if (!controller.signal.aborted) setCompany(null);
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setCompanyBusy(false);
+        });
+    }, 250);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [org, seller]);
 
   const goPrice = () => {
     if (!trades.length) return showToast("Välj minst en tjänst");
@@ -267,14 +267,16 @@ export function BusinessSetup() {
     const names = trades.map((id) => services.find((item) => item.id === id)?.name).filter(Boolean);
     const who = profile.name || "Jag";
     const where = area.label;
+    const lookedUp = company?.source === "bolagsverket" && company.name ? company.name : "";
+    const companyLabel = lookedUp || who;
     const listing: Listing = {
       serviceId: trades[0],
       serviceIds: trades,
-      title: seller === "private" ? "Privatperson" : company?.name || who,
+      title: seller === "private" ? "Privatperson" : companyLabel,
       desc:
         seller === "private"
           ? `${who} tar uppdrag som privatperson inom ${names.join(", ")} kring ${where}.`
-          : `${company?.name ?? who} tar uppdrag inom ${names.join(", ")} kring ${where}.`,
+          : `${companyLabel} tar uppdrag inom ${names.join(", ")} kring ${where}.`,
       price: Math.min(...active.map((offer) => offer.price)),
       photos,
       offers: active.map(({ name, hours, price }) => ({ name, hours, price })),
@@ -282,11 +284,14 @@ export function BusinessSetup() {
       sellerKind: seller === "private" ? "private" : "company",
       demo: true,
       nationalId: seller === "private" ? pn : undefined,
-      ...(seller === "private" || !company
+      ...(seller === "private"
         ? {}
-        : { companyName: company.name, orgNumber: company.orgNumber, fTax: company.fTax }),
+        : {
+            companyName: companyLabel,
+            orgNumber: formatOrg(orgDigits(company?.orgNumber || org)),
+            ...(fTax ? { fTax } : {}),
+          }),
     };
-    if (seller !== "private" && !company) return showToast("Slå upp företaget först");
     publishDemoBusiness(listing);
     saveSetupDraft(null);
   };
@@ -307,7 +312,7 @@ export function BusinessSetup() {
           </p>
           <ul className="mt-6 space-y-3">
             {[
-              ["Identitet", "BankID om det finns, annars ID-handling som platshållare."],
+              ["Identitet", "BankID i appen. Pass används inte."],
               ["Företag eller privat", "Organisationsnummer, eller personnummer om du inte har bolag."],
               ["Syns för kunder", "Tjänster, pris, område och en förhandsvisning."],
             ].map(([title, body]) => (
@@ -334,16 +339,12 @@ export function BusinessSetup() {
 
   if (step === "doc") {
     return (
-      <div className="absolute inset-0 z-40 flex flex-col bg-cream">
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 pt-4 pb-6">
-          <IdentityFlow
-            onBack={() => setStep("identity")}
-            onContinue={() => {
-              setIdentityVia("document");
-              setStep("org");
-            }}
-          />
-        </div>
+      <div className="absolute inset-0 z-40 flex flex-col bg-cream px-5 pt-6">
+        <button type="button" onClick={() => setStep("identity")} className="text-sm font-semibold text-brown">
+          Tillbaka
+        </button>
+        <h1 className="ios-title mt-4 text-[1.85rem]">Har du inte BankID?</h1>
+        <p className="mt-3 text-sm leading-relaxed text-muted">Verifiering med pass är inte tillgänglig. Använd BankID i appen.</p>
       </div>
     );
   }
@@ -351,12 +352,10 @@ export function BusinessSetup() {
   const title =
     step === "identity"
       ? "Hur vill du identifiera dig?"
-      : step === "org"
+        : step === "org"
         ? "Har du ett företag?"
         : step === "person"
           ? "Ditt personnummer"
-        : step === "company"
-          ? "Stämmer företaget?"
           : step === "trades"
             ? "Vad erbjuder du?"
             : step === "price"
@@ -371,13 +370,11 @@ export function BusinessSetup() {
 
   const subtitle =
     step === "identity"
-      ? "BankID är vägen när en leverantör är kopplad. ID-handling granskas inte i den här versionen."
-      : step === "org"
-        ? "Bolag slår upp organisationsnummer. Utan bolag använder du personnummer i stället."
+      ? "BankID öppnas här i appen. Har du inte BankID kan du inte verifiera dig i den här versionen."
+        : step === "org"
+        ? "Skriv ditt organisationsnummer så hämtar vi resten."
         : step === "person"
           ? "Numret behövs för att veta vem som ska få betalt. Det sparas bara på ditt privata konto, som bara du kan läsa, och visas inte på den publika profilen."
-        : step === "company"
-          ? "Uppgifterna kommer från demoregistret. F-skatt är inte kontrollerad mot Skatteverket."
           : step === "trades"
             ? "Välj upp till tre. Förslagen på nästa steg följer det du väljer."
             : step === "price"
@@ -410,9 +407,8 @@ export function BusinessSetup() {
         <p className="mt-2 text-sm leading-relaxed text-muted">{subtitle}</p>
         <div className="mt-6">
           {step === "identity" ? (
-            <div className="grid grid-cols-2 gap-3">
-              <ChoiceCard icon={ShieldCheck} title="BankID" subtitle="Rekommenderas" selected={identityVia === "bankid"} onClick={() => setIdentityVia("bankid")} />
-              <ChoiceCard icon={IdCard} title="ID-handling" subtitle="Pass eller kort" selected={identityVia === "document"} onClick={() => setIdentityVia("document")} />
+            <div className="space-y-4">
+              <BankIdVerify onVerified={() => setIdentityVia("bankid")} />
             </div>
           ) : null}
 
@@ -423,16 +419,14 @@ export function BusinessSetup() {
                 <ChoiceCard icon={UserRound} title="Privatperson" subtitle="Inget företag" selected={seller === "private"} onClick={() => setSeller("private")} />
               </div>
               {seller === "company" ? (
-                <label className="block">
-                  <span className="mb-2 block text-sm font-medium text-muted">Organisationsnummer</span>
-                  <input
-                    value={formatOrg(orgDigits(org))}
-                    inputMode="numeric"
-                    placeholder="556677-8899"
-                    onChange={(event) => setOrg(orgDigits(event.target.value))}
-                    className="h-14 w-full rounded-2xl border border-line bg-paper px-4 text-lg text-ink outline-none"
-                  />
-                </label>
+                <OrgNumberFields
+                  digits={org}
+                  busy={companyBusy}
+                  company={company?.source === "bolagsverket" ? company : null}
+                  fTax={fTax}
+                  onDigits={(value) => setOrg(orgDigits(value))}
+                  onTax={setFtax}
+                />
               ) : null}
             </div>
           ) : null}
@@ -474,49 +468,9 @@ export function BusinessSetup() {
             </div>
           ) : null}
 
-          {step === "company" && company ? (
-            <div className="space-y-3">
-              <p className="rounded-2xl bg-sand px-3 py-2 text-xs leading-snug">Demoregister. En Bolagsverket- eller Roaring-koppling kan ersätta det här.</p>
-              <label className="block text-sm font-medium">
-                Namn
-                <input value={company.name} onChange={(event) => setCompany({ ...company, name: event.target.value })} className="mt-1 h-14 w-full rounded-2xl border border-line bg-paper px-4 text-lg font-normal outline-none" />
-              </label>
-              <label className="block text-sm font-medium">
-                Adress
-                <input
-                  value={`${company.street}, ${company.city}`}
-                  onChange={(event) => {
-                    const [street, city] = event.target.value.split(",");
-                    setCompany({ ...company, street: (street ?? "").trim(), city: (city ?? company.city).trim() });
-                  }}
-                  className="mt-1 h-14 w-full rounded-2xl border border-line bg-paper px-4 text-lg font-normal outline-none"
-                />
-              </label>
-              <div>
-                <p className="text-sm font-medium">F-skatt</p>
-                <div className="mt-2 grid grid-cols-3 gap-2">
-                  {(
-                    [
-                      ["yes", "Ja"],
-                      ["no", "Nej"],
-                      ["unsure", "Vet inte"],
-                    ] as const
-                  ).map(([value, label]) => (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => setCompany({ ...company, fTax: value })}
-                      className={cn("h-12 rounded-full text-sm font-semibold", company.fTax === value ? "bg-brown text-paper" : "border border-line bg-paper")}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          ) : null}
-
           {step === "trades" ? (
+            <div className="space-y-2">
+            <p className="text-sm text-muted">Välj Annat om du vill ta uppdrag som inte passar de andra tjänsterna. Högst tre tjänster.</p>
             <div className="grid grid-cols-2 gap-2">
               {services.map((service) => {
                 const on = trades.includes(service.id);
@@ -533,6 +487,7 @@ export function BusinessSetup() {
                   </button>
                 );
               })}
+            </div>
             </div>
           ) : null}
 
@@ -553,6 +508,7 @@ export function BusinessSetup() {
                     <span className="block text-xs text-muted">{offer.hours}</span>
                   </span>
                   <label className="flex items-center gap-1 text-sm font-semibold">
+                    <span className="text-muted">fr.</span>
                     <input
                       inputMode="numeric"
                       value={offer.price}
@@ -620,7 +576,7 @@ export function BusinessSetup() {
             </div>
           ) : null}
 
-          {step === "preview" && (seller === "private" || company) ? (
+          {step === "preview" && seller ? (
             <div className="overflow-hidden rounded-[1.4rem] border border-line bg-paper">
               <div className="bg-sand px-4 py-3">
                 <span className="rounded-full bg-brown px-2.5 py-1 text-xs font-semibold text-paper">Demo</span>
@@ -630,8 +586,8 @@ export function BusinessSetup() {
                 <div className="flex items-center gap-3">
                   <ProfilePhoto />
                   <div>
-                    <p className="font-serif text-2xl leading-none">{profile.name || company?.name}</p>
-                    <p className="mt-1 text-sm text-muted">{seller === "private" ? "Privatperson" : company?.name}</p>
+                    <p className="font-serif text-2xl leading-none">{profile.name || company?.name || formatOrg(org)}</p>
+                    <p className="mt-1 text-sm text-muted">{seller === "private" ? "Privatperson" : company?.name || formatOrg(org) || profile.name}</p>
                   </div>
                 </div>
                 <p className="mt-3 text-sm">fr. {Math.min(...offers.filter((offer) => offer.on).map((offer) => offer.price))} kr</p>
@@ -652,8 +608,7 @@ export function BusinessSetup() {
                   </p>
                 ) : (
                   <>
-                    <p className="mt-3 text-sm text-muted">Org.nr {company?.orgNumber}</p>
-                    <p className="text-sm text-muted">F-skatt: {company?.fTax === "yes" ? "Ja, enligt dig" : company?.fTax === "no" ? "Nej" : "Osäker"}</p>
+                    <p className="mt-3 text-sm text-muted">Org.nr {formatOrg(orgDigits(company?.orgNumber || org))}</p>
                   </>
                 )}
                 <p className="mt-4 flex gap-2 rounded-2xl bg-sand px-3 py-3 text-sm leading-snug">
@@ -666,19 +621,22 @@ export function BusinessSetup() {
         </div>
       </div>
       <div className="px-5 pt-2 pb-4">
-        {(step === "identity" && !identityVia) || (step === "org" && !seller) ? null : (
+        {(step === "org" && !seller) ? null : (
           <button
             type="button"
-            disabled={lookupBusy}
             onClick={() => {
               if (step === "identity") {
-                if (identityVia === "document") setStep("doc");
-                else setStep("org");
+                setIdentityVia("bankid");
+                setStep("org");
                 return;
               }
               if (step === "org") {
                 if (seller === "private") openPrivate();
-                else void loadCompany();
+                else {
+                  if (!validOrg(org)) return showToast("Kontrollera organisationsnumret");
+                  if (!fTax) return showToast("Välj F-skatt: ja, nej eller vet inte");
+                  setStep("trades");
+                }
                 return;
               }
               else if (step === "person") {
@@ -686,8 +644,7 @@ export function BusinessSetup() {
                 if (!check.ok) return showToast(check.message);
                 setRevealPn(false);
                 setStep("trades");
-              } else if (step === "company") setStep("trades");
-              else if (step === "trades") goPrice();
+              } else if (step === "trades") goPrice();
               else if (step === "price") {
                 if (!offers.some((offer) => offer.on)) return showToast("Behåll minst ett pris");
                 setStep("area");
@@ -698,9 +655,79 @@ export function BusinessSetup() {
             }}
             className="h-14 w-full rounded-full bg-brown text-base font-semibold text-paper disabled:opacity-50"
           >
-            {lookupBusy ? "Slår upp…" : step === "org" && seller === "company" ? "Hämta företag" : step === "work" && photos.length === 0 ? "Hoppa över" : step === "preview" ? "Publicera som Demo" : "Nästa"}
+            {step === "work" && photos.length === 0 ? "Hoppa över" : step === "preview" ? "Publicera som Demo" : "Nästa"}
           </button>
         )}
+      </div>
+    </div>
+  );
+}
+
+function OrgNumberFields({
+  digits,
+  busy,
+  company,
+  fTax,
+  onDigits,
+  onTax,
+}: {
+  digits: string;
+  busy: boolean;
+  company: CompanyRecord | null;
+  fTax: "yes" | "no" | "unsure" | null;
+  onDigits: (value: string) => void;
+  onTax: (value: "yes" | "no" | "unsure") => void;
+}) {
+  const invalid = digits.length === 10 && !validOrg(digits);
+  const address = [company?.street, company?.postalCode, company?.city].filter(Boolean).join(", ");
+  return (
+    <div className="space-y-3">
+      <label className="block">
+        <span className="mb-2 block text-sm font-medium text-muted">Organisationsnummer</span>
+        <input
+          value={formatOrg(digits)}
+          inputMode="numeric"
+          autoComplete="off"
+          placeholder="556677-8899"
+          aria-label="Organisationsnummer"
+          aria-invalid={invalid}
+          onChange={(event) => onDigits(event.target.value)}
+          className="h-14 w-full rounded-2xl border border-line bg-paper px-4 text-lg tracking-wide text-ink outline-none"
+        />
+      </label>
+      {invalid ? <p className="text-sm text-red-800">Kontrollera organisationsnumret.</p> : null}
+      {busy ? <p className="text-sm text-muted">Hämtar företagsuppgifter…</p> : null}
+      {company?.name ? (
+        <div className="rounded-2xl bg-sand px-3 py-3">
+          <p className="font-semibold">{company.name}</p>
+          {address ? <p className="mt-1 text-sm text-muted">{address}</p> : null}
+          <p className="mt-1 text-sm text-muted">{company.orgNumber}</p>
+        </div>
+      ) : (
+        <p className="text-sm text-muted">Vi hämtar företagsuppgifterna automatiskt.</p>
+      )}
+      <div>
+        <p className="text-sm font-medium">F-skatt</p>
+        <div className="mt-2 grid grid-cols-3 gap-2">
+          {(
+            [
+              ["yes", "Ja"],
+              ["no", "Nej"],
+              ["unsure", "Vet inte"],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={fTax === value}
+              onClick={() => onTax(value)}
+              className={cn("h-12 rounded-full text-sm font-semibold", fTax === value ? "bg-brown text-paper" : "border border-line bg-paper")}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <p className="mt-2 text-xs leading-snug text-muted">Svaret sparas bara på ditt konto. Det visas inte på profilen och kontrolleras inte mot Skatteverket.</p>
       </div>
     </div>
   );

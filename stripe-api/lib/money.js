@@ -1,9 +1,9 @@
-/** Offer amount is SEK. The 10% service fee is included in that total. */
+/** Offer amount is what the worker is paid. The customer also pays a 10% VELIO fee on top. */
 
 export function breakdownFromSek(amountSek) {
-  const totalOre = Math.round(Number(amountSek) * 100);
-  const feeOre = Math.round(totalOre * 0.1);
-  const workOre = totalOre - feeOre;
+  const workOre = Math.round(Number(amountSek) * 100);
+  const feeOre = Math.round(workOre * 0.1);
+  const totalOre = workOre + feeOre;
   return { workOre, feeOre, totalOre };
 }
 

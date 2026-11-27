@@ -19,53 +19,16 @@ import {
   kr,
   providerById,
   ratingLabel,
+  priceDisclaimer,
   serviceById,
   sortLabels,
+  taxReliefDisclaimer,
   type Provider,
-  type ServiceId,
 } from "@/lib/velio/data";
 import { useVelio } from "@/lib/velio/store";
 import { AppHeader } from "@/components/velio/header";
 import { cn } from "@/lib/cn";
 import { CityMap } from "@/components/velio/osm-map";
-import { asset } from "@/lib/velio/asset";
-
-const intros: Record<ServiceId, string> = {
-  sak: "Larm, bevakning och trygghet – aktivera professionella utförare nära dig.",
-  el: "Installation, felsökning och belysning – boka en elektriker nära dig.",
-  stad: "Hemstäd och flyttstäd – boka en städare nära dig.",
-  trad: "Häck, plantering och skötsel – boka en trädgårdsmästare nära dig.",
-  rep: "Det som gått sönder hemma – boka en reparatör nära dig.",
-  ren: "Målning och mindre renovering – boka ett proffs nära dig.",
-  per: "Tillfällig personal till hem och event – boka nära dig.",
-  eko: "Bokföring och deklaration – boka en ekonom nära dig.",
-  ank: "Förbered hemmet inför ankomst – boka hjälp nära dig.",
-  til: "Tillsyn när du är borta – boka någon som tittar till bostaden.",
-};
-
-const heroes: Partial<Record<ServiceId, string>> = {
-  sak: asset("/velio/hero-sak.jpg"),
-  el: asset("/velio/el.jpg"),
-  stad: asset("/velio/stad.jpg"),
-  trad: asset("/velio/trad.jpg"),
-  rep: asset("/velio/rep.jpg"),
-  ren: asset("/velio/ren.jpg"),
-  per: asset("/velio/per.jpg"),
-  til: asset("/velio/til.jpg"),
-};
-
-const fallbackTags: Record<ServiceId, string[]> = {
-  el: ["Installation", "Felsökning", "Belysning"],
-  stad: ["Hemstäd", "Flyttstäd"],
-  trad: ["Skötsel", "Häck"],
-  rep: ["Reparation", "Montering"],
-  sak: ["Larm", "Bevakning"],
-  ren: ["Målning", "Renovering"],
-  per: ["Personal", "Event"],
-  eko: ["Bokföring", "Deklaration"],
-  ank: ["Ankomst", "Förberedelse"],
-  til: ["Tillsyn", "Växter"],
-};
 
 function shiftDate(offset: number) {
   const date = new Date();
@@ -80,7 +43,7 @@ function dayStamp(date: Date) {
 }
 
 function tagsOf(person: Provider) {
-  return person.tags?.length ? person.tags : fallbackTags[person.serviceId];
+  return person.tags?.length ? person.tags : serviceById(person.serviceId)?.subcategories.map((item) => item.name) ?? [];
 }
 
 export function ServiceScreen() {
@@ -105,6 +68,7 @@ export function ServiceScreen() {
   const service = serviceById(serviceId);
   const [menu, setMenu] = useState<"time" | "place" | "tags" | null>(null);
   const [tag, setTag] = useState<string | null>(null);
+  const [subId, setSubId] = useState<string | null>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
   const [quick, setQuick] = useState<"today" | "tomorrow" | null>(null);
   const [picked, setPicked] = useState<Date | null>(null);
@@ -124,7 +88,9 @@ export function ServiceScreen() {
   const areas = Object.keys(areaLayout);
 
   if (!service) return null;
-  const hero = heroes[service.id] ?? asset("/velio/hero.jpg");
+  const hero = service.image;
+  const chosen = service.subcategories.find((item) => item.id === subId) ?? null;
+  const relief = chosen?.taxRelief ?? service.taxRelief;
 
   const book = (id: string) => {
     useVelio.setState({ providerId: id, sheet: "book" });
@@ -139,11 +105,44 @@ export function ServiceScreen() {
           <AppHeader tone="glass" />
           <div className="px-5 pt-1 pb-6">
           <h1 className="ios-title scrim-text text-[2.35rem] text-paper">{service.name}</h1>
-          <p className="scrim-text mt-2 max-w-[18rem] text-sm leading-snug text-paper">{intros[service.id]}</p>
+          <p className="scrim-text mt-2 max-w-[18rem] text-sm leading-snug text-paper">{service.intro}</p>
           </div>
         </div>
       </section>
 
+      <div className="px-4 pt-4">
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {service.subcategories.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              aria-pressed={subId === item.id}
+              onClick={() => setSubId(subId === item.id ? null : item.id)}
+              className={cn("shrink-0 rounded-full border px-3 py-1.5 text-sm", subId === item.id ? "border-brown bg-brown text-paper" : "border-line bg-paper")}
+            >
+              {item.name}
+            </button>
+          ))}
+        </div>
+        {chosen ? (
+          <div className="mt-3 rounded-2xl border border-line bg-paper p-3">
+            <p className="font-semibold">{chosen.name}</p>
+            <p className="mt-1 text-sm text-muted">{chosen.desc}</p>
+            {chosen.priceEstimate ? (
+              <p className="mt-2 text-sm">
+                Uppskattning {chosen.priceEstimate.min}–{chosen.priceEstimate.max} {chosen.priceEstimate.unit}
+              </p>
+            ) : null}
+            <p className="mt-2 text-sm">
+              <span className="rounded-full bg-sand px-2 py-0.5 text-xs font-semibold">{relief.label}</span>
+            </p>
+            <p className="mt-2 text-xs leading-relaxed text-muted">{relief.note}</p>
+            <a href={relief.source} className="mt-1 inline-block text-xs text-brown underline">Skatteverket</a>
+            <p className="mt-2 text-[11px] leading-relaxed text-muted">{taxReliefDisclaimer}</p>
+            {chosen.priceEstimate ? <p className="mt-1 text-[11px] leading-relaxed text-muted">{priceDisclaimer}</p> : null}
+          </div>
+        ) : null}
+      </div>
       <div className="relative px-4 pt-3">
         <div className="flex items-center gap-3">
             <div className="flex rounded-full bg-sand p-1">

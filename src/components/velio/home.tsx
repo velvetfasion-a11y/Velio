@@ -4,34 +4,36 @@ import {
   BadgeCheck,
   Calculator,
   Check,
-  Clock,
   ClipboardList,
+  Clock,
+  CircleEllipsis,
+  Drill,
+  Droplets,
   Eye,
-  Flower2,
   Hammer,
   Heart,
   KeyRound,
+  Laptop,
   Leaf,
-  Lightbulb,
   MapPin,
   Navigation,
-  Paintbrush,
   Paperclip,
   Search,
   Shield,
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
-  SprayCan,
   Star,
+  Truck,
   UserRound,
   Users,
   Wrench,
   Zap,
   type LucideIcon,
 } from "lucide-react";
-import { coordsForArea, distanceKm, greetingName, providerById, providerTradeNames, ratingLabel, serviceById, services, type ServiceIcon, type ServiceId } from "@/lib/velio/data";
+import { coordsForArea, distanceKm, greetingName, providerById, providerTradeNames, ratingLabel, resolveServiceId, serviceById, services, subcategoryById, type ServiceIcon, type ServiceId } from "@/lib/velio/data";
 import { useVelio } from "@/lib/velio/store";
+import { jobPriceDetail } from "@/lib/velio/price";
 import { AppHeader } from "@/components/velio/header";
 import { cn } from "@/lib/cn";
 import { BottomSheet, Btn, StepProgress, TrustNote } from "@/components/velio/ui";
@@ -47,21 +49,30 @@ const icons: Record<ServiceIcon, LucideIcon> = {
   shield: Shield,
   hammer: Hammer,
   user: UserRound,
+  users: Users,
   calculator: Calculator,
   key: KeyRound,
   eye: Eye,
+  truck: Truck,
+  drill: Drill,
+  droplets: Droplets,
+  heart: Heart,
+  laptop: Laptop,
+  ellipsis: CircleEllipsis,
 };
 
-const popular: { id: ServiceId; label: string; icon: LucideIcon; image: string }[] = [
-  { id: "stad", label: "Städning", icon: SprayCan, image: asset("/velio/stad.jpg") },
-  { id: "ren", label: "Renovering", icon: Paintbrush, image: asset("/velio/ren.jpg") },
-  { id: "el", label: "Elektriker", icon: Lightbulb, image: asset("/velio/el.jpg") },
-  { id: "trad", label: "Trädgård", icon: Flower2, image: asset("/velio/trad.jpg") },
-  { id: "rep", label: "Reparationer", icon: Wrench, image: asset("/velio/rep.jpg") },
-  { id: "per", label: "Personal", icon: Users, image: asset("/velio/per.jpg") },
-  { id: "sak", label: "Säkerhet", icon: Shield, image: asset("/velio/sak.jpg") },
-  { id: "til", label: "Tillsyn & Service", icon: ClipboardList, image: asset("/velio/til.jpg") },
-];
+const popular = services
+  .filter((service) => service.popular)
+  .map((service) => ({ id: service.id, label: service.name, icon: icons[service.icon], image: service.image }));
+
+function matchesService(query: string, id: ServiceId) {
+  const service = serviceById(id);
+  if (!service) return false;
+  const hay = [service.name, service.desc, service.intro, ...service.subcategories.flatMap((item) => [item.name, item.desc])]
+    .join(" ")
+    .toLowerCase();
+  return hay.includes(query);
+}
 
 export function ServiceIcon({ name, className }: { name: ServiceIcon; className?: string }) {
   const Icon = icons[name];
@@ -72,9 +83,7 @@ export function CategoryGrid({ compact = false, filter = true }: { compact?: boo
   const openService = useVelio((state) => state.openService);
   const search = useVelio((state) => state.search);
   const query = filter ? search.trim().toLowerCase() : "";
-  const visible = services.filter(
-    (service) => !query || service.name.toLowerCase().includes(query) || service.desc.toLowerCase().includes(query),
-  );
+  const visible = services.filter((service) => !query || matchesService(query, service.id));
 
   if (!visible.length) {
     return <p className="mb-6 text-sm text-muted">Inga tjänster matchar “{search.trim()}”.</p>;
@@ -115,8 +124,9 @@ export function Home() {
   const firstName = greetingName(profile.name);
   const [showAll, setShowAll] = useState(false);
   const query = search.trim().toLowerCase();
-  const cards = popular.filter((item) => !query || item.label.toLowerCase().includes(query));
-  const extra = services.filter((service) => !popular.some((item) => item.id === service.id));
+  const cards = popular.filter((item) => !query || matchesService(query, item.id));
+  const extra = services.filter((service) => !service.popular && service.id !== "annat");
+  const annat = services.find((service) => service.id === "annat");
   const activeAddress = addresses.find((item) => item.id === activeAddressId) ?? null;
   const origin =
     activeAddress?.lat != null && activeAddress.lng != null
@@ -202,19 +212,25 @@ export function Home() {
             ))}
             {showAll
               ? extra
-                  .filter((service) => !query || service.name.toLowerCase().includes(query))
+                  .filter((service) => !query || matchesService(query, service.id))
                   .map((service) => (
-                    <button
+                    <PhotoTile
                       key={service.id}
-                      type="button"
+                      label={service.name}
+                      image={service.image}
+                      icon={icons[service.icon]}
                       onClick={() => openService(service.id)}
-                      className="flex aspect-[4/5] flex-col items-start justify-end rounded-2xl bg-sand p-2 text-left"
-                    >
-                      <ServiceIcon name={service.icon} className="mb-2 size-6" />
-                      <span className="text-sm leading-tight font-semibold">{service.name}</span>
-                    </button>
+                    />
                   ))
               : null}
+            {annat && (!query || matchesService(query, annat.id)) ? (
+              <PhotoTile
+                label={annat.name}
+                image={annat.image}
+                icon={icons[annat.icon]}
+                onClick={() => openService(annat.id)}
+              />
+            ) : null}
           </div>
         ) : (
           <p className="text-sm text-muted">Inga tjänster matchar “{search.trim()}”.</p>
@@ -366,7 +382,9 @@ export function SearchScreen() {
   const openService = useVelio((state) => state.openService);
   const openProvider = useVelio((state) => state.openProvider);
   const query = search.trim().toLowerCase();
-  const matched = popular.filter((item) => !query || item.label.toLowerCase().includes(query));
+  const matched = services
+    .filter((service) => !query || matchesService(query, service.id))
+    .map((service) => ({ id: service.id, label: service.name, icon: icons[service.icon], image: service.image }));
 
   return (
     <div className="bg-cream px-4 pt-4">
@@ -620,6 +638,8 @@ function JobSheet() {
   const saveJobDraft = useVelio((state) => state.saveJobDraft);
   const jobDraft = useVelio((state) => state.jobDraft);
   const [serviceId, setServiceId] = useState<ServiceId>("stad");
+  const [subcategoryId, setSubcategoryId] = useState<string | null>(null);
+  const [jobTitle, setJobTitle] = useState("");
   const [text, setText] = useState("");
   const [whenMode, setWhenMode] = useState<WhenMode>("day");
   const [startDate, setStartDate] = useState<Date | null>(null);
@@ -634,7 +654,8 @@ function JobSheet() {
   const [locating, setLocating] = useState(false);
   const [files, setFiles] = useState<string[]>([]);
   const [budget, setBudget] = useState("");
-  const [quotes, setQuotes] = useState(false);
+  const [priceMode, setPriceMode] = useState<"quote" | "budget" | "fixed" | "hourly">("quote");
+  const [estHours, setEstHours] = useState("");
   const [step, setStep] = useState(0);
   const [done, setDone] = useState(false);
   const [keyboard, setKeyboard] = useState(0);
@@ -644,6 +665,8 @@ function JobSheet() {
     saveJobDraft({
       step,
       serviceId,
+      subcategoryId,
+      jobTitle,
       text,
       whenMode,
       start: startDate ? startDate.toISOString() : null,
@@ -652,14 +675,17 @@ function JobSheet() {
       clock,
       address: pickedAddress,
       budget,
-      quotes,
+      priceMode,
+      estHours,
     });
-  }, [step, serviceId, text, whenMode, startDate, endDate, timeWindow, clock, pickedAddress, budget, quotes, saveJobDraft]);
+  }, [step, serviceId, subcategoryId, jobTitle, text, whenMode, startDate, endDate, timeWindow, clock, pickedAddress, budget, priceMode, estHours, saveJobDraft]);
   const resumeJob = () => {
     const draft = jobDraft;
     if (!draft) return;
     if (typeof draft.step === "number") setStep(draft.step);
-    if (typeof draft.serviceId === "string") setServiceId(draft.serviceId as ServiceId);
+    if (typeof draft.serviceId === "string") setServiceId((resolveServiceId(draft.serviceId)?.id ?? "stad") as ServiceId);
+    if (typeof draft.subcategoryId === "string") setSubcategoryId(draft.subcategoryId);
+    if (typeof draft.jobTitle === "string") setJobTitle(draft.jobTitle);
     if (typeof draft.text === "string") setText(draft.text);
     if (typeof draft.whenMode === "string") setWhenMode(draft.whenMode as WhenMode);
     if (typeof draft.start === "string") setStartDate(new Date(draft.start));
@@ -668,11 +694,12 @@ function JobSheet() {
     if (typeof draft.clock === "string") setClock(draft.clock);
     if (draft.address && typeof draft.address === "object") setPickedAddress(draft.address as AddressHit);
     if (typeof draft.budget === "string") setBudget(draft.budget);
-    if (typeof draft.quotes === "boolean") setQuotes(draft.quotes);
+    if (draft.priceMode === "fixed" || draft.priceMode === "hourly" || draft.priceMode === "quote" || draft.priceMode === "budget") setPriceMode(draft.priceMode);
+    if (typeof draft.estHours === "string") setEstHours(draft.estHours);
   };
   const catCols = services.length % 2 === 0 ? 2 : 3;
   const catRows = Math.ceil(services.length / catCols);
-  const stepNames = ["Tjänst", "Beskrivning", "Tid", "Plats", "Budget", "Granska"];
+  const stepNames = ["Tjänst", "Beskrivning", "Tid", "Plats", "Pris", "Granska"];
   const hours = Array.from({ length: 14 }, (_, index) => `${String(index + 7).padStart(2, "0")}:00`);
 
   useEffect(() => {
@@ -757,30 +784,41 @@ function JobSheet() {
       .finally(() => setLocating(false));
   };
 
+  const needsDetail = serviceId === "annat" || subcategoryId === "annat";
   const advance = () => {
-    if (step === 1 && text.trim().length < 8) return showToast("Beskriv uppdraget lite till");
+    if (step === 1 && !subcategoryId) return showToast("Välj vad som ska göras");
+    if (step === 1 && needsDetail && jobTitle.trim().length < 3) return showToast("Skriv en kort titel");
+    if (step === 1 && text.trim().length < 8) return showToast(needsDetail ? "Beskriv vad du behöver hjälp med" : "Beskriv uppdraget lite till");
     if (step === 2) {
       if (whenMode === "range" && startDate && !endDate) return showToast("Välj även ett slutdatum");
       if (!chosenWhen) return showToast("Välj datum, intervall, senast-datum eller flexibel");
     }
     if (step === 3 && !pickedAddress) return showToast("Välj en adress i listan, eller använd din plats");
-    if (step === 4 && budget && !/^\d+$/.test(budget)) return showToast("Skriv budget i hela kronor, eller hoppa över");
+    if (step === 4 && priceMode !== "quote" && (!/^\d+$/.test(budget) || Number(budget) <= 0)) return showToast("Skriv ett pris i hela kronor");
+    if (step === 4 && priceMode === "hourly" && estHours && !/^\d+([.,]\d+)?$/.test(estHours)) return showToast("Skriv timmarna som ett tal");
     setStep((current) => Math.min(5, current + 1));
   };
 
   const publish = () => {
-    if (text.trim().length < 8) return showToast("Beskriv uppdraget lite till");
+    if (needsDetail && jobTitle.trim().length < 3) return showToast("Skriv en kort titel");
+    if (text.trim().length < 8) return showToast(needsDetail ? "Beskriv vad du behöver hjälp med" : "Beskriv uppdraget lite till");
     if (!chosenWhen) return showToast("Välj när uppdraget ska göras");
     if (!pickedAddress) return showToast("Välj en adress");
-    const price = !quotes && budget ? Number(budget) : 0;
+    const priceType = priceMode ?? "quote";
+    const price = priceType === "quote" ? 0 : Number(budget);
+    const hours = priceType === "hourly" && estHours ? Number(estHours.replace(",", ".")) : undefined;
     const attached = files.length ? `\n\nBifogat: ${files.join(", ")}` : "";
     addPosted({
       serviceId,
+      subcategoryId: subcategoryId ?? undefined,
+      title: needsDetail ? jobTitle.trim() : undefined,
       text: `${text.trim()}${attached}`,
       when: chosenWhen,
       address: pickedAddress.label,
-      rate: price > 0 ? "fixed" : "hour",
+      rate: priceType === "hourly" ? "hour" : "fixed",
       price,
+      priceType,
+      ...(hours ? { estHours: hours } : {}),
     });
     setDone(true);
     saveJobDraft(null);
@@ -808,7 +846,7 @@ function JobSheet() {
         <div className={step === 0 ? "shrink-0" : undefined}>
         <StepProgress step={step + 1} total={6} label={stepNames[step]} />
         <h1 className={cn("ios-title", step === 0 ? "text-[1.35rem] leading-tight" : "text-[1.85rem]")}>
-          {step === 0 ? "Vad behöver du hjälp med?" : step === 1 ? "Beskriv uppdraget" : step === 2 ? "När ska det göras?" : step === 3 ? "Var ska det utföras?" : step === 4 ? "Ungefärlig budget" : "Granska och publicera"}
+          {step === 0 ? "Vad behöver du hjälp med?" : step === 1 ? "Beskriv uppdraget" : step === 2 ? "När ska det göras?" : step === 3 ? "Var ska det utföras?" : step === 4 ? "Vilket pris?" : "Granska och publicera"}
         </h1>
         {step === 0 && jobDraft ? (
           <button type="button" onClick={resumeJob} className="mt-3 h-11 w-full rounded-full border border-line text-sm font-semibold">
@@ -817,7 +855,7 @@ function JobSheet() {
         ) : null}
         <p className={cn("leading-snug text-muted", step === 0 ? "mt-1 text-xs" : "mt-2 text-sm")}>
           {step === 4
-            ? "Budgeten är en riktlinje. Du betalar när jobbet är klart, och inget dras om arbetet inte utförs."
+            ? "Välj hur priset ska anges. Du betalar när jobbet är klart."
             : step === 0
               ? "Välj en tjänst."
               : "Kort steg för steg. Du kan gå tillbaka och ändra innan du publicerar."}
@@ -833,24 +871,26 @@ function JobSheet() {
             }}
           >
             {services.map((service) => {
-              const photo = popular.find((item) => item.id === service.id);
               const selected = serviceId === service.id;
               return (
                 <button
                   key={service.id}
                   type="button"
                   aria-pressed={selected}
-                  onClick={() => setServiceId(service.id)}
+                  onClick={() => {
+                    setServiceId(service.id);
+                    setSubcategoryId(service.id === "annat" ? "annat" : null);
+                    if (service.id === "annat") {
+                      setJobTitle("");
+                      setText("");
+                    }
+                  }}
                   className={cn(
                     "relative h-full min-h-0 overflow-hidden rounded-2xl border-2 text-left text-paper",
                     selected ? "border-brown" : "border-transparent",
                   )}
                 >
-                  {photo ? (
-                    <img src={photo.image} alt="" className="absolute inset-0 h-full w-full object-cover" />
-                  ) : (
-                    <span className="absolute inset-0 bg-sand" />
-                  )}
+                  <img src={service.image} alt="" className="absolute inset-0 h-full w-full object-cover" />
                   <span className={cn("absolute inset-0", selected ? "bg-brown/40" : "bg-gradient-to-t from-ink/80 via-ink/15 to-transparent")} />
                   {selected ? (
                     <span className="absolute top-1 right-1 grid size-5 place-items-center rounded-full bg-paper text-brown">
@@ -858,7 +898,6 @@ function JobSheet() {
                     </span>
                   ) : null}
                   <span className="scrim-text absolute inset-x-1.5 bottom-1 text-[clamp(0.62rem,2.1dvh,0.95rem)] leading-tight font-semibold">
-                    {photo ? null : <ServiceIcon name={service.icon} className="mb-0.5 size-4" />}
                     {service.name}
                   </span>
                 </button>
@@ -869,14 +908,53 @@ function JobSheet() {
 
         {step === 1 ? (
         <section className="rounded-[1.3rem] border border-line bg-paper/80 backdrop-blur-xl p-3">
+          <p className="mb-2 text-sm font-semibold">Vad ska göras?</p>
+          <div className="mb-3 flex flex-wrap gap-2">
+            {(serviceById(serviceId)?.subcategories ?? []).map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                aria-pressed={subcategoryId === item.id}
+                onClick={() => {
+                  const previous = subcategoryById(serviceId, subcategoryId);
+                  setSubcategoryId(item.id);
+                  if (item.id === "annat") {
+                    if (previous && text.trim() === previous.desc.trim()) setText("");
+                    return;
+                  }
+                  if (text.trim().length < 8) setText(item.desc);
+                }}
+                className={cn("rounded-full border px-3 py-1.5 text-sm", subcategoryId === item.id ? "border-brown bg-brown text-paper" : "border-line bg-paper")}
+              >
+                {item.name}
+              </button>
+            ))}
+          </div>
+          {subcategoryById(serviceId, subcategoryId)?.taxRelief ? (
+            <p className="mb-3 text-xs text-muted">
+              {subcategoryById(serviceId, subcategoryId)?.taxRelief.label}. {subcategoryById(serviceId, subcategoryId)?.taxRelief.note}{" "}
+              <a className="underline" href={subcategoryById(serviceId, subcategoryId)?.taxRelief.source}>Skatteverket</a>
+            </p>
+          ) : null}
+          {needsDetail ? (
+            <label className="mb-3 block">
+              <span className="text-sm font-semibold">Titel</span>
+              <input
+                value={jobTitle}
+                onChange={(event) => setJobTitle(event.target.value)}
+                placeholder="Kort rubrik på uppdraget"
+                className="mt-1 w-full rounded-2xl border border-line px-3 py-3 text-sm outline-none"
+              />
+            </label>
+          ) : null}
           <div className="mb-2 flex items-start gap-2">
             <ClipboardList className="mt-0.5 size-5" />
             <div>
               <p className="font-semibold">Beskriv uppdraget</p>
-              <p className="text-sm text-muted">Berätta kort vad som ska göras.</p>
+              <p className="text-sm text-muted">{needsDetail ? "Skriv vad som ska göras, så att rätt person kan svara." : "Berätta kort vad som ska göras."}</p>
             </div>
           </div>
-          <textarea value={text} onChange={(event) => setText(event.target.value)} rows={4} placeholder="T.ex. flyttstädning av 3 rum och kök." className="w-full rounded-2xl border border-line px-3 py-3 text-sm outline-none" />
+          <textarea value={text} onChange={(event) => setText(event.target.value)} rows={4} placeholder={needsDetail ? "Beskriv vad du behöver hjälp med" : "T.ex. flyttstädning av 3 rum och kök."} className="w-full rounded-2xl border border-line px-3 py-3 text-sm outline-none" />
         </section>
         ) : null}
 
@@ -999,41 +1077,68 @@ function JobSheet() {
 
         {step === 4 ? (
           <section className="rounded-[1.3rem] border border-line bg-paper p-3 shadow-soft">
-            <button
-              type="button"
-              aria-pressed={quotes}
-              onClick={() => {
-                setQuotes(true);
-                setBudget("");
-              }}
-              className={cn(
-                "flex w-full items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left",
-                quotes ? "border-brown bg-brown text-paper" : "border-line bg-paper",
-              )}
-            >
-              <span>
-                <span className="block font-semibold">Hoppa över · jag vill få offerter</span>
-                <span className={cn("mt-0.5 block text-sm", quotes ? "text-paper/80" : "text-muted")}>
-                  Ingen summa behövs. Utförare svarar med pris.
-                </span>
-              </span>
-              {quotes ? <Check className="size-5 shrink-0" /> : null}
-            </button>
-            <label className={cn("mt-3 flex items-center gap-2 rounded-2xl border border-line px-4", quotes && "opacity-50")}>
-              <input
-                inputMode="numeric"
-                value={budget}
-                onChange={(event) => {
-                  setBudget(event.target.value.replace(/\D/g, "").slice(0, 6));
-                  setQuotes(false);
-                }}
-                onFocus={(event) => event.currentTarget.scrollIntoView({ block: "center" })}
-                placeholder="Eller skriv en budget"
-                aria-label="Budget i kronor"
-                className="h-12 min-w-0 flex-1 bg-transparent text-lg font-semibold outline-none"
-              />
-              <span className="text-sm font-semibold text-muted">kr</span>
-            </label>
+            <div className="grid grid-cols-2 gap-1 rounded-[1.15rem] bg-sand p-1">
+              {([
+                ["quote", "Ge offert"],
+                ["budget", "Budget"],
+                ["fixed", "Fast pris"],
+                ["hourly", "Timpris"],
+              ] as const).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  aria-pressed={priceMode === id}
+                  onClick={() => {
+                    setPriceMode(id);
+                    if (id === "quote") {
+                      setBudget("");
+                      setEstHours("");
+                    }
+                  }}
+                  className={cn(
+                    "h-11 rounded-[0.9rem] text-sm font-semibold",
+                    priceMode === id ? "bg-brown text-paper" : "text-ink",
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-3 text-sm leading-snug text-muted">
+              {priceMode === "budget"
+                ? "Högsta belopp du vill betala."
+                : priceMode === "fixed"
+                  ? "Ett pris för hela uppdraget."
+                  : priceMode === "hourly"
+                    ? "Pris per timme. Uppskattade timmar är valfritt."
+                    : "Utföraren föreslår priset."}
+            </p>
+            {priceMode === "fixed" || priceMode === "hourly" || priceMode === "budget" ? (
+              <label className="mt-3 flex items-center gap-2 rounded-2xl border border-line px-4">
+                <input
+                  inputMode="numeric"
+                  value={budget}
+                  onChange={(event) => setBudget(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                  placeholder={priceMode === "hourly" ? "Kr per timme" : priceMode === "budget" ? "Högsta belopp" : "Belopp"}
+                  aria-label={priceMode === "hourly" ? "Timpris i kronor" : priceMode === "budget" ? "Budget i kronor" : "Fast pris i kronor"}
+                  className="h-12 min-w-0 flex-1 bg-transparent text-lg font-semibold outline-none"
+                />
+                <span className="text-sm font-semibold text-muted">{priceMode === "hourly" ? "kr/tim" : "kr"}</span>
+              </label>
+            ) : null}
+            {priceMode === "hourly" ? (
+              <label className="mt-3 flex items-center gap-2 rounded-2xl border border-line px-4">
+                <input
+                  inputMode="decimal"
+                  value={estHours}
+                  onChange={(event) => setEstHours(event.target.value.replace(/[^\d.,]/g, "").slice(0, 5))}
+                  placeholder="Uppskattade timmar, valfritt"
+                  aria-label="Uppskattade timmar"
+                  className="h-12 min-w-0 flex-1 bg-transparent text-lg font-semibold outline-none"
+                />
+                <span className="text-sm font-semibold text-muted">tim</span>
+              </label>
+            ) : null}
             <div className="mt-3">
               <TrustNote>Betalningen hålls tills jobbet är klart. Kvitto sparas i appen.</TrustNote>
             </div>
@@ -1042,10 +1147,11 @@ function JobSheet() {
         {step === 5 ? (
           <section className="space-y-2 rounded-[1.3rem] border border-line bg-paper p-4 text-sm shadow-soft">
             <ReviewRow label="Tjänst" value={serviceName} />
+            {needsDetail ? <ReviewRow label="Titel" value={jobTitle.trim()} /> : null}
             <ReviewRow label="Beskrivning" value={text.trim()} />
             <ReviewRow label="När" value={chosenWhen || "—"} />
             <ReviewRow label="Plats" value={pickedAddress?.label || "—"} />
-            <ReviewRow label="Budget" value={!quotes && budget ? `${budget} kr` : "Offerter, ingen budget"} />
+            <ReviewRow label="Pris" value={priceMode ? jobPriceDetail({ priceType: priceMode, price: priceMode === "quote" ? 0 : Number(budget) || 0, estHours: estHours ? Number(estHours.replace(",", ".")) : undefined }) : "Inte valt"} />
             <ReviewRow label="Bilder" value={files.length ? files.join(", ") : "Inga"} />
           </section>
         ) : null}
@@ -1140,7 +1246,6 @@ function JobCalendar({
                 past && "text-muted/35",
                 between && "bg-wheat text-ink",
                 selected && "bg-brown text-paper",
-                isToday && !selected && "ring-2 ring-brown",
               )}
             >
               <span className="leading-none">{day}</span>
@@ -1156,10 +1261,12 @@ function JobCalendar({
 function FilterSheet() {
   const closeSheet = useVelio((state) => state.closeSheet);
   const openService = useVelio((state) => state.openService);
+  const annat = services.find((service) => service.id === "annat");
+  const choices = [...popular, ...(annat ? [{ id: annat.id, label: annat.name }] : [])];
   return (
     <BottomSheet title="Filtrera" onClose={closeSheet}>
       <div className="grid grid-cols-2 gap-2">
-        {popular.map((item) => (
+        {choices.map((item) => (
           <Btn key={item.id} variant="secondary" onClick={() => openService(item.id)}>
             {item.label}
           </Btn>

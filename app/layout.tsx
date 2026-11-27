@@ -1,9 +1,21 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://velio.nu";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: "VELIO",
   description: "VELIO — boka elektriker, städning och andra tjänster nära dig.",
+  alternates: { canonical: "/" },
+  openGraph: {
+    title: "VELIO",
+    description: "VELIO — boka elektriker, städning och andra tjänster nära dig.",
+    url: "/",
+    siteName: "VELIO",
+    locale: "sv_SE",
+    type: "website",
+  },
   icons: { icon: "/favicon.svg" },
 };
 

@@ -1,0 +1,1889 @@
+{
+  "version": 1,
+  "locale": "sv-SE",
+  "currency": "SEK",
+  "taxReliefDisclaimer": "RUT är 50 % av arbetskostnaden och ROT är 30 % av arbetskostnaden (2026). Material, resor och administration ger i regel inte avdrag. Uppgifterna är en vägledning, inte ett bindande besked. Kontrollera alltid aktuella regler på Skatteverket.",
+  "priceDisclaimer": "Alla priser är uppskattningar i kronor inklusive moms och är inte offerter.",
+  "categories": [
+    {
+      "id": "stad",
+      "name": "Städning",
+      "desc": "Hemstäd, flyttstäd, fönsterputs och tvätt",
+      "intro": "Hemstäd och flyttstäd – boka en städare nära dig.",
+      "icon": "sparkles",
+      "popular": true,
+      "image": {
+        "file": "stad.webp",
+        "thumb": "stad-thumb.webp",
+        "width": 1200,
+        "height": 800,
+        "photographer": "kaboompics",
+        "sourceUrl": "https://www.pexels.com/photo/4239031/",
+        "license": "Pexels License (free commercial use)",
+        "licenseUrl": "https://www.pexels.com/license/",
+        "pexelsId": 4239031,
+        "alt": "Person dammar en spegel i ett varmt badrum"
+      },
+      "priceEstimate": {
+        "unit": "kr/tim",
+        "min": 440,
+        "max": 600,
+        "isEstimate": true,
+        "note": "Typiskt timpris för hemstädning före RUT.",
+        "sources": [],
+        "afterDeduction": {
+          "kind": "RUT",
+          "rate": 0.5,
+          "min": 220,
+          "max": 300
+        }
+      },
+      "taxRelief": {
+        "status": "rut",
+        "label": "RUT",
+        "note": "Städning i eller nära bostaden ger i regel RUT.",
+        "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+      },
+      "subcategories": [
+        {
+          "id": "hemstad",
+          "name": "Hemstädning",
+          "desc": "Regelbunden eller enstaka städning av hemmet",
+          "taxRelief": {
+            "status": "rut",
+            "label": "RUT",
+            "note": "Enklare städning i bostaden ger RUT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          },
+          "priceEstimate": {
+            "unit": "kr/tim",
+            "min": 440,
+            "max": 600,
+            "isEstimate": true,
+            "note": "",
+            "sources": [],
+            "afterDeduction": {
+              "kind": "RUT",
+              "rate": 0.5,
+              "min": 220,
+              "max": 300
+            }
+          },
+          "image": {
+            "file": "stad-hemstad.webp",
+            "thumb": "stad-hemstad-thumb.webp",
+            "width": 1200,
+            "height": 800,
+            "photographer": "cottonbro studio",
+            "sourceUrl": "https://www.pexels.com/photo/4107284/",
+            "license": "Pexels License (free commercial use)",
+            "licenseUrl": "https://www.pexels.com/license/",
+            "pexelsId": 4107284,
+            "alt": "Dammsugare på en matta i ett solbelyst rum"
+          }
+        },
+        {
+          "id": "storstad",
+          "name": "Storstädning",
+          "desc": "Grundlig städning av hela hemmet",
+          "taxRelief": {
+            "status": "rut",
+            "label": "RUT",
+            "note": "Storstädning i bostaden ger i regel RUT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          },
+          "priceEstimate": {
+            "unit": "kr/tim",
+            "min": 500,
+            "max": 700,
+            "isEstimate": true,
+            "note": "",
+            "sources": [],
+            "afterDeduction": {
+              "kind": "RUT",
+              "rate": 0.5,
+              "min": 250,
+              "max": 350
+            }
+          }
+        },
+        {
+          "id": "flyttstad",
+          "name": "Flyttstädning",
+          "desc": "Städning vid in- eller utflytt",
+          "taxRelief": {
+            "status": "rut",
+            "label": "RUT",
+            "note": "Städning vid flytt ger RUT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          },
+          "priceEstimate": {
+            "unit": "kr/tillfälle",
+            "min": 2500,
+            "max": 8000,
+            "isEstimate": true,
+            "note": "Beror på storlek.",
+            "sources": [],
+            "afterDeduction": {
+              "kind": "RUT",
+              "rate": 0.5,
+              "min": 1250,
+              "max": 4000
+            }
+          },
+          "image": {
+            "file": "stad-flyttstad.webp",
+            "thumb": "stad-flyttstad-thumb.webp",
+            "width": 1200,
+            "height": 800,
+            "photographer": "Curtis Adams",
+            "sourceUrl": "https://www.pexels.com/photo/7027999/",
+            "license": "Pexels License (free commercial use)",
+            "licenseUrl": "https://www.pexels.com/license/",
+            "pexelsId": 7027999,
+            "alt": "Tom ljus lägenhet redo för flyttstäd"
+          }
+        },
+        {
+          "id": "fonsterputs",
+          "name": "Fönsterputs",
+          "desc": "Puts av fönster inne och ute",
+          "taxRelief": {
+            "status": "rut",
+            "label": "RUT",
+            "note": "Fönsterputs i eller nära bostaden ger RUT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          },
+          "priceEstimate": {
+            "unit": "kr/tillfälle",
+            "min": 800,
+            "max": 2500,
+            "isEstimate": true,
+            "note": "",
+            "sources": [],
+            "afterDeduction": {
+              "kind": "RUT",
+              "rate": 0.5,
+              "min": 400,
+              "max": 1250
+            }
+          },
+          "image": {
+            "file": "stad-fonsterputs.webp",
+            "thumb": "stad-fonsterputs-thumb.webp",
+            "width": 1200,
+            "height": 800,
+            "photographer": "kaboompics",
+            "sourceUrl": "https://www.pexels.com/photo/4239091/",
+            "license": "Pexels License (free commercial use)",
+            "licenseUrl": "https://www.pexels.com/license/",
+            "pexelsId": 4239091,
+            "alt": "Hand som drar en skrapa över glas"
+          }
+        },
+        {
+          "id": "tvatt-stryk",
+          "name": "Tvätt och strykning",
+          "desc": "Tvätt, tork, vikning och strykning",
+          "taxRelief": {
+            "status": "rut",
+            "label": "RUT",
+            "note": "Tvätt i anslutning till bostaden kan ge RUT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          },
+          "priceEstimate": {
+            "unit": "kr/tim",
+            "min": 350,
+            "max": 550,
+            "isEstimate": true,
+            "note": "",
+            "sources": [],
+            "afterDeduction": {
+              "kind": "RUT",
+              "rate": 0.5,
+              "min": 175,
+              "max": 275
+            }
+          },
+          "image": {
+            "file": "stad-tvatt.webp",
+            "thumb": "stad-tvatt-thumb.webp",
+            "width": 1200,
+            "height": 800,
+            "photographer": "Tima Miroshnichenko",
+            "sourceUrl": "https://www.pexels.com/photo/4794900/",
+            "license": "Pexels License (free commercial use)",
+            "licenseUrl": "https://www.pexels.com/license/",
+            "pexelsId": 4794900,
+            "alt": "Vikta handdukar på en bricka"
+          }
+        },
+        {
+          "id": "visningsstad",
+          "name": "Visningsstädning",
+          "desc": "Städning inför visning",
+          "taxRelief": {
+            "status": "rut",
+            "label": "RUT",
+            "note": "Städning i bostaden ger i regel RUT. Styling ger inte RUT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        },
+        {
+          "id": "ugn-kok",
+          "name": "Ugns- och köksrengöring",
+          "desc": "Djuprengöring av ugn, fläkt och spis",
+          "taxRelief": {
+            "status": "rut",
+            "label": "RUT",
+            "note": "Avtorkning av spis och fläkt i samband med städ ger RUT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        },
+        {
+          "id": "badrum",
+          "name": "Badrumsrengöring",
+          "desc": "Grundlig rengöring av badrum",
+          "taxRelief": {
+            "status": "rut",
+            "label": "RUT",
+            "note": "Städning av badrum ger RUT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        },
+        {
+          "id": "kontorsstad",
+          "name": "Kontorsstädning",
+          "desc": "Städning av kontor",
+          "taxRelief": {
+            "status": "none",
+            "label": "Ej avdrag",
+            "note": "RUT gäller hushållsarbete i en bostad, inte företagslokaler.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        }
+      ]
+    },
+    {
+      "id": "trad",
+      "name": "Trädgård & utemiljö",
+      "desc": "Gräsklippning, häck, skötsel och snöskottning",
+      "intro": "Häck, gräs, skötsel och snöröjning – boka trädgårdshjälp nära dig.",
+      "icon": "leaf",
+      "popular": true,
+      "image": {
+        "file": "trad.webp",
+        "thumb": "trad-thumb.webp",
+        "width": 1200,
+        "height": 800,
+        "photographer": "cottonbro studio",
+        "sourceUrl": "https://www.pexels.com/photo/4503269/",
+        "license": "Pexels License (free commercial use)",
+        "licenseUrl": "https://www.pexels.com/license/",
+        "pexelsId": 4503269,
+        "alt": "Trädgårdsredskap och krukor"
+      },
+      "priceEstimate": {
+        "unit": "kr/tim",
+        "min": 350,
+        "max": 550,
+        "isEstimate": true,
+        "note": "Skötsel före RUT.",
+        "sources": [],
+        "afterDeduction": {
+          "kind": "RUT",
+          "rate": 0.5,
+          "min": 175,
+          "max": 275
+        }
+      },
+      "taxRelief": {
+        "status": "rut",
+        "label": "RUT (skötsel)",
+        "note": "Klippning, räfsning och beskärning kan ge RUT. Plantering och anläggning ger inte RUT.",
+        "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+      },
+      "subcategories": [
+        {
+          "id": "grasklippning",
+          "name": "Gräsklippning",
+          "desc": "Klippa och sköta gräsmattan",
+          "taxRelief": {
+            "status": "rut",
+            "label": "RUT",
+            "note": "Att klippa gräs på tomten ger RUT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          },
+          "priceEstimate": {
+            "unit": "kr/gång",
+            "min": 300,
+            "max": 700,
+            "isEstimate": true,
+            "note": "",
+            "sources": [],
+            "afterDeduction": {
+              "kind": "RUT",
+              "rate": 0.5,
+              "min": 150,
+              "max": 350
+            }
+          },
+          "image": {
+            "file": "trad-grasklippning.webp",
+            "thumb": "trad-grasklippning-thumb.webp",
+            "width": 1200,
+            "height": 800,
+            "photographer": "Alan Miller",
+            "sourceUrl": "https://www.pexels.com/photo/8174996/",
+            "license": "Pexels License (free commercial use)",
+            "licenseUrl": "https://www.pexels.com/license/",
+            "pexelsId": 8174996,
+            "alt": "Person som klipper en gräsmatta"
+          }
+        },
+        {
+          "id": "hack",
+          "name": "Häckklippning",
+          "desc": "Klippa och forma häckar",
+          "taxRelief": {
+            "status": "rut",
+            "label": "RUT",
+            "note": "Att klippa häck ger RUT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        },
+        {
+          "id": "lov",
+          "name": "Lövräfsning",
+          "desc": "Kratta löv på tomten",
+          "taxRelief": {
+            "status": "rut",
+            "label": "RUT",
+            "note": "Att kratta löv ger RUT. Bortforsling ger inte RUT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        },
+        {
+          "id": "snoskottning",
+          "name": "Snöskottning",
+          "desc": "Skotta uppfart, gång och tak",
+          "taxRelief": {
+            "status": "rut",
+            "label": "RUT",
+            "note": "Snöskottning nära bostaden ger RUT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          },
+          "priceEstimate": {
+            "unit": "kr/gång",
+            "min": 300,
+            "max": 800,
+            "isEstimate": true,
+            "note": "",
+            "sources": [],
+            "afterDeduction": {
+              "kind": "RUT",
+              "rate": 0.5,
+              "min": 150,
+              "max": 400
+            }
+          },
+          "image": {
+            "file": "trad-snoskottning.webp",
+            "thumb": "trad-snoskottning-thumb.webp",
+            "width": 1200,
+            "height": 800,
+            "photographer": "kaboompics",
+            "sourceUrl": "https://www.pexels.com/photo/6952455/",
+            "license": "Pexels License (free commercial use)",
+            "licenseUrl": "https://www.pexels.com/license/",
+            "pexelsId": 6952455,
+            "alt": "Snöskyffel som skottar en gång"
+          }
+        },
+        {
+          "id": "tradgardsskotel",
+          "name": "Allmän trädgårdsskötsel",
+          "desc": "Ogräs, rabatter och vattning",
+          "taxRelief": {
+            "status": "rut",
+            "label": "RUT",
+            "note": "Ogräs, vattning och gödning ger RUT. Ny plantering ger inte RUT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        },
+        {
+          "id": "beskarning",
+          "name": "Beskärning och trädfällning",
+          "desc": "Beskära och fälla träd på tomten",
+          "taxRelief": {
+            "status": "rut",
+            "label": "RUT",
+            "note": "Beskärning och fällning på tomten kan ge RUT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        },
+        {
+          "id": "plantering",
+          "name": "Plantering",
+          "desc": "Plantera blommor, buskar och träd",
+          "taxRelief": {
+            "status": "none",
+            "label": "Ej avdrag",
+            "note": "Skatteverket ger inte RUT för plantering.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        },
+        {
+          "id": "anlaggning",
+          "name": "Stenläggning och anläggning",
+          "desc": "Plattor, gångar, staket och murar",
+          "taxRelief": {
+            "status": "rot",
+            "label": "ROT",
+            "note": "Anläggning ger inte RUT. Delar kan vara ROT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrotavdrag.4.5c1163881590be297b5173bf.html"
+          }
+        }
+      ]
+    },
+    {
+      "id": "flytt",
+      "name": "Flytt & transport",
+      "desc": "Flytthjälp, packning, bärhjälp och bohagstransport",
+      "intro": "Flytta, packa och bära – boka flytthjälp nära dig.",
+      "icon": "truck",
+      "popular": true,
+      "image": {
+        "file": "flytt.webp",
+        "thumb": "flytt-thumb.webp",
+        "width": 1200,
+        "height": 800,
+        "photographer": "Dorota Semla",
+        "sourceUrl": "https://www.pexels.com/photo/15086618/",
+        "license": "Pexels License (free commercial use)",
+        "licenseUrl": "https://www.pexels.com/license/",
+        "pexelsId": 15086618,
+        "alt": "Staplade flyttkartonger i varmt ljus"
+      },
+      "priceEstimate": {
+        "unit": "kr/tim",
+        "min": 495,
+        "max": 795,
+        "isEstimate": true,
+        "note": "Arbetskostnad före RUT. Bil och material ger inte avdrag.",
+        "sources": [],
+        "afterDeduction": {
+          "kind": "RUT",
+          "rate": 0.5,
+          "min": 248,
+          "max": 398
+        }
+      },
+      "taxRelief": {
+        "status": "rut",
+        "label": "RUT (arbete)",
+        "note": "RUT ges för att flytta och packa bohag. Inte för bil, drivmedel eller kartonger.",
+        "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+      },
+      "subcategories": [
+        {
+          "id": "flytthjalp",
+          "name": "Flytthjälp",
+          "desc": "Flytta bohag mellan bostäder",
+          "taxRelief": {
+            "status": "rut",
+            "label": "RUT",
+            "note": "Arbetet ger RUT, inte bil och material.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          },
+          "priceEstimate": {
+            "unit": "kr/tim",
+            "min": 495,
+            "max": 795,
+            "isEstimate": true,
+            "note": "",
+            "sources": [],
+            "afterDeduction": {
+              "kind": "RUT",
+              "rate": 0.5,
+              "min": 248,
+              "max": 398
+            }
+          },
+          "image": {
+            "file": "flytt-flytthjalp.webp",
+            "thumb": "flytt-flytthjalp-thumb.webp",
+            "width": 1200,
+            "height": 800,
+            "photographer": "Ketut Subiyanto",
+            "sourceUrl": "https://www.pexels.com/photo/4246109/",
+            "license": "Pexels License (free commercial use)",
+            "licenseUrl": "https://www.pexels.com/license/",
+            "pexelsId": 4246109,
+            "alt": "Händer som tejpar en flyttkartong"
+          }
+        },
+        {
+          "id": "packning",
+          "name": "Packning och uppackning",
+          "desc": "Packa ned och upp bohaget",
+          "taxRelief": {
+            "status": "rut",
+            "label": "RUT",
+            "note": "Packning vid flytt ger RUT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        },
+        {
+          "id": "barhjalp",
+          "name": "Bärhjälp och tunga lyft",
+          "desc": "Bära möbler och tunga saker",
+          "taxRelief": {
+            "status": "rut",
+            "label": "RUT",
+            "note": "Bärhjälp av kundens bohag kan ge RUT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        },
+        {
+          "id": "magasin",
+          "name": "Flytt till magasin",
+          "desc": "Flytta bohag till eller från förråd",
+          "taxRelief": {
+            "status": "rut",
+            "label": "RUT",
+            "note": "Arbetet kan ge RUT. Hyra ger inte avdrag.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        },
+        {
+          "id": "ateranvandning",
+          "name": "Transport till återanvändning",
+          "desc": "Köra bohag till second hand",
+          "taxRelief": {
+            "status": "partial",
+            "label": "RUT med schablon",
+            "note": "Schablon: 50 % av totalkostnaden räknas som arbete.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        },
+        {
+          "id": "atervinning",
+          "name": "Bortforsling till återvinning",
+          "desc": "Köra skräp till återvinning",
+          "taxRelief": {
+            "status": "none",
+            "label": "Ej avdrag",
+            "note": "Inte RUT till återvinning eller soptipp.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        },
+        {
+          "id": "butikshamtning",
+          "name": "Hämtning från butik",
+          "desc": "Hämta möbler från butik",
+          "taxRelief": {
+            "status": "none",
+            "label": "Ej avdrag",
+            "note": "RUT ges inte för hämtning från möbelbutik.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        }
+      ]
+    },
+    {
+      "id": "mon",
+      "name": "Montering & småfix",
+      "desc": "Möbelmontering, hänga TV och tavlor, säsongsmöbler",
+      "intro": "Montera möbler och hänga upp saker – boka hjälp nära dig.",
+      "icon": "drill",
+      "popular": true,
+      "image": {
+        "file": "mon.webp",
+        "thumb": "mon-thumb.webp",
+        "width": 1200,
+        "height": 800,
+        "photographer": "Yan Krukau",
+        "sourceUrl": "https://www.pexels.com/photo/5217124/",
+        "license": "Pexels License (free commercial use)",
+        "licenseUrl": "https://www.pexels.com/license/",
+        "pexelsId": 5217124,
+        "alt": "Händer som sätter ihop en trämöbel"
+      },
+      "priceEstimate": {
+        "unit": "kr/tim",
+        "min": 400,
+        "max": 700,
+        "isEstimate": true,
+        "note": "Före RUT.",
+        "sources": [],
+        "afterDeduction": {
+          "kind": "RUT",
+          "rate": 0.5,
+          "min": 200,
+          "max": 350
+        }
+      },
+      "taxRelief": {
+        "status": "rut",
+        "label": "RUT (möblering)",
+        "note": "Montering av möbler och lösöre ger RUT. Fast inredning kan vara ROT.",
+        "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+      },
+      "subcategories": [
+        {
+          "id": "mobelmontering",
+          "name": "Möbelmontering",
+          "desc": "Montera och demontera möbler",
+          "taxRelief": {
+            "status": "rut",
+            "label": "RUT",
+            "note": "Montering av möbler i bostaden ger RUT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          },
+          "priceEstimate": {
+            "unit": "kr/tim",
+            "min": 400,
+            "max": 700,
+            "isEstimate": true,
+            "note": "",
+            "sources": [],
+            "afterDeduction": {
+              "kind": "RUT",
+              "rate": 0.5,
+              "min": 200,
+              "max": 350
+            }
+          },
+          "image": {
+            "file": "mon-mobelmontering.webp",
+            "thumb": "mon-mobelmontering-thumb.webp",
+            "width": 1200,
+            "height": 800,
+            "photographer": "Athena Sandrini",
+            "sourceUrl": "https://www.pexels.com/photo/5805491/",
+            "license": "Pexels License (free commercial use)",
+            "licenseUrl": "https://www.pexels.com/license/",
+            "pexelsId": 5805491,
+            "alt": "Monteringsanvisning och verktyg"
+          }
+        },
+        {
+          "id": "hanga-tv",
+          "name": "Montera TV på vägg",
+          "desc": "Fästa TV-stativ och skärm",
+          "taxRelief": {
+            "status": "mixed",
+            "label": "RUT eller ROT",
+            "note": "Enklare upphängning kan vara RUT. El i väggen kan vara ROT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        },
+        {
+          "id": "tavlor",
+          "name": "Hänga tavlor, speglar och hyllor",
+          "desc": "Borra och sätta upp tavlor och krokar",
+          "taxRelief": {
+            "status": "rut",
+            "label": "RUT",
+            "note": "Upphängning av lös inredning ger i regel RUT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        },
+        {
+          "id": "gardiner",
+          "name": "Montera gardiner",
+          "desc": "Gardiner, rullgardiner och stänger",
+          "taxRelief": {
+            "status": "rut",
+            "label": "RUT",
+            "note": "Gardiner ger RUT. Motoriserade med el kan vara ROT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        },
+        {
+          "id": "sasong",
+          "name": "Säsongsmöbler",
+          "desc": "Plocka fram eller undan utemöbler",
+          "taxRelief": {
+            "status": "rut",
+            "label": "RUT",
+            "note": "Säsongsmöbler ger RUT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        },
+        {
+          "id": "barnsakring",
+          "name": "Barnsäkra hemmet",
+          "desc": "Spärrar och grindar som inte är fasta",
+          "taxRelief": {
+            "status": "mixed",
+            "label": "Ofta RUT",
+            "note": "Lös montering kan vara RUT. Fast installation kan vara ROT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        }
+      ]
+    },
+    {
+      "id": "rep",
+      "name": "Reparationer",
+      "desc": "Vitvaror, småfix och det som gått sönder",
+      "intro": "Det som gått sönder hemma – boka en reparatör nära dig.",
+      "icon": "wrench",
+      "popular": true,
+      "image": {
+        "file": "rep.webp",
+        "thumb": "rep-thumb.webp",
+        "width": 1200,
+        "height": 800,
+        "photographer": "Pixabay",
+        "sourceUrl": "https://www.pexels.com/photo/209235/",
+        "license": "Pexels License (free commercial use)",
+        "licenseUrl": "https://www.pexels.com/license/",
+        "pexelsId": 209235,
+        "alt": "Hammare och spik på en träskiva"
+      },
+      "priceEstimate": {
+        "unit": "kr/tim",
+        "min": 450,
+        "max": 750,
+        "isEstimate": true,
+        "note": "Avdragstyp beror på jobbet.",
+        "sources": []
+      },
+      "taxRelief": {
+        "status": "mixed",
+        "label": "RUT eller ROT",
+        "note": "Vitvaror i bostaden är RUT. Fast inredning är typiskt ROT.",
+        "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+      },
+      "subcategories": [
+        {
+          "id": "vitvaror",
+          "name": "Reparation av vitvaror",
+          "desc": "Laga tvättmaskin, diskmaskin, kyl, frys, spis och ugn",
+          "taxRelief": {
+            "status": "rut",
+            "label": "RUT",
+            "note": "Reparation av listade vitvaror ger RUT. Inte småapparater.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          },
+          "priceEstimate": {
+            "unit": "kr/tim",
+            "min": 500,
+            "max": 900,
+            "isEstimate": true,
+            "note": "Plus reservdelar.",
+            "sources": [],
+            "afterDeduction": {
+              "kind": "RUT",
+              "rate": 0.5,
+              "min": 250,
+              "max": 450
+            }
+          }
+        },
+        {
+          "id": "smafix",
+          "name": "Allmänt småfix",
+          "desc": "Mindre reparationer i hemmet",
+          "taxRelief": {
+            "status": "mixed",
+            "label": "Beror på jobbet",
+            "note": "Lösöre kan vara RUT. Fast byggnadsdel är typiskt ROT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        },
+        {
+          "id": "dor-fonster",
+          "name": "Dörrar och fönster",
+          "desc": "Justera, laga eller byta dörrar och fönster",
+          "taxRelief": {
+            "status": "rot",
+            "label": "ROT",
+            "note": "Reparation av dörrar och fönster är typiskt ROT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrotavdrag.4.5c1163881590be297b5173bf.html"
+          }
+        },
+        {
+          "id": "installation-vitvara",
+          "name": "Installation av vitvaror",
+          "desc": "Installera en ny vitvara",
+          "taxRelief": {
+            "status": "rot",
+            "label": "ROT",
+            "note": "Installation ger inte RUT. Kan vara ROT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrotavdrag.4.5c1163881590be297b5173bf.html"
+          }
+        },
+        {
+          "id": "cykel",
+          "name": "Cykelservice",
+          "desc": "Laga och serva cykel",
+          "taxRelief": {
+            "status": "none",
+            "label": "Ej avdrag",
+            "note": "Cykelreparation är varken RUT eller ROT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        }
+      ]
+    },
+    {
+      "id": "el",
+      "name": "El & installation",
+      "desc": "Elektriker, felsökning, belysning och uttag",
+      "intro": "Installation, felsökning och belysning – boka en elektriker nära dig.",
+      "icon": "zap",
+      "popular": true,
+      "image": {
+        "file": "el.webp",
+        "thumb": "el-thumb.webp",
+        "width": 1200,
+        "height": 800,
+        "photographer": "Brett Sayles",
+        "sourceUrl": "https://www.pexels.com/photo/1073054/",
+        "license": "Pexels License (free commercial use)",
+        "licenseUrl": "https://www.pexels.com/license/",
+        "pexelsId": 1073054,
+        "alt": "Glödlampa med varm glödtråd"
+      },
+      "priceEstimate": {
+        "unit": "kr/tim",
+        "min": 700,
+        "max": 1100,
+        "isEstimate": true,
+        "note": "Före ROT. Framkörning och material tillkommer.",
+        "sources": [],
+        "afterDeduction": {
+          "kind": "ROT",
+          "rate": 0.3,
+          "min": 490,
+          "max": 770
+        }
+      },
+      "taxRelief": {
+        "status": "rot",
+        "label": "ROT",
+        "note": "Elarbete i bostaden är typiskt ROT. Larm och kameror ger inte RUT.",
+        "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrotavdrag.4.5c1163881590be297b5173bf.html"
+      },
+      "subcategories": [
+        {
+          "id": "felsokning",
+          "name": "Felsökning",
+          "desc": "Hitta fel på elen",
+          "taxRelief": {
+            "status": "mixed",
+            "label": "ROT vid åtgärd",
+            "note": "Enbart felsökning ger inte alltid ROT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        },
+        {
+          "id": "installation",
+          "name": "Elinstallation och uttag",
+          "desc": "Nya uttag, strömbrytare och kabel",
+          "taxRelief": {
+            "status": "rot",
+            "label": "ROT",
+            "note": "Installation i befintlig bostad är typiskt ROT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrotavdrag.4.5c1163881590be297b5173bf.html"
+          }
+        },
+        {
+          "id": "belysning",
+          "name": "Belysning och armaturer",
+          "desc": "Byta och installera lampor",
+          "taxRelief": {
+            "status": "rot",
+            "label": "ROT",
+            "note": "Elinstallation av belysning är typiskt ROT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrotavdrag.4.5c1163881590be297b5173bf.html"
+          }
+        },
+        {
+          "id": "elcentral",
+          "name": "Elcentral",
+          "desc": "Byta eller komplettera elcentral",
+          "taxRelief": {
+            "status": "rot",
+            "label": "ROT",
+            "note": "Elcentral kan ge ROT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrotavdrag.4.5c1163881590be297b5173bf.html"
+          }
+        },
+        {
+          "id": "laddbox",
+          "name": "Laddbox för elbil",
+          "desc": "Installera laddbox vid bostaden",
+          "taxRelief": {
+            "status": "rot",
+            "label": "ROT",
+            "note": "Kan ge ROT för den egna bostaden.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrotavdrag.4.5c1163881590be297b5173bf.html"
+          }
+        },
+        {
+          "id": "smarthome",
+          "name": "Smart hem",
+          "desc": "Smart belysning, inte larm",
+          "taxRelief": {
+            "status": "mixed",
+            "label": "Beror på jobbet",
+            "note": "El kan vara ROT. Larm och kameror ger inte RUT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        }
+      ]
+    },
+    {
+      "id": "vvs",
+      "name": "VVS & värme",
+      "desc": "Rörmokare, kranar, avlopp och värme",
+      "intro": "Läckor, kranar och värme – boka en rörmokare nära dig.",
+      "icon": "droplets",
+      "popular": true,
+      "image": {
+        "file": "vvs.webp",
+        "thumb": "vvs-thumb.webp",
+        "width": 1200,
+        "height": 800,
+        "photographer": "Anıl Karakaya",
+        "sourceUrl": "https://www.pexels.com/photo/6419128/",
+        "license": "Pexels License (free commercial use)",
+        "licenseUrl": "https://www.pexels.com/license/",
+        "pexelsId": 6419128,
+        "alt": "Händer som drar rör under en diskbänk"
+      },
+      "priceEstimate": {
+        "unit": "kr/tim",
+        "min": 700,
+        "max": 1100,
+        "isEstimate": true,
+        "note": "Ordinarie timpris före ROT.",
+        "sources": [],
+        "afterDeduction": {
+          "kind": "ROT",
+          "rate": 0.3,
+          "min": 490,
+          "max": 770
+        }
+      },
+      "taxRelief": {
+        "status": "rot",
+        "label": "ROT",
+        "note": "VVS och värme i bostaden är typiskt ROT.",
+        "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrotavdrag.4.5c1163881590be297b5173bf.html"
+      },
+      "subcategories": [
+        {
+          "id": "rormokare",
+          "name": "Rörmokare och läckor",
+          "desc": "Fixa läckor och rör",
+          "taxRelief": {
+            "status": "rot",
+            "label": "ROT",
+            "note": "Reparation av rör är typiskt ROT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrotavdrag.4.5c1163881590be297b5173bf.html"
+          },
+          "priceEstimate": {
+            "unit": "kr/tim",
+            "min": 700,
+            "max": 1100,
+            "isEstimate": true,
+            "note": "",
+            "sources": [],
+            "afterDeduction": {
+              "kind": "ROT",
+              "rate": 0.3,
+              "min": 490,
+              "max": 770
+            }
+          }
+        },
+        {
+          "id": "blandare",
+          "name": "Byta blandare och kranar",
+          "desc": "Byta köks- och badrumskranar",
+          "taxRelief": {
+            "status": "rot",
+            "label": "ROT",
+            "note": "Byte av blandare är typiskt ROT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrotavdrag.4.5c1163881590be297b5173bf.html"
+          }
+        },
+        {
+          "id": "avlopp",
+          "name": "Toalett och avlopp",
+          "desc": "Toalett och stopp i avlopp",
+          "taxRelief": {
+            "status": "rot",
+            "label": "ROT",
+            "note": "VVS i bostaden är typiskt ROT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrotavdrag.4.5c1163881590be297b5173bf.html"
+          }
+        },
+        {
+          "id": "varmvatten",
+          "name": "Varmvattenberedare",
+          "desc": "Byta eller serva beredare",
+          "taxRelief": {
+            "status": "rot",
+            "label": "ROT",
+            "note": "Kan ge ROT, inte RUT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrotavdrag.4.5c1163881590be297b5173bf.html"
+          }
+        },
+        {
+          "id": "varme",
+          "name": "Värme och värmepump",
+          "desc": "Element och värmepump",
+          "taxRelief": {
+            "status": "rot",
+            "label": "ROT",
+            "note": "Värmearbete kan vara ROT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrotavdrag.4.5c1163881590be297b5173bf.html"
+          }
+        },
+        {
+          "id": "badrums-vvs",
+          "name": "Badrums-VVS",
+          "desc": "Rörarbete vid badrum",
+          "taxRelief": {
+            "status": "rot",
+            "label": "ROT",
+            "note": "VVS vid badrum är typiskt ROT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrotavdrag.4.5c1163881590be297b5173bf.html"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ren",
+      "name": "Renovering & bygg",
+      "desc": "Målning, tapetsering, golv, kök och badrum",
+      "intro": "Målning och mindre renovering – boka ett proffs nära dig.",
+      "icon": "hammer",
+      "popular": true,
+      "image": {
+        "file": "ren.webp",
+        "thumb": "ren-thumb.webp",
+        "width": 1200,
+        "height": 800,
+        "photographer": "Polina Tankilevitch",
+        "sourceUrl": "https://www.pexels.com/photo/5583052/",
+        "license": "Pexels License (free commercial use)",
+        "licenseUrl": "https://www.pexels.com/license/",
+        "pexelsId": 5583052,
+        "alt": "Två färgrullar på en träyta"
+      },
+      "priceEstimate": {
+        "unit": "kr/tim",
+        "min": 500,
+        "max": 850,
+        "isEstimate": true,
+        "note": "Före ROT.",
+        "sources": [],
+        "afterDeduction": {
+          "kind": "ROT",
+          "rate": 0.3,
+          "min": 350,
+          "max": 595
+        }
+      },
+      "taxRelief": {
+        "status": "rot",
+        "label": "ROT",
+        "note": "Målning, golv, kök och badrum är typiskt ROT. Nybyggnad ger aldrig ROT.",
+        "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrotavdrag.4.5c1163881590be297b5173bf.html"
+      },
+      "subcategories": [
+        {
+          "id": "malning",
+          "name": "Målning",
+          "desc": "Måla väggar, tak och snickerier",
+          "taxRelief": {
+            "status": "rot",
+            "label": "ROT",
+            "note": "Målning av bostaden är typiskt ROT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrotavdrag.4.5c1163881590be297b5173bf.html"
+          },
+          "priceEstimate": {
+            "unit": "kr/tim",
+            "min": 500,
+            "max": 750,
+            "isEstimate": true,
+            "note": "",
+            "sources": [],
+            "afterDeduction": {
+              "kind": "ROT",
+              "rate": 0.3,
+              "min": 350,
+              "max": 525
+            }
+          },
+          "image": {
+            "file": "ren-malning.webp",
+            "thumb": "ren-malning-thumb.webp",
+            "width": 1200,
+            "height": 800,
+            "photographer": "Malte Luk",
+            "sourceUrl": "https://www.pexels.com/photo/1669754/",
+            "license": "Pexels License (free commercial use)",
+            "licenseUrl": "https://www.pexels.com/license/",
+            "pexelsId": 1669754,
+            "alt": "Hand som målar en vägg"
+          }
+        },
+        {
+          "id": "tapetsering",
+          "name": "Tapetsering",
+          "desc": "Sätta upp eller ta ner tapeter",
+          "taxRelief": {
+            "status": "rot",
+            "label": "ROT",
+            "note": "Tapetsering är typiskt ROT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrotavdrag.4.5c1163881590be297b5173bf.html"
+          }
+        },
+        {
+          "id": "golv",
+          "name": "Golvläggning",
+          "desc": "Lägga, byta eller laga golv",
+          "taxRelief": {
+            "status": "rot",
+            "label": "ROT",
+            "note": "Golvarbete är typiskt ROT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrotavdrag.4.5c1163881590be297b5173bf.html"
+          }
+        },
+        {
+          "id": "kakel",
+          "name": "Plattsättning",
+          "desc": "Kakel och klinker",
+          "taxRelief": {
+            "status": "rot",
+            "label": "ROT",
+            "note": "Plattsättning är typiskt ROT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrotavdrag.4.5c1163881590be297b5173bf.html"
+          },
+          "priceEstimate": {
+            "unit": "kr/tim",
+            "min": 650,
+            "max": 900,
+            "isEstimate": true,
+            "note": "",
+            "sources": [],
+            "afterDeduction": {
+              "kind": "ROT",
+              "rate": 0.3,
+              "min": 455,
+              "max": 630
+            }
+          }
+        },
+        {
+          "id": "kok",
+          "name": "Köksrenovering",
+          "desc": "Renovera kök och fast inredning",
+          "taxRelief": {
+            "status": "rot",
+            "label": "ROT",
+            "note": "Fast köksinredning är ROT, inte RUT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrotavdrag.4.5c1163881590be297b5173bf.html"
+          }
+        },
+        {
+          "id": "badrum",
+          "name": "Badrumsrenovering",
+          "desc": "Renovera badrum",
+          "taxRelief": {
+            "status": "rot",
+            "label": "ROT",
+            "note": "Badrumsrenovering är typiskt ROT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrotavdrag.4.5c1163881590be297b5173bf.html"
+          }
+        },
+        {
+          "id": "snickeri",
+          "name": "Snickeri",
+          "desc": "Lister och mindre byggjobb",
+          "taxRelief": {
+            "status": "rot",
+            "label": "ROT",
+            "note": "Snickeri i bostaden är typiskt ROT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrotavdrag.4.5c1163881590be297b5173bf.html"
+          }
+        }
+      ]
+    },
+    {
+      "id": "sak",
+      "name": "Säkerhet",
+      "desc": "Lås, larm och trygghet i hemmet",
+      "intro": "Larm, lås och trygghet – boka hjälp nära dig.",
+      "icon": "shield",
+      "popular": true,
+      "image": {
+        "file": "sak.webp",
+        "thumb": "sak-thumb.webp",
+        "width": 1200,
+        "height": 800,
+        "photographer": "AS Photography",
+        "sourceUrl": "https://www.pexels.com/photo/101808/",
+        "license": "Pexels License (free commercial use)",
+        "licenseUrl": "https://www.pexels.com/license/",
+        "pexelsId": 101808,
+        "alt": "Nyckel i ett dörrlås"
+      },
+      "priceEstimate": {
+        "unit": "kr/tillfälle",
+        "min": 800,
+        "max": 8000,
+        "isEstimate": true,
+        "note": "Låsbyte till larmsystem. Abonnemang ger inte avdrag.",
+        "sources": []
+      },
+      "taxRelief": {
+        "status": "mixed",
+        "label": "Viss ROT, inte RUT",
+        "note": "Bevakning, kameror och larmabonnemang ger inte RUT. Lås på bostaden kan vara ROT.",
+        "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+      },
+      "subcategories": [
+        {
+          "id": "las",
+          "name": "Lås och nycklar",
+          "desc": "Byta lås och montera säkerhetslås",
+          "taxRelief": {
+            "status": "rot",
+            "label": "ROT",
+            "note": "Lås på bostaden kan vara ROT, inte RUT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrotavdrag.4.5c1163881590be297b5173bf.html"
+          },
+          "priceEstimate": {
+            "unit": "kr/tillfälle",
+            "min": 800,
+            "max": 2500,
+            "isEstimate": true,
+            "note": "",
+            "sources": []
+          },
+          "image": {
+            "file": "sak-las.webp",
+            "thumb": "sak-las-thumb.webp",
+            "width": 1200,
+            "height": 800,
+            "photographer": "Pixabay",
+            "sourceUrl": "https://www.pexels.com/photo/279810/",
+            "license": "Pexels License (free commercial use)",
+            "licenseUrl": "https://www.pexels.com/license/",
+            "pexelsId": 279810,
+            "alt": "Dörrhandtag och lås med nyckel"
+          }
+        },
+        {
+          "id": "larm",
+          "name": "Larm",
+          "desc": "Installera eller serva inbrottslarm",
+          "taxRelief": {
+            "status": "none",
+            "label": "Ej avdrag",
+            "note": "Installation av larm ger inte RUT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        },
+        {
+          "id": "kamera",
+          "name": "Övervakningskameror",
+          "desc": "Sätta upp kameror",
+          "taxRelief": {
+            "status": "none",
+            "label": "Ej avdrag",
+            "note": "Kameraövervakning ger inte RUT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        },
+        {
+          "id": "bevakning",
+          "name": "Bevakning och personskydd",
+          "desc": "Vakt och patrullering",
+          "taxRelief": {
+            "status": "none",
+            "label": "Ej avdrag",
+            "note": "Vakttjänster ger inte RUT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        },
+        {
+          "id": "brand",
+          "name": "Brandskydd",
+          "desc": "Brandvarnare och brandsläckare",
+          "taxRelief": {
+            "status": "mixed",
+            "label": "Beror på jobbet",
+            "note": "Lös utrustning är i regel inte RUT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        }
+      ]
+    },
+    {
+      "id": "oms",
+      "name": "Barn, omsorg & djur",
+      "desc": "Barnvakt, omsorg, läxhjälp och djurpassning",
+      "intro": "Barnvakt, omsorg och djur – boka hjälp nära dig.",
+      "icon": "heart",
+      "popular": true,
+      "image": {
+        "file": "oms.webp",
+        "thumb": "oms-thumb.webp",
+        "width": 1200,
+        "height": 800,
+        "photographer": "Tima Miroshnichenko",
+        "sourceUrl": "https://www.pexels.com/photo/6321616/",
+        "license": "Pexels License (free commercial use)",
+        "licenseUrl": "https://www.pexels.com/license/",
+        "pexelsId": 6321616,
+        "alt": "Vuxen som läser för ett barn"
+      },
+      "priceEstimate": {
+        "unit": "kr/tim",
+        "min": 150,
+        "max": 280,
+        "isEstimate": true,
+        "note": "Hundrastning är inte RUT.",
+        "sources": []
+      },
+      "taxRelief": {
+        "status": "partial",
+        "label": "RUT för barn och omsorg, inte djur",
+        "note": "Barnpassning och omsorg i hemmet kan ge RUT. Husdjur ger inte RUT.",
+        "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+      },
+      "subcategories": [
+        {
+          "id": "barnvakt",
+          "name": "Barnvakt",
+          "desc": "Passa barn i hemmet",
+          "taxRelief": {
+            "status": "rut",
+            "label": "RUT",
+            "note": "Barnpassning enligt villkoren ger RUT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          },
+          "priceEstimate": {
+            "unit": "kr/tim",
+            "min": 150,
+            "max": 250,
+            "isEstimate": true,
+            "note": "",
+            "sources": [],
+            "afterDeduction": {
+              "kind": "RUT",
+              "rate": 0.5,
+              "min": 75,
+              "max": 125
+            }
+          },
+          "image": {
+            "file": "oms-barnvakt.webp",
+            "thumb": "oms-barnvakt-thumb.webp",
+            "width": 1200,
+            "height": 800,
+            "photographer": "cottonbro studio",
+            "sourceUrl": "https://www.pexels.com/photo/3662667/",
+            "license": "Pexels License (free commercial use)",
+            "licenseUrl": "https://www.pexels.com/license/",
+            "pexelsId": 3662667,
+            "alt": "Barn som leker med träklossar"
+          }
+        },
+        {
+          "id": "hamtning",
+          "name": "Hämtning och lämning",
+          "desc": "Hämta och lämna vid skola",
+          "taxRelief": {
+            "status": "rut",
+            "label": "RUT",
+            "note": "Passningen kan ge RUT. Transportkostnad ger inte avdrag.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        },
+        {
+          "id": "laxhjalp",
+          "name": "Läxhjälp",
+          "desc": "Läxor i samband med barnpassning",
+          "taxRelief": {
+            "status": "partial",
+            "label": "Begränsad RUT",
+            "note": "Högst 10 % av tiden vid varje passningstillfälle.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        },
+        {
+          "id": "aldreomsorg",
+          "name": "Omsorg och sällskap",
+          "desc": "Hygien, påklädning och sällskap i hemmet",
+          "taxRelief": {
+            "status": "rut",
+            "label": "RUT",
+            "note": "Omsorg i hemmet ger RUT. Inte sjukvård.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          },
+          "priceEstimate": {
+            "unit": "kr/tim",
+            "min": 200,
+            "max": 350,
+            "isEstimate": true,
+            "note": "",
+            "sources": [],
+            "afterDeduction": {
+              "kind": "RUT",
+              "rate": 0.5,
+              "min": 100,
+              "max": 175
+            }
+          },
+          "image": {
+            "file": "oms-aldreomsorg.webp",
+            "thumb": "oms-aldreomsorg-thumb.webp",
+            "width": 1200,
+            "height": 800,
+            "photographer": "Kampus Production",
+            "sourceUrl": "https://www.pexels.com/photo/7551668/",
+            "license": "Pexels License (free commercial use)",
+            "licenseUrl": "https://www.pexels.com/license/",
+            "pexelsId": 7551668,
+            "alt": "Omsorgssamtal vid ett bord i hemmet"
+          }
+        },
+        {
+          "id": "promenad",
+          "name": "Promenader och ärenden",
+          "desc": "Följa med på promenad eller ärende",
+          "taxRelief": {
+            "status": "rut",
+            "label": "RUT",
+            "note": "Promenader och enklare ärenden ger RUT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        },
+        {
+          "id": "hundrastning",
+          "name": "Hundrastning",
+          "desc": "Rasta hund",
+          "taxRelief": {
+            "status": "none",
+            "label": "Ej avdrag",
+            "note": "Att passa husdjur ger inte RUT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          },
+          "priceEstimate": {
+            "unit": "kr/promenad",
+            "min": 150,
+            "max": 250,
+            "isEstimate": true,
+            "note": "",
+            "sources": []
+          },
+          "image": {
+            "file": "oms-hundrastning.webp",
+            "thumb": "oms-hundrastning-thumb.webp",
+            "width": 1200,
+            "height": 800,
+            "photographer": "Johann",
+            "sourceUrl": "https://www.pexels.com/photo/1254140/",
+            "license": "Pexels License (free commercial use)",
+            "licenseUrl": "https://www.pexels.com/license/",
+            "pexelsId": 1254140,
+            "alt": "Hund i koppel på en stig"
+          }
+        },
+        {
+          "id": "djurvakt",
+          "name": "Kattvakt och djurtillsyn",
+          "desc": "Titta till djur när ägaren är borta",
+          "taxRelief": {
+            "status": "none",
+            "label": "Ej avdrag",
+            "note": "Att passa husdjur ger inte RUT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        }
+      ]
+    },
+    {
+      "id": "til",
+      "name": "Tillsyn & ankomst",
+      "desc": "Titta till hemmet, vattna växter och förbereda ankomst",
+      "intro": "Tillsyn när du är borta, eller hjälp att förbereda hemmet inför ankomst.",
+      "icon": "eye",
+      "popular": true,
+      "image": {
+        "file": "til.webp",
+        "thumb": "til-thumb.webp",
+        "width": 1200,
+        "height": 800,
+        "photographer": "Designecologist",
+        "sourceUrl": "https://www.pexels.com/photo/1005058/",
+        "license": "Pexels License (free commercial use)",
+        "licenseUrl": "https://www.pexels.com/license/",
+        "pexelsId": 1005058,
+        "alt": "Krukväxter i ett vardagsrum"
+      },
+      "priceEstimate": {
+        "unit": "kr/besök",
+        "min": 200,
+        "max": 450,
+        "isEstimate": true,
+        "note": "",
+        "sources": [],
+        "afterDeduction": {
+          "kind": "RUT",
+          "rate": 0.5,
+          "min": 100,
+          "max": 225
+        }
+      },
+      "taxRelief": {
+        "status": "rut",
+        "label": "RUT (tillsyn och städ)",
+        "note": "Tillsyn i bostaden ger RUT. Inte vakt eller kamera. Homestyling ger inte RUT.",
+        "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+      },
+      "subcategories": [
+        {
+          "id": "bostadstillsyn",
+          "name": "Tillsyn av bostad",
+          "desc": "Titta till hemmet när du är bortrest",
+          "taxRelief": {
+            "status": "rut",
+            "label": "RUT",
+            "note": "Tillsyn av hushållet ger RUT, inte bevakning.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        },
+        {
+          "id": "vattna",
+          "name": "Vattna växter och ta hand om post",
+          "desc": "Vattna, vädra och hämta post",
+          "taxRelief": {
+            "status": "rut",
+            "label": "RUT",
+            "note": "Uttryckligen godkänt som tillsyn.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        },
+        {
+          "id": "ankomst",
+          "name": "Ankomstservice",
+          "desc": "Förbered hemmet inför ankomst",
+          "taxRelief": {
+            "status": "partial",
+            "label": "Delar kan vara RUT",
+            "note": "Städ och tillsyn kan ge RUT. Inköp och styling ger inte RUT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        },
+        {
+          "id": "mottagning",
+          "name": "Ta emot bud och hantverkare",
+          "desc": "Släppa in leveranser",
+          "taxRelief": {
+            "status": "rut",
+            "label": "RUT",
+            "note": "Att ta emot bud och hantverkare ger RUT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        },
+        {
+          "id": "sasong-stangning",
+          "name": "Sätta på och stänga av vatten och värme",
+          "desc": "Säsongsavstängning av sommarhus",
+          "taxRelief": {
+            "status": "rut",
+            "label": "RUT",
+            "note": "Säsongsavstängning ger RUT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        }
+      ]
+    },
+    {
+      "id": "it",
+      "name": "IT & teknik",
+      "desc": "Datorhjälp, wifi, TV och installation i hemmet",
+      "intro": "Dator, wifi och teknik i hemmet – boka hjälp nära dig.",
+      "icon": "laptop",
+      "popular": false,
+      "image": {
+        "file": "it.webp",
+        "thumb": "it-thumb.webp",
+        "width": 1200,
+        "height": 800,
+        "photographer": "Julia M Cameron",
+        "sourceUrl": "https://www.pexels.com/photo/4144923/",
+        "license": "Pexels License (free commercial use)",
+        "licenseUrl": "https://www.pexels.com/license/",
+        "pexelsId": 4144923,
+        "alt": "Skrivbord med dator i dagsljus"
+      },
+      "priceEstimate": {
+        "unit": "kr/tim",
+        "min": 400,
+        "max": 700,
+        "isEstimate": true,
+        "note": "På plats, före RUT.",
+        "sources": [],
+        "afterDeduction": {
+          "kind": "RUT",
+          "rate": 0.5,
+          "min": 200,
+          "max": 350
+        }
+      },
+      "taxRelief": {
+        "status": "rut",
+        "label": "RUT",
+        "note": "Dator, wifi och TV som tar datatrafik ger RUT i bostaden. Inte larm, kameror eller hjälp på distans.",
+        "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+      },
+      "subcategories": [
+        {
+          "id": "datorhjalp",
+          "name": "Dator- och surfplatta",
+          "desc": "Installera och visa dator och surfplatta",
+          "taxRelief": {
+            "status": "rut",
+            "label": "RUT",
+            "note": "På plats ger RUT. Inte hjälp på distans.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        },
+        {
+          "id": "wifi",
+          "name": "Wifi och nätverk",
+          "desc": "Router och nätverk inne i bostaden",
+          "taxRelief": {
+            "status": "rut",
+            "label": "RUT",
+            "note": "Wifi i bostaden ger RUT. Inte grävning på tomten.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        },
+        {
+          "id": "tv",
+          "name": "TV och streaming",
+          "desc": "Koppla in TV och streamingenheter",
+          "taxRelief": {
+            "status": "rut",
+            "label": "RUT",
+            "note": "Enheter som tar datatrafik ger RUT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        },
+        {
+          "id": "program",
+          "name": "Program och antivirus",
+          "desc": "Installera och uppdatera program",
+          "taxRelief": {
+            "status": "rut",
+            "label": "RUT",
+            "note": "Installation i bostaden ger RUT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        },
+        {
+          "id": "skrivare",
+          "name": "Skrivare och tillbehör",
+          "desc": "Installera skrivare och skanner",
+          "taxRelief": {
+            "status": "rut",
+            "label": "RUT",
+            "note": "Skrivare som hör till IT-utrustningen ger RUT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        }
+      ]
+    },
+    {
+      "id": "per",
+      "name": "Personal & event",
+      "desc": "Tillfällig personal, servering och hjälp vid event",
+      "intro": "Tillfällig personal till hem och event – boka nära dig.",
+      "icon": "users",
+      "popular": false,
+      "image": {
+        "file": "per.webp",
+        "thumb": "per-thumb.webp",
+        "width": 1200,
+        "height": 800,
+        "photographer": "Pixabay",
+        "sourceUrl": "https://www.pexels.com/photo/262978/",
+        "license": "Pexels License (free commercial use)",
+        "licenseUrl": "https://www.pexels.com/license/",
+        "pexelsId": 262978,
+        "alt": "Person som bär fram tallrikar"
+      },
+      "priceEstimate": {
+        "unit": "kr/tim",
+        "min": 250,
+        "max": 500,
+        "isEstimate": true,
+        "note": "I regel utan RUT eller ROT.",
+        "sources": []
+      },
+      "taxRelief": {
+        "status": "none",
+        "label": "I regel inget avdrag",
+        "note": "Eventpersonal och servering är varken RUT eller ROT.",
+        "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+      },
+      "subcategories": [
+        {
+          "id": "eventpersonal",
+          "name": "Event- och festpersonal",
+          "desc": "Extra händer vid fest",
+          "taxRelief": {
+            "status": "none",
+            "label": "Ej avdrag",
+            "note": "Eventarbete ger inte RUT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        },
+        {
+          "id": "servering",
+          "name": "Servering i hemmet",
+          "desc": "Servera vid middag eller event",
+          "taxRelief": {
+            "status": "none",
+            "label": "Ej avdrag",
+            "note": "Servering är inte en godkänd RUT-tjänst.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        },
+        {
+          "id": "tillfallig",
+          "name": "Tillfällig personal",
+          "desc": "Kortare avlastning som inte är städ eller omsorg",
+          "taxRelief": {
+            "status": "mixed",
+            "label": "Bara om uppgiften själv är godkänd",
+            "note": "Städ, barnpassning eller omsorg kan vara RUT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        },
+        {
+          "id": "matlagning",
+          "name": "Enklare matlagning",
+          "desc": "Laga mat i hemmet",
+          "taxRelief": {
+            "status": "partial",
+            "label": "Bara i samband med omsorg",
+            "note": "Fristående kock ger inte RUT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        }
+      ]
+    },
+    {
+      "id": "eko",
+      "name": "Ekonomi & administration",
+      "desc": "Bokföring, deklaration och praktisk hjälp med papper",
+      "intro": "Bokföring och deklaration – boka en ekonom nära dig.",
+      "icon": "calculator",
+      "popular": false,
+      "image": {
+        "file": "eko.webp",
+        "thumb": "eko-thumb.webp",
+        "width": 1200,
+        "height": 800,
+        "photographer": "RDNE Stock project",
+        "sourceUrl": "https://www.pexels.com/photo/7821711/",
+        "license": "Pexels License (free commercial use)",
+        "licenseUrl": "https://www.pexels.com/license/",
+        "pexelsId": 7821711,
+        "alt": "Samtal vid ett bord med papper och dator"
+      },
+      "priceEstimate": {
+        "unit": "kr/tim",
+        "min": 400,
+        "max": 800,
+        "isEstimate": true,
+        "note": "Inte RUT, utom räkningshjälp som del av omsorg.",
+        "sources": []
+      },
+      "taxRelief": {
+        "status": "none",
+        "label": "I regel inget avdrag",
+        "note": "Bokföring och deklaration är varken RUT eller ROT.",
+        "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+      },
+      "subcategories": [
+        {
+          "id": "bokforing",
+          "name": "Bokföring",
+          "desc": "Löpande bokföring",
+          "taxRelief": {
+            "status": "none",
+            "label": "Ej avdrag",
+            "note": "Bokföring ger inte RUT eller ROT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        },
+        {
+          "id": "deklaration",
+          "name": "Deklaration",
+          "desc": "Hjälp med inkomstdeklaration",
+          "taxRelief": {
+            "status": "none",
+            "label": "Ej avdrag",
+            "note": "Deklarationshjälp ger inte RUT eller ROT.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        },
+        {
+          "id": "rakningar",
+          "name": "Hjälp med räkningar",
+          "desc": "Betala räkningar tillsammans i hemmet",
+          "taxRelief": {
+            "status": "partial",
+            "label": "RUT som omsorg",
+            "note": "Kan ge RUT när det ingår i omsorg i hemmet.",
+            "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+          }
+        }
+      ]
+    },
+    {
+      "id": "annat",
+      "name": "Annat",
+      "desc": "Uppdrag som inte passar en kategori",
+      "intro": "Hittar du inte rätt tjänst? Beskriv vad du behöver hjälp med.",
+      "icon": "ellipsis",
+      "popular": false,
+      "image": {
+        "file": "annat.webp",
+        "thumb": "annat-thumb.webp",
+        "width": 1200,
+        "height": 800,
+        "photographer": "VELIO",
+        "sourceUrl": "",
+        "license": "Egen bild",
+        "licenseUrl": "",
+        "pexelsId": 0,
+        "alt": "Brun och gräddfärgad tonplatta för övriga uppdrag"
+      },
+      "taxRelief": {
+        "status": "none",
+        "label": "Beror på uppdraget",
+        "note": "RUT och ROT beror på vad som ska göras. Det här är ingen bedömning.",
+        "source": "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html"
+      },
+      "subcategories": []
+    }
+  ]
+}

@@ -197,6 +197,7 @@ export function VelioApp() {
                 onClose={() => closeCheckout()}
                 onPaid={() => {
                   if (checkout.offerId !== "demo") acceptOffer(checkout.offerId);
+                  useVelio.getState().checkoutAfter?.();
                 }}
               />
             ) : null}

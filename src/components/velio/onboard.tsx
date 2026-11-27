@@ -60,14 +60,19 @@ export function OnboardSheet() {
     return null;
   };
   const initialServices = tradesOf(saved) ?? tradesOf(listing) ?? [];
+  const savedOther = saved?.otherTrade || listing?.otherTrade || "";
   const startedAtPlace = useRef(useVelio.getState().onboardFocus === "place").current;
   const [step, setStep] = useState(startedAtPlace ? 3 : 1);
   useEffect(() => {
     if (useVelio.getState().onboardFocus) useVelio.setState({ onboardFocus: null });
   }, []);
-  const [serviceIds, setServiceIds] = useState<ServiceId[]>(initialServices);
-  const [otherOn, setOtherOn] = useState(Boolean(saved?.otherTrade || listing?.otherTrade));
-  const [otherTrade, setOtherTrade] = useState(saved?.otherTrade || listing?.otherTrade || "");
+  const [serviceIds, setServiceIds] = useState<ServiceId[]>(() => {
+    const ids = [...initialServices];
+    if (savedOther && !ids.includes("annat") && ids.length < 3) ids.push("annat");
+    return ids;
+  });
+  const [otherTrade, setOtherTrade] = useState(savedOther);
+  const otherOn = serviceIds.includes("annat");
   const [title, setTitle] = useState(savedTitle);
   const [desc, setDesc] = useState(savedDesc.startsWith("\n") ? savedDesc.trim() : savedDesc);
   const [level, setLevel] = useState(saved?.level || listing?.experience || "");
@@ -241,7 +246,6 @@ export function OnboardSheet() {
               level={level}
               photos={photos}
               onToggleService={toggleService}
-              onToggleOther={() => setOtherOn((value) => !value)}
               onOtherTrade={setOtherTrade}
               onTitle={setTitle}
               onDesc={setDesc}
@@ -453,7 +457,6 @@ function StepInfo(props: {
   level: string;
   photos: string[];
   onToggleService: (id: ServiceId) => void;
-  onToggleOther: () => void;
   onOtherTrade: (value: string) => void;
   onTitle: (value: string) => void;
   onDesc: (value: string) => void;
@@ -483,20 +486,12 @@ function StepInfo(props: {
               </button>
             );
           })}
-          <button
-            type="button"
-            aria-pressed={props.otherOn}
-            onClick={props.onToggleOther}
-            className={cn("rounded-full px-3 py-1.5 text-sm", props.otherOn ? "bg-bronze text-white" : "border border-line bg-white")}
-          >
-            Annat
-          </button>
         </div>
         {props.otherOn ? (
           <input
             value={props.otherTrade}
             onChange={(event) => props.onOtherTrade(event.target.value)}
-            placeholder="Beskriv vad annat betyder"
+            placeholder="Beskriv vilka Annat-uppdrag du kan ta"
             className="mt-2 w-full rounded-2xl border border-line bg-white px-4 py-3 text-sm outline-none"
           />
         ) : null}

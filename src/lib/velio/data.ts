@@ -1,18 +1,142 @@
-export const services = [
-  { id: "el", name: "Elektriker", desc: "Elinstallationer och felsökning", icon: "zap" },
-  { id: "stad", name: "Städning", desc: "Hemstäd och flyttstäd", icon: "sparkles" },
-  { id: "trad", name: "Trädgård", desc: "Gräsklippning och skötsel", icon: "leaf" },
-  { id: "rep", name: "Reparationer", desc: "Allt som gått sönder", icon: "wrench" },
-  { id: "sak", name: "Säkerhet", desc: "Larm och lås", icon: "shield" },
-  { id: "ren", name: "Renovering", desc: "Målning och renovering", icon: "hammer" },
-  { id: "per", name: "Personal", desc: "Tillfällig personal", icon: "user" },
-  { id: "eko", name: "Ekonomi", desc: "Bokföring och deklaration", icon: "calculator" },
-  { id: "ank", name: "Ankomstservice", desc: "Förbered hemmet inför ankomst", icon: "key" },
-  { id: "til", name: "Tillsyn", desc: "Kolla bostaden när du är borta", icon: "eye" },
-] as const;
+import catalog from "./categories.json";
+import { asset } from "./asset";
 
-export type ServiceId = (typeof services)[number]["id"];
-export type ServiceIcon = (typeof services)[number]["icon"];
+export type TaxStatus = "rut" | "rot" | "mixed" | "partial" | "none";
+export type ServiceIcon =
+  | "sparkles"
+  | "leaf"
+  | "truck"
+  | "drill"
+  | "wrench"
+  | "zap"
+  | "droplets"
+  | "hammer"
+  | "shield"
+  | "heart"
+  | "eye"
+  | "laptop"
+  | "users"
+  | "calculator"
+  | "key"
+  | "user"
+  | "ellipsis";
+
+export const SERVICE_IDS = ["stad", "trad", "flytt", "mon", "rep", "el", "vvs", "ren", "sak", "oms", "til", "it", "per", "eko", "annat"] as const;
+export type ServiceId = (typeof SERVICE_IDS)[number];
+
+export type TaxRelief = { status: TaxStatus; label: string; note: string; source: string };
+export type PriceEstimate = {
+  unit: string;
+  min: number;
+  max: number;
+  isEstimate: true;
+  note: string;
+  afterDeduction?: { kind: string; rate: number; min: number; max: number };
+};
+export type PhotoCredit = {
+  file: string;
+  thumb: string;
+  photographer: string;
+  sourceUrl: string;
+  license: string;
+  licenseUrl: string;
+  alt: string;
+};
+export type Subcategory = {
+  id: string;
+  name: string;
+  desc: string;
+  taxRelief: TaxRelief;
+  priceEstimate?: PriceEstimate;
+  image?: string;
+  imageThumb?: string;
+  credit?: PhotoCredit;
+};
+export type Service = {
+  id: ServiceId;
+  name: string;
+  desc: string;
+  intro: string;
+  icon: ServiceIcon;
+  popular: boolean;
+  image: string;
+  imageThumb: string;
+  credit: PhotoCredit;
+  taxRelief: TaxRelief;
+  priceEstimate?: PriceEstimate;
+  subcategories: Subcategory[];
+};
+
+function creditOf(image: { file: string; thumb: string; photographer: string; sourceUrl: string; license: string; licenseUrl: string; alt: string }): PhotoCredit {
+  return {
+    file: image.file,
+    thumb: image.thumb,
+    photographer: image.photographer,
+    sourceUrl: image.sourceUrl,
+    license: image.license,
+    licenseUrl: image.licenseUrl,
+    alt: image.alt,
+  };
+}
+
+const otherTax: TaxRelief = {
+  status: "none",
+  label: "Beror på uppdraget",
+  note: "RUT och ROT beror på vad som ska göras. Det här är ingen bedömning.",
+  source: "https://www.skatteverket.se/foretag/skatterochavdrag/rotochrut/gerarbetetratttillrutavdrag.4.2ef18e6a125660db8b080001531.html",
+};
+
+export const otherSubcategory: Subcategory = {
+  id: "annat",
+  name: "Annat",
+  desc: "Beskriv vad du behöver hjälp med",
+  taxRelief: otherTax,
+};
+
+function mapSub(raw: (typeof catalog.categories)[number]["subcategories"][number]): Subcategory {
+  const image = "image" in raw ? raw.image : undefined;
+  return {
+    id: raw.id,
+    name: raw.name,
+    desc: raw.desc,
+    taxRelief: raw.taxRelief as TaxRelief,
+    priceEstimate: "priceEstimate" in raw ? (raw.priceEstimate as PriceEstimate) : undefined,
+    image: image ? asset(`/velio/categories/${image.file}`) : undefined,
+    imageThumb: image ? asset(`/velio/categories/${image.thumb}`) : undefined,
+    credit: image ? creditOf(image) : undefined,
+  };
+}
+
+export const services: Service[] = catalog.categories.map((raw) => ({
+  id: raw.id as ServiceId,
+  name: raw.name,
+  desc: raw.desc,
+  intro: raw.intro,
+  icon: raw.icon as ServiceIcon,
+  popular: raw.popular,
+  image: asset(`/velio/categories/${raw.image.file}`),
+  imageThumb: asset(`/velio/categories/${raw.image.thumb}`),
+  credit: creditOf(raw.image),
+  taxRelief: raw.taxRelief as TaxRelief,
+  priceEstimate: raw.priceEstimate as PriceEstimate | undefined,
+  subcategories: [...raw.subcategories.map(mapSub).filter((item) => item.id !== "annat"), otherSubcategory],
+}));
+
+export const taxReliefDisclaimer = catalog.taxReliefDisclaimer;
+export const priceDisclaimer = catalog.priceDisclaimer;
+
+export const photoCredits: PhotoCredit[] = [
+  ...services.map((service) => service.credit),
+  ...services.flatMap((service) => service.subcategories.flatMap((item) => (item.credit ? [item.credit] : []))),
+].filter((credit) => credit.sourceUrl.startsWith("http"));
+
+export const deprecatedServiceMap: Record<string, { id: ServiceId; subcategoryId: string }> = {
+  ank: { id: "til", subcategoryId: "ankomst" },
+};
+
+export function categoryImage(id: string | null | undefined) {
+  return resolveServiceId(id)?.imageThumb ?? asset("/velio/categories/stad-thumb.webp");
+}
 export type Slot = "morning" | "afternoon" | "evening";
 export type SortKey = "best" | "rating" | "price-desc" | "price-asc";
 
@@ -54,13 +178,19 @@ export type Provider = {
   demo?: boolean;
 };
 
-/** Public “Om” text: the description the person wrote, without a leading account name. */
+/** Public “Om” text. Prices and F-skatt stay off the profile even if an older text still contains them. */
 export function providerDescription(provider: { name: string; about: string }) {
-  const raw = provider.about.trim();
+  let raw = provider.about.trim();
   const name = provider.name.trim();
   if (!raw) return "";
   if (name && raw === name) return "";
-  if (name && raw.startsWith(`${name}\n`)) return raw.slice(name.length).trim();
+  if (name && raw.startsWith(`${name}\n`)) raw = raw.slice(name.length).trim();
+  raw = raw.replace(/\n*Priser\n[\s\S]*$/i, "").trim();
+  raw = raw
+    .split("\n")
+    .filter((line) => !/^f-skatt\b/i.test(line.trim()))
+    .join("\n")
+    .trim();
   return raw;
 }
 
@@ -121,7 +251,20 @@ export const sortLabels: Record<SortKey, string> = {
 };
 
 export function serviceById(id: string | null | undefined) {
+  if (!id) return undefined;
   return services.find((service) => service.id === id);
+}
+
+export function resolveServiceId(id: string | null | undefined) {
+  if (!id) return undefined;
+  const mapped = deprecatedServiceMap[id];
+  return serviceById(mapped ? mapped.id : id);
+}
+
+export function subcategoryById(serviceId: string | null | undefined, subcategoryId: string | null | undefined) {
+  const service = resolveServiceId(serviceId);
+  if (!service || !subcategoryId) return undefined;
+  return service.subcategories.find((item) => item.id === subcategoryId);
 }
 
 export function providerById(id: string | null | undefined) {

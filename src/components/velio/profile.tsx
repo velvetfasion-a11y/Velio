@@ -28,6 +28,7 @@ import { VerifyIdScreen } from "@/components/velio/verify-id";
 import { GetPaidCard } from "@/components/velio/get-paid";
 import { openSupportSheet } from "@/components/velio/support-sheet";
 import { ownBusiness, useVelio, type Booking, type SavedAddress } from "@/lib/velio/store";
+import { jobPriceDetail, overBudget, priceOrQuote } from "@/lib/velio/price";
 import { cn } from "@/lib/cn";
 import { Btn, Field, ProfilePhoto, ScreenHeader, SecurePayNote } from "@/components/velio/ui";
 import { asset } from "@/lib/velio/asset";
@@ -289,6 +290,7 @@ export function ProfileScreens() {
   const listing = useVelio((state) => state.listing);
   const accountMode = useVelio((state) => state.accountMode);
   const idVerified = useVelio((state) => state.idVerified);
+  const idStatus = useVelio((state) => state.idStatus);
   const kycPending = useVelio((state) => state.kycPending);
   const idMethod = useVelio((state) => state.idMethod);
   const setAccountMode = useVelio((state) => state.setAccountMode);
@@ -429,12 +431,6 @@ export function ProfileScreens() {
 
   if (screen === "posted") {
     const mine = posted.filter((job) => !accountId || job.ownerId === accountId);
-    const images: Record<string, string> = {
-      stad: asset("/velio/tile-stad.jpg"),
-      ren: asset("/velio/tile-ren.jpg"),
-      el: asset("/velio/tile-el.jpg"),
-      trad: asset("/velio/tile-trad.jpg"),
-    };
     return (
       <div className="px-4 pt-4">
         <ScreenHeader title="Mina uppdrag" />
@@ -444,15 +440,16 @@ export function ProfileScreens() {
               const service = serviceById(job.serviceId);
               return (
                 <article key={job.id} className="flex gap-3 rounded-[1.3rem] border border-line bg-paper/80 backdrop-blur-xl p-3">
-                  <img src={images[job.serviceId] || `/velio/${job.serviceId}.jpg`} alt="" className="size-16 rounded-xl object-cover" />
+                  <img src={service?.imageThumb ?? asset("/velio/categories/stad-thumb.webp")} alt="" className="size-16 rounded-xl object-cover" />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-2">
-                      <p className="font-semibold">{service?.name}</p>
+                      <p className="font-semibold">{job.title || service?.name}</p>
                       <span className="shrink-0 rounded-full bg-ok/15 px-2 py-0.5 text-[11px] text-ok">Publicerad</span>
                     </div>
                     <p className="mt-1 line-clamp-2 text-sm text-muted">{job.text}</p>
                     <p className="mt-1 text-xs text-muted">{job.when}</p>
                     <p className="text-xs text-muted">{job.address}</p>
+                    <p className="mt-1 text-sm font-semibold">{jobPriceDetail(job)}</p>
                     {job.status && job.status !== "open" ? (
                       <p className="mt-1 text-xs font-semibold text-brown">{job.status === "assigned" ? "Tilldelat" : job.status === "completed" ? "Klart" : job.status === "cancelled" ? "Avbrutet" : job.status}</p>
                     ) : null}
@@ -467,12 +464,13 @@ export function ProfileScreens() {
                         .map((offer) => (
                           <div key={offer.id} className="rounded-2xl bg-sand px-3 py-2">
                             <p className="text-sm font-semibold">
-                              Offert {offer.amount.toLocaleString("sv-SE")} kr
+                              Offert {priceOrQuote(offer.amount)}
                               <span className="ml-2 font-medium text-muted">
                                 {offer.status === "pending" ? "Väntar" : offer.status === "accepted" ? "Accepterad" : offer.status === "declined" ? "Avböjd" : "Tillbakadragen"}
                               </span>
                             </p>
                             {offer.message ? <p className="mt-1 text-sm text-muted">{offer.message}</p> : null}
+                            {overBudget(offer.amount, job) ? <p className="mt-1 text-xs text-brown">Över kundens budget</p> : null}
                             {offer.status === "pending" && offer.jobOwnerId === accountId ? (
                               <div className="mt-2 flex gap-2">
                                 <button type="button" onClick={() => openCheckout(offer.id)} className="h-9 rounded-full bg-brown px-3 text-sm font-semibold text-paper">
@@ -514,8 +512,8 @@ export function ProfileScreens() {
       ? "Demo\ninte verifierad"
       : !idVerified
         ? "Identitet\nkrävs"
-        : idMethod === "passport"
-          ? "Verifierad\nmed pass"
+        : idMethod === "bankid" || idMethod === "stripe_identity"
+          ? "Verifierad\nmed BankID"
           : "Verifierad\nmed BankID";
     const points = [
       { icon: ShieldCheck, label: verifyLabel },
@@ -880,6 +878,11 @@ export function ProfileScreens() {
             );
           })}
         </div>
+        <h2 className="mt-5 mb-2 px-1 text-xs font-semibold tracking-wide text-muted">BILDKÄLLOR</h2>
+        <a href={asset("/krediter/")} className="mb-5 flex items-center justify-between rounded-[1.4rem] border border-line bg-white px-4 py-3.5 text-[15px]">
+          Fotografer och licenser
+          <ChevronRight className="size-4 text-muted" />
+        </a>
         <h2 className="mt-5 mb-2 px-1 text-xs font-semibold tracking-wide text-muted">KONTAKTA OSS</h2>
         <div className="rounded-[1.4rem] border border-line bg-white px-4 py-4">
           <label className="block">
@@ -916,7 +919,7 @@ export function ProfileScreens() {
         <div className="font-display text-4xl font-bold tracking-tight">VELIO</div>
         <h2 className="mt-3 font-display text-2xl font-semibold">Välkommen</h2>
         <p className="mt-2 mb-6 max-w-xs text-sm leading-relaxed text-muted">
-          Logga in med BankID, Google, e-post eller mobil. Utförare verifieras med BankID eller pass.
+          Logga in med Google, e-post eller mobil. Utförare verifieras med BankID.
         </p>
         <Btn variant="bank" onClick={() => setSheet("bankid")}>
           <Shield className="size-4" /> Öppna BankID
@@ -927,7 +930,7 @@ export function ProfileScreens() {
 
   const own = ownBusiness({ accountId, directory, loggedIn });
   const email = profile.email;
-  const verifyLabel = idVerified ? "ID verifierat" : "Konto aktivt";
+  const verifyLabel = idVerified ? "Verifierad" : idStatus === "pending" ? "Väntar" : idStatus === "canceled" || idStatus === "requires_input" ? "Försök igen" : "Inte verifierad";
   const roleLabel = accountMode === "business" ? "Utförare" : "Kund";
   const quick = [
     { icon: Calendar, label: "Bokningar", badge: bookings.length, onClick: () => go("bookings") },
@@ -948,6 +951,30 @@ export function ProfileScreens() {
 
   return (
     <div className="bg-cream px-4 pt-4 pb-4">
+      <div className="mb-4 grid grid-cols-2 rounded-full bg-sand p-1" role="group" aria-label="Byt mellan kund och utförare">
+        <button
+          type="button"
+          aria-pressed={accountMode === "customer"}
+          onClick={() => {
+            setAccountMode("customer");
+            go("home");
+          }}
+          className={cn("h-11 rounded-full text-sm font-semibold", accountMode === "customer" ? "bg-brown text-paper" : "text-ink")}
+        >
+          Kund
+        </button>
+        <button
+          type="button"
+          aria-pressed={accountMode === "business"}
+          onClick={() => {
+            setAccountMode("business");
+            go("home");
+          }}
+          className={cn("h-11 rounded-full text-sm font-semibold", accountMode === "business" ? "bg-brown text-paper" : "text-ink")}
+        >
+          Utförare
+        </button>
+      </div>
       {listing || own ? (
         <ModeSwitch
           name={profile.name}
@@ -1095,8 +1122,8 @@ function ModeSwitch({
     go("home");
   };
   const badge = idVerified
-    ? idMethod === "passport"
-      ? "Verifierad med pass"
+    ? idMethod === "bankid" || idMethod === "stripe_identity"
+      ? "Verifierad med BankID"
       : "Verifierad med BankID"
     : "Konto aktivt";
   return (
@@ -1129,7 +1156,7 @@ function ModeSwitch({
             active={mode === "business"}
             icon={Briefcase}
             title="VELIO Business"
-            text={idVerified || ownsListing ? "Erbjud tjänster och ta emot uppdrag" : "Kräver BankID eller pass"}
+            text={idVerified || ownsListing ? "Erbjud tjänster och ta emot uppdrag" : "Kräver BankID"}
             onClick={() => pick("business")}
           />
         </div>

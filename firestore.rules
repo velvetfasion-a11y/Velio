@@ -206,7 +206,7 @@ service cloud.firestore {
 
     function omitsServerPaymentFields() {
       return !request.resource.data.keys().hasAny([
-        'paymentStatus', 'paymentIntentId', 'paidAt', 'payoutStatus', 'transferId', 'offerId', 'workerId', 'amountOre', 'feeOre', 'workOre', 'currency', 'refundedOre', 'disputeId', 'disputeStatus', 'cancelledBy', 'cancelReason', 'cancelledAt'
+        'paymentStatus', 'paymentIntentId', 'paidAt', 'payoutStatus', 'transferId', 'offerId', 'workerId', 'amountOre', 'feeOre', 'workOre', 'currency', 'refundedOre', 'disputeId', 'disputeStatus', 'cancelledBy', 'cancelReason', 'cancelledAt', 'workerLat', 'workerLng', 'workerEtaMin'
       ]);
     }
 
@@ -350,7 +350,7 @@ service cloud.firestore {
 
     function isValidUser(data) {
       return hasRequiredFields(['uid', 'createdAt', 'updatedAt']) &&
-        hasOnlyAllowedFields(['uid', 'email', 'phone', 'displayName', 'accountType', 'orgNumber', 'nationalId', 'stripeAccountId', 'stripeOnboardingStatus', 'stripeAccountState', 'stripeRequirements', 'status', 'statusReason', 'disabledAt', 'idVerified', 'idMethod', 'emailLower', 'phoneE164', 'createdAt', 'updatedAt']) &&
+        hasOnlyAllowedFields(['uid', 'email', 'phone', 'displayName', 'accountType', 'orgNumber', 'nationalId', 'fSkatt', 'stripeAccountId', 'stripeOnboardingStatus', 'stripeAccountState', 'stripeRequirements', 'status', 'statusReason', 'disabledAt', 'idVerified', 'idMethod', 'idStatus', 'verifiedName', 'personnummerHash', 'emailLower', 'phoneE164', 'createdAt', 'updatedAt']) &&
         data.uid is string &&
         data.uid == request.auth.uid &&
         isValidTimestamp(data.createdAt) &&
@@ -362,6 +362,7 @@ service cloud.firestore {
         (!('accountType' in data) || data.accountType in ['private', 'business']) &&
         isValidOptionalString(data, 'orgNumber', 0, 32) &&
         isValidOptionalString(data, 'nationalId', 0, 32) &&
+        (!('fSkatt' in data) || data.fSkatt is bool) &&
         isValidOptionalString(data, 'stripeAccountId', 1, 64) &&
         (!('stripeOnboardingStatus' in data) || data.stripeOnboardingStatus in ['none', 'pending', 'complete']) &&
         (!('status' in data) || data.status in ['active', 'suspended', 'blocked']) &&
@@ -369,6 +370,9 @@ service cloud.firestore {
         isValidOptionalString(data, 'stripeAccountState', 0, 40) &&
         isValidOptionalString(data, 'idMethod', 0, 20) &&
         (!('idVerified' in data) || data.idVerified is bool) &&
+        (!('idStatus' in data) || data.idStatus in ['pending', 'verified', 'canceled', 'requires_input']) &&
+        isValidOptionalString(data, 'verifiedName', 1, 80) &&
+        isValidOptionalString(data, 'personnummerHash', 64, 64) &&
         (!('disabledAt' in data) || isValidTimestamp(data.disabledAt)) &&
         (!('stripeRequirements' in data) || data.stripeRequirements is list);
     }
@@ -433,7 +437,7 @@ service cloud.firestore {
 
     function isValidJob(data) {
       return hasRequiredFields(['ownerId', 'title', 'category', 'status', 'createdAt', 'updatedAt']) &&
-        hasOnlyAllowedFields(['ownerId', 'title', 'category', 'description', 'locationLabel', 'schedule', 'budget', 'status', 'completedAt', 'paymentStatus', 'paymentIntentId', 'paidAt', 'payoutStatus', 'transferId', 'offerId', 'workerId', 'amountOre', 'feeOre', 'workOre', 'currency', 'refundedOre', 'disputeId', 'disputeStatus', 'cancelledBy', 'cancelReason', 'cancelledAt', 'createdAt', 'updatedAt']) &&
+        hasOnlyAllowedFields(['ownerId', 'title', 'category', 'description', 'locationLabel', 'schedule', 'budget', 'price', 'priceType', 'estHours', 'status', 'completedAt', 'paymentStatus', 'paymentIntentId', 'paidAt', 'payoutStatus', 'transferId', 'offerId', 'workerId', 'amountOre', 'feeOre', 'workOre', 'currency', 'refundedOre', 'disputeId', 'disputeStatus', 'cancelledBy', 'cancelReason', 'cancelledAt', 'workerLat', 'workerLng', 'workerEtaMin', 'createdAt', 'updatedAt']) &&
         data.ownerId is string &&
         data.title is string &&
         data.title.size() >= 1 &&
@@ -448,6 +452,9 @@ service cloud.firestore {
         isValidOptionalString(data, 'locationLabel', 0, 200) &&
         (!('schedule' in data) || data.schedule is map) &&
         (!('budget' in data) || (data.budget is number && data.budget >= 0)) &&
+        (!('priceType' in data) || data.priceType in ['quote', 'budget', 'fixed', 'hourly']) &&
+        (!('price' in data) || (data.price is number && data.price >= 0 && data.price <= 1000000)) &&
+        (!('estHours' in data) || (data.estHours is number && data.estHours > 0 && data.estHours <= 1000)) &&
         (!('completedAt' in data) || isValidTimestamp(data.completedAt)) &&
         (!('paymentStatus' in data) || isPaymentStatus(data.paymentStatus)) &&
         isValidOptionalString(data, 'paymentIntentId', 1, 128) &&
@@ -463,9 +470,12 @@ service cloud.firestore {
         isValidOptionalString(data, 'currency', 3, 3) &&
         isValidOptionalString(data, 'disputeId', 1, 128) &&
         isValidOptionalString(data, 'disputeStatus', 0, 40) &&
-        isValidOptionalString(data, 'cancelledBy', 0, 20) &&
+        isValidOptionalString(data, 'cancelledBy', 0, 128) &&
         isValidOptionalString(data, 'cancelReason', 0, 500) &&
-        (!('cancelledAt' in data) || isValidTimestamp(data.cancelledAt));
+        (!('cancelledAt' in data) || isValidTimestamp(data.cancelledAt)) &&
+        (!('workerLat' in data) || data.workerLat is number) &&
+        (!('workerLng' in data) || data.workerLng is number) &&
+        (!('workerEtaMin' in data) || (data.workerEtaMin is number && data.workerEtaMin >= 0 && data.workerEtaMin <= 240));
     }
 
     function isValidOffer(data) {
@@ -505,15 +515,122 @@ service cloud.firestore {
         request.auth.uid in resource.data.participantIds;
     }
 
-    function isValidMessage(data) {
+    function isTextMessage(data) {
       return hasRequiredFields(['senderId', 'text', 'createdAt']) &&
         hasOnlyAllowedFields(['senderId', 'text', 'createdAt']) &&
-        data.senderId is string &&
         data.senderId == request.auth.uid &&
         data.text is string &&
         data.text.size() >= 1 &&
         data.text.size() <= 4000 &&
         isValidTimestamp(data.createdAt);
+    }
+
+    function isShort(data, field, max) {
+      return data[field] is string && data[field].size() >= 1 && data[field].size() <= max;
+    }
+
+    function isTimeConfirmation(data) {
+      return hasRequiredFields(['senderId', 'type', 'date', 'time', 'place', 'service', 'status', 'createdAt']) &&
+        hasOnlyAllowedFields(['senderId', 'type', 'date', 'time', 'place', 'service', 'status', 'createdAt']) &&
+        data.senderId == request.auth.uid &&
+        data.type == 'time_confirmation' &&
+        data.status == 'waiting' &&
+        isShort(data, 'date', 40) &&
+        data.time is string && data.time.matches('^[0-2][0-9]:[0-5][0-9]$') &&
+        isShort(data, 'place', 200) &&
+        isShort(data, 'service', 80) &&
+        isValidTimestamp(data.createdAt);
+    }
+
+    function isFinalPrice(data) {
+      return hasRequiredFields(['senderId', 'type', 'service', 'amount', 'when', 'place', 'status', 'createdAt']) &&
+        hasOnlyAllowedFields(['senderId', 'type', 'service', 'amount', 'when', 'place', 'hours', 'rate', 'status', 'createdAt']) &&
+        data.senderId == request.auth.uid &&
+        data.type == 'final_price' &&
+        data.status == 'waiting' &&
+        isShort(data, 'service', 80) &&
+        data.amount is number && data.amount >= 1 && data.amount <= 1000000 &&
+        data.when is string && data.when.size() <= 80 &&
+        data.place is string && data.place.size() <= 200 &&
+        (!('hours' in data) || (data.hours is number && data.hours > 0 && data.hours <= 1000)) &&
+        (!('rate' in data) || (data.rate is number && data.rate >= 1 && data.rate <= 1000000)) &&
+        isValidTimestamp(data.createdAt);
+    }
+
+    function isOnTheWay(data) {
+      return hasRequiredFields(['senderId', 'type', 'place', 'etaMin', 'approximate', 'status', 'createdAt']) &&
+        hasOnlyAllowedFields(['senderId', 'type', 'place', 'etaMin', 'etaMax', 'distanceM', 'approximate', 'status', 'lat', 'lng', 'jobLat', 'jobLng', 'createdAt']) &&
+        data.senderId == request.auth.uid &&
+        data.type == 'on_the_way' &&
+        data.status == 'enroute' &&
+        data.approximate is bool &&
+        data.place is string && data.place.size() <= 200 &&
+        data.etaMin is number && data.etaMin >= 0 && data.etaMin <= 240 &&
+        (!('etaMax' in data) || (data.etaMax is number && data.etaMax >= 0 && data.etaMax <= 240)) &&
+        (!('distanceM' in data) || (data.distanceM is number && data.distanceM >= 0)) &&
+        (!('lat' in data) || data.lat is number) &&
+        (!('lng' in data) || data.lng is number) &&
+        (!('jobLat' in data) || data.jobLat is number) &&
+        (!('jobLng' in data) || data.jobLng is number) &&
+        isValidTimestamp(data.createdAt);
+    }
+
+    function isBookingChange(data) {
+      return hasRequiredFields(['senderId', 'type', 'date', 'time', 'place', 'service', 'status', 'createdAt']) &&
+        hasOnlyAllowedFields(['senderId', 'type', 'date', 'time', 'place', 'description', 'service', 'status', 'createdAt']) &&
+        data.senderId == request.auth.uid &&
+        data.type == 'booking_change' &&
+        data.status == 'pending' &&
+        isShort(data, 'date', 40) &&
+        data.time is string && data.time.matches('^[0-2][0-9]:[0-5][0-9]$') &&
+        data.place is string && data.place.size() <= 200 &&
+        isShort(data, 'service', 80) &&
+        (!('description' in data) || (data.description is string && data.description.size() <= 2000)) &&
+        isValidTimestamp(data.createdAt);
+    }
+
+    function isValidMessage(data) {
+      return isTextMessage(data) || isTimeConfirmation(data) || isFinalPrice(data) || isOnTheWay(data) || isBookingChange(data);
+    }
+
+    function isChatMember(chatId) {
+      return isAuthenticated() &&
+        request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participantIds;
+    }
+
+    function canConfirmTime() {
+      return resource.data.type == 'time_confirmation' &&
+        resource.data.status == 'waiting' &&
+        request.resource.data.status == 'confirmed' &&
+        request.auth.uid != resource.data.senderId &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
+    }
+
+    function canMarkPaid() {
+      return resource.data.type == 'final_price' &&
+        resource.data.status == 'waiting' &&
+        request.resource.data.status == 'paid' &&
+        request.auth.uid != resource.data.senderId &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
+    }
+
+    function canAnswerBookingChange() {
+      return resource.data.type == 'booking_change' &&
+        resource.data.status == 'pending' &&
+        request.resource.data.status in ['accepted', 'declined'] &&
+        request.auth.uid != resource.data.senderId &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
+    }
+
+    function canUpdateEnroute() {
+      return resource.data.type == 'on_the_way' &&
+        resource.data.senderId == request.auth.uid &&
+        resource.data.status == 'enroute' &&
+        request.resource.data.type == 'on_the_way' &&
+        request.resource.data.senderId == resource.data.senderId &&
+        request.resource.data.status in ['enroute', 'arrived'] &&
+        request.resource.data.etaMin is number &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['etaMin', 'etaMax', 'distanceM', 'lat', 'lng', 'jobLat', 'jobLng', 'status', 'approximate']);
     }
 
     function isValidAddress(data) {
@@ -550,7 +667,7 @@ service cloud.firestore {
         omitsAdminUserFields();
       allow update: if isOwner(userId) &&
         isValidUser(request.resource.data) &&
-        areImmutableFieldsUnchanged(['uid', 'createdAt', 'stripeAccountId', 'stripeOnboardingStatus', 'stripeAccountState', 'stripeRequirements', 'status', 'statusReason', 'disabledAt', 'idVerified', 'idMethod', 'emailLower', 'phoneE164']);
+        areImmutableFieldsUnchanged(['uid', 'createdAt', 'stripeAccountId', 'stripeOnboardingStatus', 'stripeAccountState', 'stripeRequirements', 'status', 'statusReason', 'disabledAt', 'idVerified', 'idMethod', 'idStatus', 'verifiedName', 'personnummerHash', 'emailLower', 'phoneE164']);
     }
 
     match /profiles/{userId} {
@@ -573,17 +690,87 @@ service cloud.firestore {
       allow delete: if isOwner(userId);
     }
 
+    function canCancelJob() {
+      return resource.data.status in ['open', 'assigned'] &&
+        request.resource.data.status == 'cancelled' &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cancelledBy', 'cancelReason', 'cancelledAt', 'updatedAt']) &&
+        request.resource.data.cancelledBy == request.auth.uid &&
+        request.resource.data.cancelReason is string &&
+        request.resource.data.cancelReason.size() <= 500 &&
+        isValidTimestamp(request.resource.data.cancelledAt) &&
+        isValidTimestamp(request.resource.data.updatedAt) &&
+        (!('payoutStatus' in resource.data) || resource.data.payoutStatus == 'none' || resource.data.payoutStatus == '') &&
+        (!('transferId' in resource.data) || resource.data.transferId == '') &&
+        (!('paymentStatus' in resource.data) || resource.data.paymentStatus in ['requires_payment', 'processing', 'failed', 'canceled']) &&
+        (request.auth.uid == resource.data.ownerId ||
+          (('workerId' in resource.data) && resource.data.workerId == request.auth.uid));
+    }
+
+    function jobIsOpenForChange() {
+      return resource.data.status in ['open', 'assigned'] &&
+        (!('payoutStatus' in resource.data) || resource.data.payoutStatus == 'none' || resource.data.payoutStatus == '') &&
+        (!('transferId' in resource.data) || resource.data.transferId == '') &&
+        (!('paymentStatus' in resource.data) || resource.data.paymentStatus in ['requires_payment', 'processing', 'failed', 'canceled']);
+    }
+
+    function canApplyBookingChange() {
+      return jobIsOpenForChange() &&
+        request.resource.data.status == resource.data.status &&
+        (request.auth.uid == resource.data.ownerId || (('workerId' in resource.data) && resource.data.workerId == request.auth.uid)) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['schedule', 'locationLabel', 'description', 'updatedAt']) &&
+        request.resource.data.schedule is map &&
+        isValidTimestamp(request.resource.data.updatedAt) &&
+        (!request.resource.data.keys().hasAny(['locationLabel']) || (request.resource.data.locationLabel is string && request.resource.data.locationLabel.size() <= 200)) &&
+        (!request.resource.data.keys().hasAny(['description']) || (request.resource.data.description is string && request.resource.data.description.size() <= 8000));
+    }
+
+    function canShareWorkerLocation() {
+      return isAuthenticated() &&
+        resource.data.keys().hasAny(['workerId']) &&
+        resource.data.workerId == request.auth.uid &&
+        resource.data.status in ['open', 'assigned'] &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['workerLat', 'workerLng', 'workerEtaMin', 'updatedAt']) &&
+        isValidTimestamp(request.resource.data.updatedAt) &&
+        (
+          (request.resource.data.workerLat is number && request.resource.data.workerLng is number && request.resource.data.workerEtaMin is number) ||
+          (!('workerLat' in request.resource.data) && !('workerLng' in request.resource.data) && !('workerEtaMin' in request.resource.data))
+        );
+    }
+
+    function workerIdOk() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['workerId']) ||
+        (
+          request.auth.uid == resource.data.ownerId &&
+          resource.data.status == 'open' &&
+          request.resource.data.status == 'assigned' &&
+          (!('workerId' in resource.data) || resource.data.workerId == '') &&
+          request.resource.data.workerId is string &&
+          request.resource.data.workerId.size() >= 1 &&
+          request.resource.data.workerId.size() <= 128 &&
+          request.resource.data.workerId != request.auth.uid
+        );
+    }
+
     match /jobs/{jobId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated() && accountIsOpen() &&
         request.resource.data.ownerId == request.auth.uid &&
         isValidJob(request.resource.data) &&
         omitsServerPaymentFields();
-      allow update: if isAuthenticated() &&
-        resource.data.ownerId == request.auth.uid &&
-        request.resource.data.ownerId == resource.data.ownerId &&
-        isValidJob(request.resource.data) &&
-        areImmutableFieldsUnchanged(['ownerId', 'createdAt', 'paymentStatus', 'paymentIntentId', 'paidAt', 'payoutStatus', 'transferId', 'offerId', 'workerId', 'amountOre', 'feeOre', 'workOre', 'currency', 'refundedOre', 'disputeId', 'disputeStatus']);
+      allow update: if isAuthenticated() && (
+        canCancelJob() ||
+        canShareWorkerLocation() ||
+        (canApplyBookingChange() && isValidJob(request.resource.data)) ||
+        (
+          resource.data.ownerId == request.auth.uid &&
+          request.resource.data.ownerId == resource.data.ownerId &&
+          isValidJob(request.resource.data) &&
+          !(resource.data.status != 'cancelled' && request.resource.data.status == 'cancelled') &&
+          !(request.resource.data.diff(resource.data).affectedKeys().hasAny(['schedule', 'locationLabel', 'description']) && !jobIsOpenForChange()) &&
+          workerIdOk() &&
+          areImmutableFieldsUnchanged(['ownerId', 'createdAt', 'paymentStatus', 'paymentIntentId', 'paidAt', 'payoutStatus', 'transferId', 'offerId', 'amountOre', 'feeOre', 'workOre', 'currency', 'refundedOre', 'disputeId', 'disputeStatus'])
+        )
+      );
       allow delete: if isAuthenticated() &&
         resource.data.ownerId == request.auth.uid;
     }
@@ -624,10 +811,8 @@ service cloud.firestore {
       match /messages/{messageId} {
         allow read: if isAuthenticated() &&
           request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participantIds;
-        allow create: if isAuthenticated() &&
-          request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participantIds &&
-          isValidMessage(request.resource.data);
-        allow update: if false;
+        allow create: if isChatMember(chatId) && isValidMessage(request.resource.data);
+        allow update: if isChatMember(chatId) && (canConfirmTime() || canMarkPaid() || canUpdateEnroute() || canAnswerBookingChange());
         allow delete: if isAuthenticated() &&
           resource.data.senderId == request.auth.uid &&
           request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participantIds;

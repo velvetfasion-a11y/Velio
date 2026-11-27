@@ -28,6 +28,8 @@ export type JobDto = {
   address: string;
   rate: "hour" | "fixed";
   price: number;
+  priceType?: "quote" | "budget" | "fixed" | "hourly";
+  estHours?: number;
   status: string;
   createdAt: string;
 };

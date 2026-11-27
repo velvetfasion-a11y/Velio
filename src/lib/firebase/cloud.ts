@@ -24,13 +24,16 @@ import { errorCode, takeSignupName } from "@/lib/firebase/auth";
 import { chooseDisplayName } from "@/lib/firebase/display-name";
 import { setCloudActive, setPreferCustomer, prefersCustomer } from "@/lib/firebase/session";
 import {
+  deprecatedServiceMap,
   initialsOf,
-  serviceById,
+  resolveServiceId,
   services,
   setProviders,
   type Provider,
   type ServiceId,
 } from "@/lib/velio/data";
+import { messageFromFirestore } from "@/lib/velio/chat-codec";
+import { normalizeJobPrice } from "@/lib/velio/price";
 import { useVelio, type ChatMsg, type PostedJob, type SavedAddress, type VelioInvoice } from "@/lib/velio/store";
 
 export type CloudOffer = {
@@ -110,7 +113,7 @@ function whenStamp(value: unknown) {
 }
 
 function serviceIdOf(value: string): ServiceId {
-  return services.some((service) => service.id === value) ? (value as ServiceId) : services[0].id;
+  return resolveServiceId(value)?.id ?? services[0].id;
 }
 
 function parseOffers(text: string) {
@@ -141,13 +144,11 @@ export function describeWorker(input: {
   const prices = (input.offers ?? [])
     .map((offer) => `${offer.name}: från ${offer.price} kr${offer.hours ? ` (${offer.hours})` : ""}`)
     .join("\n");
-  const tax =
+  const privateNote =
     input.sellerKind === "private"
       ? "Kunden kan behöva hantera skatt och RUT på ett annat sätt än mot ett företag. Texten är en platshållare, inte juridisk vägledning."
-      : input.fTax
-        ? `F-skatt: ${input.fTax === "yes" ? "ja, enligt dig" : input.fTax === "no" ? "nej" : "osäker"}. Inte kontrollerat mot Skatteverket.`
-        : "";
-  return [input.desc.trim(), prices ? `Priser\n${prices}` : "", tax].filter(Boolean).join("\n\n").slice(0, 4000);
+      : "";
+  return [input.desc.trim(), prices ? `Priser\n${prices}` : "", privateNote].filter(Boolean).join("\n\n").slice(0, 4000);
 }
 
 function businessToProvider(id: string, data: DocumentData): Provider {
@@ -200,8 +201,6 @@ function emitDirectory(list: Provider[]) {
     ...(own && !prefersCustomer()
       ? {
           accountMode: "business" as const,
-          idVerified: false,
-          idMethod: "demo",
           providerId: state.providerId ?? own.id,
           listing: state.listing ?? {
             serviceId: own.serviceId,
@@ -222,15 +221,31 @@ function emitDirectory(list: Provider[]) {
 
 function jobFromDoc(id: string, data: DocumentData): PostedJob {
   const schedule = data.schedule && typeof data.schedule === "object" ? (data.schedule as Record<string, unknown>) : {};
-  const serviceId = serviceIdOf(asString(schedule.serviceId));
+  const rawService = asString(schedule.serviceId);
+  const serviceId = serviceIdOf(rawService);
+  const storedSub = asString(schedule.subcategoryId);
+  const subcategoryId = storedSub || deprecatedServiceMap[rawService]?.subcategoryId || undefined;
+  const jobTitle = asString(schedule.jobTitle);
+  const budget = asNumber(data.price) || asNumber(data.budget);
+  const named = asString(data.priceType);
+  const normalized = normalizeJobPrice({
+    priceType: named === "fixed" || named === "hourly" || named === "quote" || named === "budget" ? named : null,
+    price: budget,
+    rate: schedule.rate === "hour" ? "hour" : null,
+    estHours: typeof data.estHours === "number" ? data.estHours : null,
+  });
   return {
     id,
     serviceId,
+    ...(subcategoryId ? { subcategoryId } : {}),
+    ...(jobTitle ? { title: jobTitle } : {}),
     text: asString(data.description) || asString(data.title),
     when: asString(schedule.when),
     address: asString(data.locationLabel),
-    rate: schedule.rate === "hour" ? "hour" : "fixed",
-    price: asNumber(data.budget),
+    rate: normalized.priceType === "hourly" ? "hour" : "fixed",
+    price: normalized.price,
+    priceType: normalized.priceType,
+    ...(normalized.estHours ? { estHours: normalized.estHours } : {}),
     ownerId: asString(data.ownerId),
     status: asString(data.status) || "open",
   };
@@ -345,6 +360,10 @@ export function startCloudSession(uid: string) {
           phone: asString(data.phone),
           avatar: state.profile.avatar,
         },
+        idVerified: data.idVerified === true,
+        idMethod: asString(data.idMethod) || null,
+        idStatus: asString(data.idStatus) || null,
+        verifiedName: asString(data.verifiedName) || null,
       });
     }),
   );
@@ -470,12 +489,7 @@ export function startCloudSession(uid: string) {
             (messages) => {
               const thread: ChatMsg[] = messages.docs.map((message) => {
                 const body = message.data();
-                return {
-                  id: message.id,
-                  from: asString(body.senderId) === uid ? "me" : "them",
-                  text: asString(body.text),
-                  time: clock(body.createdAt),
-                };
+                return messageFromFirestore(message.id, body, asString(body.senderId) === uid, clock(body.createdAt));
               });
               const state = useVelio.getState();
               const known = state.directory.find((provider) => provider.id === peer);
@@ -559,6 +573,7 @@ export async function savePrivateIdentity(input: {
   orgNumber?: string;
   nationalId?: string;
   phone?: string;
+  fTax?: "yes" | "no" | "unsure";
 }) {
   const uid = uidOrThrow();
   const patch: Record<string, unknown> = {
@@ -566,9 +581,15 @@ export async function savePrivateIdentity(input: {
     updatedAt: serverTimestamp(),
     orgNumber: input.accountType === "business" && input.orgNumber ? input.orgNumber.trim().slice(0, 32) : deleteField(),
     nationalId: input.accountType === "private" && input.nationalId ? input.nationalId.replace(/\D/g, "").slice(0, 32) : deleteField(),
+    fSkatt: input.fTax === "yes" ? true : input.fTax === "no" ? false : deleteField(),
   };
   if (input.phone) patch.phone = input.phone.trim().slice(0, 32);
-  await updateDoc(doc(db(), "users", uid), patch);
+  try {
+    await updateDoc(doc(db(), "users", uid), patch);
+  } catch {
+    const { fSkatt: _ignored, ...withoutTax } = patch;
+    await updateDoc(doc(db(), "users", uid), withoutTax);
+  }
 }
 
 export async function publishWorkerProfile(input: {
@@ -581,6 +602,7 @@ export async function publishWorkerProfile(input: {
   sellerKind: "private" | "company";
   orgNumber?: string;
   nationalId?: string;
+  fTax?: "yes" | "no" | "unsure";
 }) {
   const uid = uidOrThrow();
   const displayName = cleanName(input.displayName, cleanName(input.companyName, "VELIO"));
@@ -623,6 +645,7 @@ export async function publishWorkerProfile(input: {
     accountType: input.sellerKind === "company" ? "business" : "private",
     orgNumber: input.orgNumber,
     nationalId: input.nationalId,
+    fTax: input.fTax,
   });
   setPreferCustomer(false);
 }
@@ -641,23 +664,31 @@ export async function deleteWorkerProfile() {
 
 export async function createCloudJob(input: {
   serviceId: ServiceId;
+  subcategoryId?: string;
+  title?: string;
   text: string;
   when: string;
   address: string;
   rate: "hour" | "fixed";
   price: number;
+  priceType?: "quote" | "budget" | "fixed" | "hourly";
+  estHours?: number;
 }) {
   const uid = uidOrThrow();
-  const serviceName = serviceById(input.serviceId)?.name ?? "Uppdrag";
+  const service = resolveServiceId(input.serviceId);
+  const serviceName = service?.name ?? "Uppdrag";
+  const customTitle = input.title?.trim().slice(0, 120) ?? "";
   const payload: Record<string, unknown> = {
     ownerId: uid,
-    title: serviceName.slice(0, 120),
+    title: (customTitle || serviceName).slice(0, 120),
     category: serviceName.slice(0, 80),
     status: "open",
     schedule: {
       when: input.when.slice(0, 300),
-      serviceId: input.serviceId,
-      rate: input.rate,
+      serviceId: service?.id ?? input.serviceId,
+      ...(input.subcategoryId ? { subcategoryId: input.subcategoryId.slice(0, 40) } : {}),
+      ...(customTitle ? { jobTitle: customTitle } : {}),
+      rate: input.priceType === "hourly" || input.rate === "hour" ? "hour" : "fixed",
     },
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -666,7 +697,13 @@ export async function createCloudJob(input: {
   const locationLabel = input.address.trim().slice(0, 200);
   if (description) payload.description = description;
   if (locationLabel) payload.locationLabel = locationLabel;
-  if (input.price > 0) payload.budget = input.price;
+  const kind = input.priceType ?? (input.price > 0 ? "fixed" : "quote");
+  payload.priceType = kind;
+  if (kind !== "quote" && input.price > 0) {
+    payload.price = input.price;
+    payload.budget = input.price;
+  }
+  if (kind === "hourly" && input.estHours && input.estHours > 0) payload.estHours = input.estHours;
   const ref = await addDoc(collection(db(), "jobs"), payload);
   return ref.id;
 }
@@ -704,7 +741,10 @@ export async function setCloudOfferStatus(id: string, status: CloudOffer["status
   const jobId = asString(offerSnap.data()?.jobId);
   const jobOwnerId = asString(offerSnap.data()?.jobOwnerId);
   if (!jobId || jobOwnerId !== uidOrThrow()) return;
-  await updateDoc(doc(db(), "jobs", jobId), { status: "assigned", updatedAt: serverTimestamp() });
+  const workerId = asString(offerSnap.data()?.ownerId);
+  const jobPatch: Record<string, unknown> = { status: "assigned", updatedAt: serverTimestamp() };
+  if (workerId && workerId !== jobOwnerId) jobPatch.workerId = workerId;
+  await updateDoc(doc(db(), "jobs", jobId), jobPatch);
 }
 
 export function chatForPeer(peerUid: string) {
@@ -720,6 +760,141 @@ export async function sendMissedCall(peerUid: string, callId: string) {
     senderId: uidOrThrow(),
     text: "Missat samtal",
     createdAt: serverTimestamp(),
+  });
+}
+
+export type StructuredPayload =
+  | { type: "time_confirmation"; date: string; time: string; place: string; service: string }
+  | { type: "final_price"; service: string; amount: number; when: string; place: string; hours?: number; rate?: number }
+  | { type: "booking_change"; date: string; time: string; place: string; description?: string; service: string }
+  | {
+      type: "on_the_way";
+      place: string;
+      etaMin: number;
+      etaMax?: number;
+      distanceM?: number;
+      approximate: boolean;
+      lat?: number;
+      lng?: number;
+      jobLat?: number;
+      jobLng?: number;
+    };
+
+async function ensureChat(peerUid: string, jobId?: string) {
+  const uid = uidOrThrow();
+  let chatId = chatByPeer.get(peerUid)?.id;
+  if (!chatId) {
+    const existing = await getDocs(query(collection(db(), "chats"), where("participantIds", "array-contains", uid)));
+    const found = existing.docs.find((item) => stringList(item.data().participantIds).includes(peerUid));
+    if (found) {
+      chatId = found.id;
+      rememberChat(peerUid, found.id, asString(found.data().jobId) || undefined);
+    }
+  }
+  if (!chatId) {
+    const payload: Record<string, unknown> = {
+      participantIds: [uid, peerUid],
+      createdAt: serverTimestamp(),
+    };
+    if (jobId && jobId.length >= 1 && jobId.length <= 128) payload.jobId = jobId;
+    const created = await addDoc(collection(db(), "chats"), payload);
+    chatId = created.id;
+    rememberChat(peerUid, chatId, jobId);
+  }
+  return chatId;
+}
+
+export async function sendStructuredMessage(peerUid: string, message: StructuredPayload, jobId?: string) {
+  const uid = uidOrThrow();
+  if (!peerUid || peerUid === uid) return null;
+  const chatId = await ensureChat(peerUid, jobId);
+  const payload: Record<string, unknown> = {
+    senderId: uid,
+    type: message.type,
+    createdAt: serverTimestamp(),
+  };
+  if (message.type === "time_confirmation") {
+    payload.date = message.date.slice(0, 40);
+    payload.time = message.time;
+    payload.place = message.place.slice(0, 200);
+    payload.service = message.service.slice(0, 80);
+    payload.status = "waiting";
+  } else if (message.type === "final_price") {
+    payload.service = message.service.slice(0, 80);
+    payload.amount = Math.max(1, Math.round(message.amount));
+    payload.when = message.when.slice(0, 80);
+    payload.place = message.place.slice(0, 200);
+    payload.status = "waiting";
+    if (message.hours && message.hours > 0) payload.hours = message.hours;
+    if (message.rate && message.rate > 0) payload.rate = message.rate;
+  } else if (message.type === "booking_change") {
+    payload.date = message.date.slice(0, 40);
+    payload.time = message.time;
+    payload.place = message.place.slice(0, 200);
+    payload.service = message.service.slice(0, 80);
+    payload.status = "pending";
+    if (message.description?.trim()) payload.description = message.description.trim().slice(0, 2000);
+  } else {
+    payload.place = message.place.slice(0, 200);
+    payload.etaMin = Math.max(0, Math.round(message.etaMin));
+    payload.approximate = message.approximate;
+    payload.status = "enroute";
+    if (message.etaMax) payload.etaMax = Math.round(message.etaMax);
+    if (message.distanceM) payload.distanceM = Math.round(message.distanceM);
+    if (typeof message.lat === "number") payload.lat = message.lat;
+    if (typeof message.lng === "number") payload.lng = message.lng;
+    if (typeof message.jobLat === "number") payload.jobLat = message.jobLat;
+    if (typeof message.jobLng === "number") payload.jobLng = message.jobLng;
+  }
+  const ref = await addDoc(collection(db(), "chats", chatId, "messages"), payload);
+  try {
+    await updateDoc(doc(db(), "chats", chatId), { updatedAt: serverTimestamp() });
+  } catch {
+    /* The message is already saved. */
+  }
+  return ref.id;
+}
+
+export async function patchStructuredMessage(peerUid: string, messageId: string, patch: Record<string, unknown>) {
+  const meta = chatByPeer.get(peerUid);
+  if (!meta || !messageId) return;
+  const next: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(patch)) {
+    next[key] = value === undefined ? deleteField() : value;
+  }
+  await updateDoc(doc(db(), "chats", meta.id, "messages", messageId), next);
+}
+
+/** Applies an accepted booking change. Address and description are written only when the proposal includes them. */
+export async function applyBookingOnJob(jobId: string, input: { when: string; place?: string; description?: string }) {
+  const ref = doc(db(), "jobs", jobId);
+  const snap = await getDoc(ref);
+  const current = snap.data()?.schedule;
+  const schedule = current && typeof current === "object" ? { ...(current as Record<string, unknown>) } : {};
+  schedule.when = input.when.slice(0, 300);
+  const patch: Record<string, unknown> = { schedule, updatedAt: serverTimestamp() };
+  if (input.place?.trim()) patch.locationLabel = input.place.trim().slice(0, 200);
+  if (input.description?.trim()) patch.description = input.description.trim().slice(0, 8000);
+  await updateDoc(ref, patch);
+}
+
+/** Last shared position only. Pass null to clear it when the worker arrives. */
+export async function shareJobPosition(jobId: string, position: { lat: number; lng: number; etaMin: number } | null) {
+  if (!jobId) return;
+  if (!position) {
+    await updateDoc(doc(db(), "jobs", jobId), {
+      workerLat: deleteField(),
+      workerLng: deleteField(),
+      workerEtaMin: deleteField(),
+      updatedAt: serverTimestamp(),
+    });
+    return;
+  }
+  await updateDoc(doc(db(), "jobs", jobId), {
+    workerLat: position.lat,
+    workerLng: position.lng,
+    workerEtaMin: position.etaMin,
+    updatedAt: serverTimestamp(),
   });
 }
 

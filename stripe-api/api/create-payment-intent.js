@@ -1,7 +1,6 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { applyCors } from "../lib/cors.js";
 import { adminDb, userFromRequest } from "../lib/firebase.js";
-import { safeOrgNr } from "../lib/invoice.js";
 import { breakdownFromSek } from "../lib/money.js";
 import { stripeClient } from "../lib/stripe.js";
 
@@ -50,10 +49,9 @@ export default async function handler(req, res) {
         offerId,
         workerId: offer.ownerId,
         customerId: user.uid,
-        ...(safeOrgNr(req.body?.buyerOrgNr) ? { buyerOrgNr: safeOrgNr(req.body.buyerOrgNr) } : {}),
-        ...(String(req.body?.buyerCompanyName || "").trim()
-          ? { buyerCompanyName: String(req.body.buyerCompanyName).trim().slice(0, 120) }
-          : {}),
+        feeModel: "extra",
+        workOre: String(workOre),
+        feeOre: String(feeOre),
       },
     });
     const patch = {

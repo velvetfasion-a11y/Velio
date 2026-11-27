@@ -1,30 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import { Leaf, Shield, Sparkles, Wrench, Zap, type LucideIcon } from "lucide-react";
-import { kr, serviceById, type ServiceId } from "@/lib/velio/data";
+import { kr, serviceById, services, type ServiceId } from "@/lib/velio/data";
 import { useVelio, bookingStatusLabel, type Booking, type VelioInvoice } from "@/lib/velio/store";
 import { downloadInvoicePdf } from "@/lib/invoices";
 import { AppHeader } from "@/components/velio/header";
 import { cn } from "@/lib/cn";
-import { asset } from "@/lib/velio/asset";
 
-const again: { id: ServiceId; label: string; image: string; icon: LucideIcon }[] = [
-  { id: "el", label: "Elektriker", image: asset("/velio/el.jpg"), icon: Zap },
-  { id: "stad", label: "Städning", image: asset("/velio/stad.jpg"), icon: Sparkles },
-  { id: "trad", label: "Trädgård", image: asset("/velio/trad.jpg"), icon: Leaf },
-  { id: "rep", label: "Reparationer", image: asset("/velio/rep.jpg"), icon: Wrench },
-  { id: "sak", label: "Säkerhet", image: asset("/velio/sak.jpg"), icon: Shield },
-];
-
-const thumbs: Partial<Record<ServiceId, string>> = {
-  el: asset("/velio/el.jpg"),
-  stad: asset("/velio/stad.jpg"),
-  trad: asset("/velio/trad.jpg"),
-  rep: asset("/velio/rep.jpg"),
-  sak: asset("/velio/sak.jpg"),
-  ren: asset("/velio/ren.jpg"),
-  per: asset("/velio/per.jpg"),
-  til: asset("/velio/til.jpg"),
-};
+const again = services.filter((service) => ["el", "stad", "trad", "rep", "sak"].includes(service.id)).map((service) => ({
+  id: service.id as ServiceId,
+  label: service.name,
+  image: service.imageThumb,
+}));
 
 export function HistoryScreen() {
   const bookings = useVelio((state) => state.bookings);
@@ -70,18 +55,14 @@ export function HistoryScreen() {
 
         <h2 className="mt-8 font-serif text-[2.2rem] leading-none font-medium">Boka igen</h2>
         <div ref={scroller} onScroll={onScroll} className="mt-4 flex gap-3 overflow-x-auto pb-1">
-          {again.map((item) => {
-            const Icon = item.icon;
-            return (
+          {again.map((item) => (
               <button key={item.id} type="button" onClick={() => openService(item.id)} className="w-[4.6rem] shrink-0 text-center">
                 <span className="relative block overflow-hidden rounded-2xl">
                   <img src={item.image} alt="" className="aspect-square w-full object-cover" />
-                  <Icon className="absolute bottom-1.5 left-1.5 size-4 text-paper drop-shadow" />
                 </span>
                 <span className="mt-1.5 block text-[11px] leading-tight font-medium">{item.label}</span>
               </button>
-            );
-          })}
+            ))}
         </div>
         <div className="relative mt-3 mb-6 h-0.5 rounded-full bg-line">
           <span className="absolute top-0 h-0.5 rounded-full bg-bronze" style={{ left: `${thumb.left * 100}%`, width: `${thumb.width * 100}%` }} />
@@ -98,14 +79,14 @@ function InvoiceRow({ invoice }: { invoice: VelioInvoice }) {
       <div className="min-w-0 flex-1">
         <p className="font-semibold">{invoice.number || "Kvitto"}</p>
         <p className="text-[13px] text-muted">{invoice.title}</p>
-        <p className="text-[13px] text-muted">{kr(invoice.totalSek)}{invoice.status === "draft" ? " · Utkast" : ""}</p>
+        <p className="text-[13px] text-muted">{kr(invoice.totalSek)} · Betald</p>
       </div>
       <button
         type="button"
-        onClick={() => void downloadInvoicePdf(invoice.id, `${invoice.number || "faktura"}.pdf`).catch((reason: unknown) => showToast(reason instanceof Error ? reason.message : "Fakturan kunde inte hämtas"))}
+        onClick={() => void downloadInvoicePdf(invoice.id, `${invoice.number || "kvitto"}.pdf`).catch((reason: unknown) => showToast(reason instanceof Error ? reason.message : "Kvittot kunde inte hämtas"))}
         className="shrink-0 rounded-full bg-[#1A1A1A] px-3 py-2 text-[13px] font-semibold text-white"
       >
-        Ladda ner faktura (PDF)
+        Ladda ner kvitto
       </button>
     </article>
   );
@@ -114,7 +95,7 @@ function InvoiceRow({ invoice }: { invoice: VelioInvoice }) {
 export function HistoryCard({ booking, onOpen, onRebook }: { booking: Booking; onOpen: () => void; onRebook: () => void }) {
   const service = serviceById(booking.serviceId);
   const status = bookingStatusLabel(booking.status);
-  const photo = thumbs[booking.serviceId];
+  const photo = service?.imageThumb;
   return (
     <article className="flex items-center gap-3 rounded-[1.25rem] border border-line bg-paper/75 backdrop-blur-xl p-2.5">
       <button type="button" onClick={onOpen} className="shrink-0">
